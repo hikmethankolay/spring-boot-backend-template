@@ -60,7 +60,9 @@ function stages(peak) {
 
 function journey(name, peak) {
   const shape = stages(peak);
-  return { executor: 'ramping-vus', exec: name, startVUs: shape[0].target, stages: shape, gracefulRampDown: '30s' };
+  // Ramps start from zero; only a profile that opens with a hold starts at its target.
+  const startVUs = PROFILES[PROFILE].stages[0][0] === 'hold' ? shape[0].target : 0;
+  return { executor: 'ramping-vus', exec: name, startVUs, stages: shape, gracefulRampDown: '30s' };
 }
 
 function scenarios() {
