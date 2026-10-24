@@ -69,6 +69,33 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
         assertThat(mail.latest("outbox-waiting@example.com", "Outbox test")).isPresent();
     }
 
+    /**
+     * Each due email is sent in its own transaction. In one batch transaction the connection idles while SMTP works,
+     * PostgreSQL ends it after idle_in_transaction_session_timeout, and the emails already sent are sent again.
+     */
+    @Test
+    void eachDueEmailIsCommittedBeforeTheNextIsSent() throws Exception {
+        mail.failNext(2);
+        enqueue("outbox-first@example.com");
+        enqueue("outbox-second@example.com");
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        mail.holdNextSendTo("outbox-second@example.com", entered, release);
+
+        Thread poll =
+                Thread.ofVirtual().start(() -> outbox.sendDue(Instant.now().plus(1, ChronoUnit.HOURS)));
+        try {
+            assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(mail.latest("outbox-first@example.com", "Outbox test")).isPresent();
+            assertThat(queued("outbox-first@example.com")).isFalse();
+        } finally {
+            release.countDown();
+            poll.join();
+        }
+        assertThat(mail.latest("outbox-second@example.com", "Outbox test")).isPresent();
+        assertThat(queued("outbox-second@example.com")).isFalse();
+    }
+
     @Test
     void rolledBackChangeSendsNothing() {
         transaction.executeWithoutResult(status -> {

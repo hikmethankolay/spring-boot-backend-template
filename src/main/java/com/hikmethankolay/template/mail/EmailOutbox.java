@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,8 +142,18 @@ public class EmailOutbox {
      * @param now the time to compare due dates with; tests pass a later time to skip the backoff
      */
     public void sendDue(Instant now) {
-        newTransaction.executeWithoutResult(
-                status -> outbox.lockDue(now, BATCH_SIZE).forEach(email -> send(email, now)));
+        // One transaction per email: a batch idles in its transaction while SMTP works, and when PostgreSQL ends it
+        // (idle_in_transaction_session_timeout) the emails already sent are sent again and failures are not counted.
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            Boolean found = newTransaction.execute(status -> {
+                List<OutboxEmail> due = outbox.lockDue(now, 1);
+                due.forEach(email -> send(email, now));
+                return !due.isEmpty();
+            });
+            if (!Boolean.TRUE.equals(found)) {
+                return;
+            }
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -34,15 +35,20 @@ public class TestMailConfiguration {
 
         private final AtomicInteger failuresLeft = new AtomicInteger();
 
-        private final AtomicReference<CountDownLatch[]> hold = new AtomicReference<>();
+        private final AtomicReference<Hold> hold = new AtomicReference<>();
 
         @Override
         public void send(SimpleMailMessage message) {
-            CountDownLatch[] latches = hold.getAndSet(null);
-            if (latches != null) {
-                latches[0].countDown();
+            Hold held = hold.get();
+            boolean matches = held != null
+                    && (held.to() == null
+                            || (message.getTo() != null
+                                    && List.of(message.getTo()).contains(held.to())));
+            if (matches && hold.compareAndSet(held, null)) {
+                held.entered().countDown();
                 try {
-                    latches[1].await();
+                    // Bounded, so a test that fails before releasing cannot block the outbox for the rest of the suite.
+                    held.release().await(10, TimeUnit.SECONDS);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                 }
@@ -55,8 +61,15 @@ public class TestMailConfiguration {
 
         /** Makes the next send count down {@code entered} and then wait for {@code release}, like a slow SMTP server. */
         public void holdNextSend(CountDownLatch entered, CountDownLatch release) {
-            hold.set(new CountDownLatch[] {entered, release});
+            hold.set(new Hold(null, entered, release));
         }
+
+        /** Like {@link #holdNextSend}, but holds the next send to {@code to} and lets other sends through. */
+        public void holdNextSendTo(String to, CountDownLatch entered, CountDownLatch release) {
+            hold.set(new Hold(to, entered, release));
+        }
+
+        private record Hold(String to, CountDownLatch entered, CountDownLatch release) {}
 
         /** Makes the next {@code count} sends fail, like an SMTP outage. */
         public void failNext(int count) {
