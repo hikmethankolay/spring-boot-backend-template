@@ -27,8 +27,20 @@ class RateLimitIntegrationTest extends IntegrationTest {
         return "10.%d.%d.%d".formatted(random.nextInt(256), random.nextInt(256), random.nextInt(1, 255));
     }
 
+    /**
+     * Waits out the last two seconds of a minute: the sliding window weighs the previous minute by the time left, so a
+     * test that crosses into a new minute can count one request less than it expects.
+     */
+    private static void awayFromTheMinuteBoundary() throws InterruptedException {
+        long untilNextMinute = 60_000 - System.currentTimeMillis() % 60_000;
+        if (untilNextMinute < 2_000) {
+            Thread.sleep(untilNextMinute + 50);
+        }
+    }
+
     @Test
     void requestsOverTheLimitAreRejected() throws Exception {
+        awayFromTheMinuteBoundary();
         String ip = randomIp();
         for (int i = 3; i > 0; i--) {
             mockMvc.perform(get("/api/v1/users/me").with(fromIp(ip)))
@@ -49,6 +61,7 @@ class RateLimitIntegrationTest extends IntegrationTest {
 
     @Test
     void thePreviousMinuteStillCounts() throws Exception {
+        awayFromTheMinuteBoundary();
         String ip = randomIp();
         long previousWindow = System.currentTimeMillis() / 60_000 - 1;
         // A burst at the end of the previous minute: nearly all of it is still inside the last 60 seconds.
@@ -59,6 +72,7 @@ class RateLimitIntegrationTest extends IntegrationTest {
 
     @Test
     void oneIpv6NetworkSharesOneLimit() throws Exception {
+        awayFromTheMinuteBoundary();
         ThreadLocalRandom random = ThreadLocalRandom.current();
         String network = "2001:db8:%x:%x::".formatted(random.nextInt(65_536), random.nextInt(65_536));
         for (int host = 1; host <= 3; host++) {

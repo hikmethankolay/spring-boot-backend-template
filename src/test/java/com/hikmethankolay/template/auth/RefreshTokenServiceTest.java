@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -153,6 +154,26 @@ class RefreshTokenServiceTest {
         verify(tokens).deleteAllByFamilyId(FAMILY);
         verify(revocations).revokeSession(FAMILY);
         verify(audit).record(AuditEvent.REFRESH_TOKEN_REUSED, 1L, "sessionId", FAMILY);
+    }
+
+    /** An expired token is rejected and issues no successor, although its session is still current. */
+    @Test
+    void expiredTokenIsRejected() {
+        when(tokens.findByTokenHash(SecureTokens.hash(RAW)))
+                .thenReturn(Optional.of(new RefreshToken(
+                        1L,
+                        FAMILY,
+                        0,
+                        SecureTokens.hash(RAW),
+                        false,
+                        Instant.now().minusSeconds(1),
+                        STARTED,
+                        "Firefox",
+                        "203.0.113.7")));
+        userWithSessionVersion(0);
+
+        assertThatThrownBy(() -> service.rotate(RAW)).isInstanceOf(BadCredentialsException.class);
+        verify(tokens, never()).save(any());
     }
 
     /** Ending every session reports how many tokens were deleted. */

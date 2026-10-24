@@ -38,10 +38,16 @@ class MfaIntegrationTest extends IntegrationTest {
 
         // The code of the next step is valid now (one step of drift) and was not used for the confirmation.
         String code = Totp.code(secret, step + 1);
-        mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.1"), code, "10.0.9.1"))
+        String challenge = passwordStep(username, "10.0.9.1");
+        mockMvc.perform(mfaLogin(challenge, code, "10.0.9.1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").exists())
                 .andExpect(header().exists(HttpHeaders.SET_COOKIE));
+
+        // An MFA token works once, even with another valid code.
+        mockMvc.perform(mfaLogin(challenge, recoveryCodes.get(1), "10.0.9.1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value("urn:problem:mfa-challenge-expired"));
 
         // A code works once.
         mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.1"), code, "10.0.9.1"))

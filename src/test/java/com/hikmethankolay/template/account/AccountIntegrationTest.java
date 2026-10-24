@@ -13,12 +13,16 @@ import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
 
 class AccountIntegrationTest extends IntegrationTest {
 
     @Autowired
     private CapturingMailSender mail;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private SimpleMailMessage latestMail(String username, String subjectPart) {
         return mail.latest(username + "@example.com", subjectPart)
@@ -109,6 +113,19 @@ class AccountIntegrationTest extends IntegrationTest {
                         .content(json("""
                                 {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void expiredResetLinkIsRejected() throws Exception {
+        String username = uniqueUsername();
+        long userId = register(username);
+        postJson("/api/v1/auth/password-reset", json("""
+                {"email":"%s@example.com"}""", username), 202);
+        String token = CapturingMailSender.token(latestMail(username, "Reset your password"));
+        jdbc.update("UPDATE account_tokens SET expires_at = now() - interval '1 second' WHERE user_id = ?", userId);
+
+        postJson("/api/v1/auth/password-reset/confirm", json("""
+                {"token":"%s","newPassword":"Reset#4567"}""", token), 400);
     }
 
     @Test

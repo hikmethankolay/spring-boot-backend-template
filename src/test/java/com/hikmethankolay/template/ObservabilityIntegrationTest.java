@@ -1,6 +1,7 @@
 package com.hikmethankolay.template;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -11,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.hikmethankolay.template.common.TraceIdResponseFilter;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
@@ -57,14 +59,17 @@ class ObservabilityIntegrationTest extends IntegrationTest {
         // startup).
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(content().string(containsString("le=\"0.3\"")))
-                .andExpect(content().string(containsString("logback_events_total{")))
-                .andExpect(content().string(containsString("tasks_scheduled_execution_seconds_count{")));
+                .andExpect(content().string(containsString("logback_events_total{")));
+        // The outbox's first scheduled run starts with the context and may not have finished yet.
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> mockMvc.perform(get("/actuator/prometheus"))
+                        .andExpect(content().string(containsString("tasks_scheduled_execution_seconds_count{"))));
     }
 
     @Test
     void auditEventsAreCountedInPrometheus() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
-                        .with(fromIp("10.0.9.1"))
+                        .with(fromIp("10.0.10.1"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"identifier":"nobody-here","password":"Wrong#123"}"""))

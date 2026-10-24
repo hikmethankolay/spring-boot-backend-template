@@ -12,11 +12,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 
 /** The real HTTP exchange, against a local stand-in for GitHub and Google. */
+@ExtendWith(OutputCaptureExtension.class)
 class SocialProfileClientTest {
 
     private final SocialProfileClient client = new SocialProfileClient();
@@ -75,10 +79,12 @@ class SocialProfileClientTest {
     }
 
     @Test
-    void aRejectedCodeIsBadCredentials() {
+    void aRejectedCodeIsBadCredentialsAndLoggedOnOneLine(CapturedOutput output) {
         ClientRegistration registration = registration(CommonOAuth2Provider.GITHUB, "github", "/bad-token", "/user");
 
         assertThatThrownBy(() -> client.fetch(registration, "c-3", null)).isInstanceOf(BadCredentialsException.class);
+        // The provider's line break would otherwise forge a log line.
+        assertThat(output).contains("Forged line").doesNotContain("\nForged line");
     }
 
     private ClientRegistration registration(CommonOAuth2Provider provider, String id, String token, String user) {

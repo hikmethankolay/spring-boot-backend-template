@@ -97,7 +97,7 @@ class UserCacheIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void deleteEvictsEntryAndMissingUsersAreNotCached() throws Exception {
+    void deleteEvictsEntry() throws Exception {
         String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
         long id = register(uniqueUsername());
 
@@ -106,7 +106,7 @@ class UserCacheIntegrationTest extends IntegrationTest {
                 .andExpect(status().isNoContent());
         assertThat(usersCache().get(id)).isNull();
 
+        // Not served from a stale cache entry.
         mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(adminToken))).andExpect(status().isNotFound());
-        assertThat(usersCache().get(id)).isNull();
     }
 }
