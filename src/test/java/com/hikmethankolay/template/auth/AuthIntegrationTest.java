@@ -14,13 +14,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
+import com.hikmethankolay.template.audit.AuditEvent;
+import com.hikmethankolay.template.audit.AuditLog;
 import com.jayway.jsonpath.JsonPath;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 class AuthIntegrationTest extends IntegrationTest {
+
+    @Autowired
+    private MeterRegistry meters;
 
     @Test
     void registerReturnsCreatedUserWithoutPassword() throws Exception {
@@ -249,6 +256,12 @@ class AuthIntegrationTest extends IntegrationTest {
                 .andExpect(status().isTooManyRequests());
     }
 
+    /** Logout audit events recorded so far. */
+    private double logouts() {
+        return meters.counter(AuditLog.METRIC_NAME, "event", AuditEvent.LOGOUT.action())
+                .count();
+    }
+
     private void failLogin(String identifier, String ip) throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                         .with(fromIp(ip))
@@ -428,9 +441,11 @@ class AuthIntegrationTest extends IntegrationTest {
     void logoutRevokesTheToken() throws Exception {
         String token = registerAndLogin(uniqueUsername());
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isOk());
+        double logouts = logouts();
 
         mockMvc.perform(post("/api/v1/auth/logout").with(bearer(token))).andExpect(status().isNoContent());
 
+        assertThat(logouts()).isEqualTo(logouts + 1);
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/users/me").cookie(new Cookie("auth_token", token)))
                 .andExpect(status().isUnauthorized());
@@ -445,6 +460,25 @@ class AuthIntegrationTest extends IntegrationTest {
         mockMvc.perform(post("/api/v1/auth/logout").with(bearer(login.accessToken())))
                 .andExpect(status().isNoContent());
 
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"refreshToken":"%s"}""", login.refreshToken())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** A browser whose access cookie has expired logs out with the refresh cookie alone. */
+    @Test
+    void logoutWithOnlyTheRefreshTokenEndsItsSession() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        Tokens login = loginTokens(username, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(new Cookie("refresh_token", login.refreshToken())))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(login.accessToken())))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""

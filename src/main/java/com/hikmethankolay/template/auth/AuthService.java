@@ -13,7 +13,6 @@ import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.mfa.MfaService;
 import com.hikmethankolay.template.security.AppUserDetails;
 import com.hikmethankolay.template.security.LoginAttemptService;
-import com.hikmethankolay.template.security.TokenRevocationService;
 import com.hikmethankolay.template.security.TokenService;
 import com.hikmethankolay.template.social.SocialAccountService;
 import com.hikmethankolay.template.social.SocialLoginProviders;
@@ -62,8 +61,6 @@ public class AuthService {
 
     private final RefreshTokenService refreshTokens;
 
-    private final TokenRevocationService revocations;
-
     private final JwtDecoder jwtDecoder;
 
     private final boolean requireVerifiedEmail;
@@ -89,7 +86,6 @@ public class AuthService {
      * @param userService           creates users
      * @param userRepository        reloads users on refresh
      * @param refreshTokens         issues and rotates refresh tokens
-     * @param revocations           denylist of revoked access tokens
      * @param jwtDecoder            validates the token presented at logout
      * @param properties            application properties (email verification policy)
      * @param audit                 records security events
@@ -106,7 +102,6 @@ public class AuthService {
             UserService userService,
             UserRepository userRepository,
             RefreshTokenService refreshTokens,
-            TokenRevocationService revocations,
             JwtDecoder jwtDecoder,
             AppProperties properties,
             AuditLog audit,
@@ -121,7 +116,6 @@ public class AuthService {
         this.userService = userService;
         this.userRepository = userRepository;
         this.refreshTokens = refreshTokens;
-        this.revocations = revocations;
         this.jwtDecoder = jwtDecoder;
         this.requireVerifiedEmail = properties.account().requireVerifiedEmail();
         this.audit = audit;
@@ -372,7 +366,6 @@ public class AuthService {
         }
         try {
             Jwt jwt = jwtDecoder.decode(accessToken);
-            revocations.revoke(jwt);
             UUID sessionId = TokenService.sessionId(jwt);
             if (sessionId != null) {
                 refreshTokens.endSession(TokenService.userId(jwt), sessionId);

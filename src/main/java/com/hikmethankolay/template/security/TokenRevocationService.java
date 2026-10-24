@@ -21,11 +21,10 @@ import org.springframework.stereotype.Service;
  * <p>Two kinds of entries exist, both kept only until the affected tokens would have expired
  * anyway, so the list never grows beyond the tokens that are still alive:</p>
  * <ul>
- *   <li>a single token id ({@code jti}), revoked on logout;</li>
  *   <li>a per-user cut-off time: every token of that user issued before it is rejected. Set when
  *       all sessions of a user end, e.g. after a password change.</li>
- *   <li>a session id ({@code sid}): every token of that session is rejected. Set when one session ends
- *       through {@code DELETE /api/v1/users/me/sessions/{id}} or because its refresh token was reused.</li>
+ *   <li>a session id ({@code sid}): every token of that session is rejected. Set when one session ends: at
+ *       logout, through {@code DELETE /api/v1/users/me/sessions/{id}} or because its refresh token was reused.</li>
  * </ul>
  *
  * <p>The JWT decoder consults both on every request, in one Redis round trip (see {@link SecurityConfig}).</p>
@@ -39,8 +38,6 @@ public class TokenRevocationService {
     private static final Logger log = LoggerFactory.getLogger(TokenRevocationService.class);
 
     private final StringRedisTemplate redis;
-
-    private final String keyPrefix;
 
     private final String userKeyPrefix;
 
@@ -60,32 +57,9 @@ public class TokenRevocationService {
             @Value("${spring.application.name}") String applicationName,
             AppProperties properties) {
         this.redis = redis;
-        this.keyPrefix = applicationName + ":revoked-token:";
         this.userKeyPrefix = applicationName + ":tokens-revoked-before:";
         this.sessionKeyPrefix = applicationName + ":revoked-session:";
         this.accessTokenTtl = properties.jwt().accessTokenTtl();
-    }
-
-    /**
-     * Revokes a token until its expiry. Tokens without an id or already expired are ignored.
-     *
-     * @param jwt the validated token to revoke
-     */
-    public void revoke(Jwt jwt) {
-        String tokenId = jwt.getId();
-        Instant expiresAt = jwt.getExpiresAt();
-        if (tokenId == null || expiresAt == null) {
-            return;
-        }
-        Duration remaining = Duration.between(Instant.now(), expiresAt);
-        if (remaining.isNegative() || remaining.isZero()) {
-            return;
-        }
-        try {
-            redis.opsForValue().set(keyPrefix + tokenId, "1", remaining);
-        } catch (DataAccessException ex) {
-            log.warn("Could not revoke token {}: {}", tokenId, ex.getMessage());
-        }
     }
 
     /**
@@ -140,37 +114,35 @@ public class TokenRevocationService {
     }
 
     /**
-     * Tells whether a token has been revoked, individually, with its session or by a cut-off of its user.
+     * Tells whether a token has been revoked with its session or by a cut-off of its user.
      *
      * @param jwt the token, already verified otherwise
      * @return {@code true} if the token must be rejected
      */
     public boolean isRevoked(Jwt jwt) {
-        String tokenId = jwt.getId();
         String userId = jwt.getSubject();
-        if (tokenId == null || userId == null) {
+        if (userId == null) {
             return false;
         }
         try {
             String sessionId = jwt.getClaimAsString(TokenService.SESSION_CLAIM);
             List<String> entries = redis.opsForValue()
                     .multiGet(List.of(
-                            keyPrefix + tokenId,
                             userKeyPrefix + userId,
                             // Tokens from before sessions were listed have no sid; nothing can revoke it.
                             sessionKeyPrefix + Objects.requireNonNullElse(sessionId, "none")));
             if (entries == null) {
                 return false;
             }
-            if (entries.get(0) != null || (sessionId != null && entries.get(2) != null)) {
+            if (sessionId != null && entries.get(1) != null) {
                 return true;
             }
             Instant issuedAt = jwt.getIssuedAt();
-            return entries.get(1) != null
+            return entries.get(0) != null
                     && issuedAt != null
-                    && issuedAt.getEpochSecond() < Long.parseLong(entries.get(1));
+                    && issuedAt.getEpochSecond() < Long.parseLong(entries.get(0));
         } catch (DataAccessException ex) {
-            log.warn("Could not check token revocation for {}: {}", tokenId, ex.getMessage());
+            log.warn("Could not check token revocation for user {}: {}", userId, ex.getMessage());
             return false;
         }
     }

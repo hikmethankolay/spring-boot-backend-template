@@ -115,9 +115,9 @@ one tab refresh and share the result, for example with a `BroadcastChannel` or a
 | Admin changes a user's password, or the owner changes a role | Same, so a demoted administrator loses access immediately |
 | User deleted (by an admin, the owner or themselves) | Same; the refresh tokens are deleted with the user |
 
-Access-token revocation lives in Redis: denylisted token ids, session ids and per-user cut-off times are kept only
-until the affected tokens would have expired, and the JWT decoder checks all three in one round trip on every request,
-on every instance. After a password change the client must log in again.
+Access-token revocation lives in Redis: denylisted session ids and per-user cut-off times are kept only until the
+affected tokens would have expired, and the JWT decoder checks both in one round trip on every request, on every
+instance. After a password change the client must log in again.
 
 ## Account flows
 
