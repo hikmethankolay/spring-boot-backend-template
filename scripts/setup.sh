@@ -33,7 +33,8 @@ if [[ -f .env && "$force" == false ]]; then
 else
   info "Creating .env from .env.example"
   cp .env.example .env
-  admin_password="Admin#$(random_secret 12)"
+  # The prefix guarantees every character class the password rule asks for; the random part may lack a digit.
+  admin_password="Admin#1$(random_secret 12)"
   sed_inplace "s|^JWT_SECRET=.*|JWT_SECRET=$(random_secret 48)|" .env
   sed_inplace "s|^MFA_ENCRYPTION_KEY=.*|MFA_ENCRYPTION_KEY=$(random_secret 48)|" .env
   sed_inplace "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${admin_password}|" .env

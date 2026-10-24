@@ -78,9 +78,10 @@ the new key alone, which ends every access token at once (refresh tokens keep wo
 | `ADMIN` | Everything a user can, plus list, read, update and delete **regular users** |
 | `OWNER` | Everything an admin can, plus change roles and update or delete administrators |
 
-The owner is the account `AdminBootstrap` creates from `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`; there is at
-most one (a partial unique index enforces it). `OWNER` implies `ADMIN`, which implies `USER` (a `RoleHierarchy` bean),
-so `hasRole('ADMIN')` lets the owner through. The owner-only rules live in `UserService`, which reads the caller's
+The owner is the account `AdminBootstrap` creates from `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`, which must
+follow the registration rules (otherwise the application does not start); there is at most one (a partial unique
+index enforces it). `OWNER` implies `ADMIN`, which implies `USER` (a `RoleHierarchy` bean), so `hasRole('ADMIN')`
+lets the owner through. The owner-only rules live in `UserService`, which reads the caller's
 role from the database, so they apply even while an older access token still carries a previous role.
 
 - **Only the owner** changes roles (`PATCH /api/v1/users/{id}` with `role`) and updates or deletes administrators.

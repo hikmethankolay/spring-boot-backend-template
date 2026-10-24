@@ -2,6 +2,13 @@ package com.hikmethankolay.template.user;
 
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.user.validation.ValidEmail;
+import com.hikmethankolay.template.user.validation.ValidPassword;
+import com.hikmethankolay.template.user.validation.ValidUsername;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotBlank;
+import java.util.Locale;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -15,8 +22,9 @@ import org.springframework.stereotype.Component;
  * problem without manual SQL. The owner has every administrator right and is the only one who can
  * change roles and manage administrators (see {@link Role#OWNER}).
  *
- * <p>If the configured username or email already belongs to a regular user, registration fails
- * with a conflict and the application does not start.</p>
+ * <p>The credentials must follow the same rules as a registration, or the application does not start. If the
+ * configured username or email already belongs to a regular user, registration fails with a conflict and the
+ * application does not start either.</p>
  */
 @Component
 class AdminBootstrap implements ApplicationRunner {
@@ -27,27 +35,33 @@ class AdminBootstrap implements ApplicationRunner {
 
     private final AppProperties.Admin admin;
 
+    private final Validator validator;
+
     /**
      * Creates the runner.
      *
      * @param userService creates the admin account
      * @param properties  application properties holding the admin credentials
+     * @param validator   checks the credentials against the registration rules
      */
-    AdminBootstrap(UserService userService, AppProperties properties) {
+    AdminBootstrap(UserService userService, AppProperties properties, Validator validator) {
         this.userService = userService;
         this.admin = properties.admin();
+        this.validator = validator;
     }
 
     /**
      * Creates the admin when it is configured and no admin exists.
      *
      * @param args application arguments (unused)
+     * @throws IllegalStateException if the credentials break the registration rules
      */
     @Override
     public void run(ApplicationArguments args) {
         if (!admin.isConfigured() || userService.ownerExists()) {
             return;
         }
+        checkCredentials();
         // The configured admin address is trusted, so no verification email is sent.
         try {
             userService.register(admin.username(), admin.email(), admin.password(), Role.OWNER, true);
@@ -60,4 +74,24 @@ class AdminBootstrap implements ApplicationRunner {
             log.info("Another instance created the owner account");
         }
     }
+
+    private void checkCredentials() {
+        String problems =
+                validator.validate(new Credentials(admin.username(), admin.email(), admin.password())).stream()
+                        // The messages never contain the rejected value, so the password is not logged.
+                        .map(violation -> "ADMIN_"
+                                + violation.getPropertyPath().toString().toUpperCase(Locale.ROOT) + " "
+                                + violation.getMessage())
+                        .sorted()
+                        .collect(Collectors.joining("; "));
+        if (!problems.isEmpty()) {
+            throw new IllegalStateException("The owner account was not created: " + problems);
+        }
+    }
+
+    /** The registration rules of {@code RegisterRequest}, applied to the configured credentials. */
+    private record Credentials(
+            @NotBlank @ValidUsername String username,
+            @NotBlank @ValidEmail String email,
+            @NotBlank @ValidPassword String password) {}
 }
