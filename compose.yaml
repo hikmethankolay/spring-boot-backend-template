@@ -49,6 +49,8 @@ services:
       - path: .env
         required: false
     environment:
+      # The container always listens on 8080; PORT from .env only moves the host port below.
+      PORT: 8080
       DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-app}
       REDIS_HOST: redis
       REDIS_PORT: 6379
