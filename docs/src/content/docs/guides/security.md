@@ -108,7 +108,7 @@ one tab refresh and share the result, for example with a `BroadcastChannel` or a
 
 | Event | Effect |
 |-------|--------|
-| Logout | The presented access token's `jti` is denylisted and the refresh token's session is deleted |
+| Logout | The session of the presented access token and of the refresh token ends: its refresh tokens are deleted and its `sid` is denylisted, so older access tokens of that session stop working too |
 | Ending a session (`DELETE /api/v1/users/me/sessions/{id}`), reused refresh token | The session's refresh tokens are deleted and its `sid` is denylisted |
 | Password change, password reset | Every session of the user ends: refresh tokens are deleted and all access tokens issued so far are rejected |
 | Admin changes a user's password, or the owner changes a role | Same, so a demoted administrator loses access immediately |

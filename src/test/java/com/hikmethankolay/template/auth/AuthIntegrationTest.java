@@ -437,6 +437,40 @@ class AuthIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void logoutWithOnlyTheAccessTokenEndsItsSession() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        Tokens login = loginTokens(username, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/logout").with(bearer(login.accessToken())))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"refreshToken":"%s"}""", login.refreshToken())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void logoutAlsoEndsOlderAccessTokensOfTheSession() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        Tokens login = loginTokens(username, PASSWORD);
+        Tokens refreshed = refresh(login.refreshToken());
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(bearer(refreshed.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"refreshToken":"%s"}""", refreshed.refreshToken())))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(login.accessToken())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void logoutWithInvalidTokenStillSucceeds() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout").header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt"))
                 .andExpect(status().isNoContent());

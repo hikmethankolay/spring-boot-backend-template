@@ -154,7 +154,22 @@ public class RefreshTokenService {
     @Transactional
     public void revokeSession(String rawToken) {
         tokens.findByTokenHash(SecureTokens.hash(rawToken))
-                .ifPresent(token -> tokens.deleteAllByFamilyId(token.getFamilyId()));
+                .ifPresent(token -> endSession(token.getUserId(), token.getFamilyId()));
+    }
+
+    /**
+     * Ends a session at logout: deletes its refresh tokens and revokes all of its access tokens, not only the one
+     * presented. Ending a session that has no refresh tokens left is not an error.
+     *
+     * @param userId    owner of the session
+     * @param sessionId the session (family) id
+     */
+    @Transactional
+    public void endSession(long userId, UUID sessionId) {
+        // Without the lock, a refresh committing during the delete would leave its new token alive.
+        tokens.lockAllByUserIdAndFamilyId(userId, sessionId);
+        tokens.deleteAllByUserIdAndFamilyId(userId, sessionId);
+        revocations.revokeSession(sessionId);
     }
 
     /**

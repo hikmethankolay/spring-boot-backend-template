@@ -26,6 +26,7 @@ import com.hikmethankolay.template.user.dto.UserResponse;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -372,6 +373,10 @@ public class AuthService {
         try {
             Jwt jwt = jwtDecoder.decode(accessToken);
             revocations.revoke(jwt);
+            UUID sessionId = TokenService.sessionId(jwt);
+            if (sessionId != null) {
+                refreshTokens.endSession(TokenService.userId(jwt), sessionId);
+            }
             audit.record(AuditEvent.LOGOUT, TokenService.userId(jwt));
         } catch (JwtException ex) {
             // Already invalid, expired or revoked.
