@@ -6,6 +6,34 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [3.2.8] - 2026-10-24
+
+### Fixed
+
+- A rolling update to 3.2.x, or a rollback from it, broke login and refresh on the pods still running the previous
+  version: `V9` made `refresh_tokens.session_started_at` NOT NULL without a default, which their inserts lack.
+  `V10` adds the default, and a new test fails on any migration that makes a column NOT NULL without one.
+- The email outbox sent its due emails in one transaction. A slow or unreachable SMTP server kept it idle until
+  PostgreSQL ended it (`DB_IDLE_IN_TRANSACTION_TIMEOUT`), so emails already sent were sent again and failures were
+  never counted. Each email now has its own transaction.
+- The per-IP rate limit and login lockout counted every IPv6 address separately, so a client with a `/64` could use a
+  new address per request. IPv6 clients now count as their `/64`.
+- Logout now ends the whole session of the presented access token, also without the refresh token, and revokes the
+  session's older access tokens.
+- The owner account created from `ADMIN_*` skipped the password rule; the application now refuses to start with
+  credentials a registration would reject. `setup` always generates a password that passes it (one in about fifteen
+  had no digit).
+- Mail is sent over STARTTLS whenever the server offers it, and the prod profile requires it
+  (`MAIL_STARTTLS_REQUIRED`, default `true`): port 587 sent the mail and the SMTP password unencrypted, or failed at
+  providers that demand STARTTLS.
+- `scripts\db.bat` ran every command for any argument, so `dev.bat` hung in `logs -f`; `scripts\smoke.bat` failed
+  before its first request; `scripts\site.bat` built the site after a failed copy.
+- `scripts/setup.sh` and the other scripts rejected a valid JDK when `JAVA_TOOL_OPTIONS` was set, and
+  `scripts/test.sh` failed without arguments on macOS's bash 3.2.
+- `scripts/docker.sh up` failed when `PORT` in `.env` was not 8080.
+- The load test's ramp-up stages started at full load.
+- A pre-release tag published its image as `latest`.
+
 ## [3.2.5] - 2026-10-24
 
 ### Changed
@@ -203,7 +231,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.5...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.8...HEAD
+[3.2.8]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.5...v3.2.8
 [3.2.5]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.1...v3.2.5
 [3.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.1.0...v3.2.0
