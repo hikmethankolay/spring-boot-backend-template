@@ -10,7 +10,7 @@ set "CMD=%~1"
 if "%CMD%"=="" set "CMD=up"
 
 if /i "%CMD%"=="up" (
-  echo ==^> Starting PostgreSQL, Redis and Mailpit (mail UI: http://localhost:8025)
+  echo ==^> Starting PostgreSQL, Redis and Mailpit ^(mail UI: http://localhost:8025^)
   %COMPOSE% up -d --wait %SERVICES%
 ) else if /i "%CMD%"=="down" (
   %COMPOSE% stop %SERVICES%

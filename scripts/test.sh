@@ -19,5 +19,6 @@ configure_testcontainers
 args=("$@")
 # A filtered run covers only part of the code, so it would fail the coverage minimums.
 [[ " $* " == *" -Dtest="* || " $* " == *" -Dit.test="* ]] && args+=(-Djacoco.haltOnFailure=false)
-./mvnw -B verify "${args[@]}"
+# The ${..+..} form keeps an empty array from failing under set -u in bash before 4.4 (macOS).
+./mvnw -B verify ${args[@]+"${args[@]}"}
 info "Coverage report: target/site/jacoco/index.html"

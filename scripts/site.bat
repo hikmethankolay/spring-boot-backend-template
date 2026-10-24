@@ -30,6 +30,8 @@ if not exist "target\site\jacoco\jacoco.xml" (
 )
 
 rem Copy the generated references into docs\public and compute the build information for the home page.
+rem for /f does not pass on PowerShell's exit code: a failure shows as no output.
+set "PUBLIC_SITE_COVERAGE="
 for /f "usebackq delims=" %%l in (`powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference = 'Stop';" ^
   "foreach ($d in 'docs\public\reference', 'docs\public\coverage') { if (Test-Path $d) { Remove-Item -Recurse -Force $d }; New-Item -ItemType Directory -Force -Path $d | Out-Null };" ^
@@ -38,7 +40,7 @@ for /f "usebackq delims=" %%l in (`powershell -NoProfile -ExecutionPolicy Bypass
   "Copy-Item -Recurse 'target\site\jacoco\*' 'docs\public\coverage';" ^
   "$line = ([xml](Get-Content -Raw 'target\site\jacoco\jacoco.xml' -Encoding UTF8)).report.counter | Where-Object type -eq 'LINE';" ^
   "'{0:N1}%%' -f (100 * [int]$line.covered / ([int]$line.covered + [int]$line.missed))"`) do set "PUBLIC_SITE_COVERAGE=%%l"
-if errorlevel 1 exit /b 1
+if not defined PUBLIC_SITE_COVERAGE exit /b 1
 
 for /f "delims=" %%v in ('git describe --tags --abbrev^=0 2^>nul') do set "PUBLIC_SITE_VERSION=%%v"
 if not defined PUBLIC_SITE_VERSION set "PUBLIC_SITE_VERSION=dev"

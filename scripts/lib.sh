@@ -25,7 +25,8 @@ require_jdk() {
   command -v "$javac_bin" >/dev/null 2>&1 \
     || die "JDK 25+ not found (javac missing). Install one, e.g. 'sudo dnf install java-25-openjdk-devel', 'sudo apt install openjdk-25-jdk' or 'sdk install java 25-tem', or set JAVA_HOME."
   local version
-  version="$("$javac_bin" -version 2>&1 | awk '{print $2}' | cut -d. -f1)"
+  # Only the "javac 25..." line: JAVA_TOOL_OPTIONS adds a "Picked up ..." line before it.
+  version="$("$javac_bin" -version 2>&1 | awk '/^javac /{print $2}' | cut -d. -f1)"
   [[ "$version" =~ ^[0-9]+$ ]] && (( version >= 25 )) || die "JDK 25+ required, found '$version' ($javac_bin)."
 }
 

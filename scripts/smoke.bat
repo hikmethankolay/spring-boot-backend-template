@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  try { $r = Invoke-WebRequest @params; $status = [int]$r.StatusCode; $content = $r.Content }" ^
   "  catch { if (-not $_.Exception.Response) { throw \"$method $path: connection failed (is the app running at $base?)\" }; $status = [int]$_.Exception.Response.StatusCode; $content = '' };" ^
   "  if ($status -ne $expected) { throw \"$method $path: expected $expected, got $status\" };" ^
-  "  Write-Host \"==> $method $path -> $status\"; return $content };" ^
+  "  Write-Host ('==> {0} {1} -> {2}' -f $method, $path, $status); return $content };" ^
   "Check GET '/actuator/health' 200 | Out-Null;" ^
   "Check POST '/api/v1/auth/register' 201 (@{ username = $user; email = \"$user@example.com\"; password = $pw } | ConvertTo-Json) | Out-Null;" ^
   "$login = Check POST '/api/v1/auth/login' 200 (@{ identifier = $user; password = $pw } | ConvertTo-Json) | ConvertFrom-Json;" ^
@@ -34,5 +34,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$again = Check POST '/api/v1/auth/login' 200 (@{ identifier = $user; password = $pw } | ConvertTo-Json) | ConvertFrom-Json;" ^
   "Check DELETE '/api/v1/users/me' 204 (@{ password = $pw } | ConvertTo-Json) $again.accessToken | Out-Null;" ^
   "Check POST '/api/v1/auth/login' 401 (@{ identifier = $user; password = $pw } | ConvertTo-Json) | Out-Null;" ^
-  "Write-Host \"==> Smoke test passed against $base\""
+  "Write-Host ('==> Smoke test passed against ' + $base)"
 exit /b %errorlevel%
