@@ -6,6 +6,7 @@ import com.hikmethankolay.template.auth.dto.LoginRequest;
 import com.hikmethankolay.template.auth.dto.RegisterRequest;
 import com.hikmethankolay.template.auth.dto.SocialProviderResponse;
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
@@ -163,7 +164,7 @@ public class AuthService {
         // Keyed by user id, so the username and the email of one account share a single limit.
         String accountKey =
                 "account:" + (accountId != null ? accountId.toString() : identifier.toLowerCase(Locale.ROOT));
-        String ipKey = "ip:" + clientIp;
+        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
         // Users sometimes type their password into the identifier field: audit a short hash, never the text.
         String identifierHash =
                 SecureTokens.hash(identifier.toLowerCase(Locale.ROOT)).substring(0, 12);
@@ -231,7 +232,7 @@ public class AuthService {
         MfaChallengeService.Challenge challenge =
                 challenges.find(mfaToken).orElseThrow(AuthService::mfaChallengeExpired);
         String accountKey = "account:" + challenge.userId();
-        String ipKey = "ip:" + clientIp;
+        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
         if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
             audit.record(AuditEvent.LOGIN_BLOCKED, challenge.userId());
             throw ApiException.tooManyRequests(

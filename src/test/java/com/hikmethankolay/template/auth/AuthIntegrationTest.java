@@ -214,6 +214,24 @@ class AuthIntegrationTest extends IntegrationTest {
                 .andExpect(header().string(HttpHeaders.RETRY_AFTER, "3600"));
     }
 
+    /** One IPv6 host usually has a whole /64, so a new address per attempt must not reset the count. */
+    @Test
+    void failedLoginsFromOneIpv6NetworkBlockTheWholeNetwork() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+
+        for (int host = 1; host <= 3; host++) {
+            failLogin(username, "2001:db8:0:4::" + host);
+        }
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(fromIp("2001:db8:0:4::99"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
+                .andExpect(status().isTooManyRequests());
+    }
+
     @Test
     void usernameAndEmailShareOneLockout() throws Exception {
         String username = uniqueUsername();

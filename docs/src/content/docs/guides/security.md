@@ -222,6 +222,9 @@ failures (default 10), an account after `LOGIN_ACCOUNT_MAX_ATTEMPTS` (default 10
 is rejected with `429` and `Retry-After`, even with the right password, until `LOGIN_LOCK_DURATION` has passed without
 new failures. A successful login only resets the account counter, not the IP counter.
 
+An IPv6 client counts as its whole `/64` network, here and in the rate limit below: one host usually gets a `/64`
+and could otherwise use a new address for every attempt.
+
 The account limit is the higher one so that a single client cannot lock a real user out by typing wrong passwords for
 their username: its IP is blocked long before the account. Locking an account takes failures from at least
 `LOGIN_ACCOUNT_MAX_ATTEMPTS / LOGIN_MAX_ATTEMPTS` IPs within the lock duration, and the account limit still caps

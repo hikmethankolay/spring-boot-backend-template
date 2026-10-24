@@ -58,6 +58,18 @@ class RateLimitIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void oneIpv6NetworkSharesOneLimit() throws Exception {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        String network = "2001:db8:%x:%x::".formatted(random.nextInt(65_536), random.nextInt(65_536));
+        for (int host = 1; host <= 3; host++) {
+            mockMvc.perform(get("/api/v1/users/me").with(fromIp(network + host)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(get("/api/v1/users/me").with(fromIp(network + "99"))).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
     void actuatorIsNotLimited() throws Exception {
         String ip = randomIp();
         for (int i = 0; i < 5; i++) {

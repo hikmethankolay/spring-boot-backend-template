@@ -3,6 +3,7 @@ package com.hikmethankolay.template.mfa;
 import com.hikmethankolay.template.audit.AuditEvent;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
@@ -164,7 +165,7 @@ public class MfaService {
         }
         // The same keys as AuthService, so these failures and failed logins share one limit.
         String accountKey = "account:" + userId;
-        String ipKey = "ip:" + clientIp;
+        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
         if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
             throw ApiException.tooManyRequests(
                     ProblemType.LOGIN_LOCKED,

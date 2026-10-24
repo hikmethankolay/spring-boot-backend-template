@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.config.AppProperties;
 import jakarta.servlet.FilterChain;
@@ -116,7 +117,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long remainingMillis = windowMillis - nowMillis % windowMillis;
         long resetSeconds = Math.ceilDiv(remainingMillis, 1000);
         // The braces keep both keys of one client in the same Redis Cluster slot.
-        String key = keyPrefix + "{" + request.getRemoteAddr() + "}:";
+        String key = keyPrefix + "{" + ClientIp.limitKey(request.getRemoteAddr()) + "}:";
 
         Long count;
         try {
