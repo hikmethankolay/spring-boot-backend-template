@@ -1,6 +1,12 @@
 # Production profile, enabled with SPRING_PROFILES_ACTIVE=prod. Overrides application.yml with
 # safe defaults; everything can still be changed through environment variables.
 
+spring:
+  mail:
+    properties:
+      # Never send mail or the SMTP password unencrypted. Set false only for a local relay without TLS.
+      "[mail.smtp.starttls.required]": ${MAIL_STARTTLS_REQUIRED:true}
+
 logging:
   structured:
     format:

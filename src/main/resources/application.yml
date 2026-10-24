@@ -55,6 +55,8 @@ spring:
       "[mail.smtp.connectiontimeout]": 5000
       "[mail.smtp.timeout]": 5000
       "[mail.smtp.writetimeout]": 5000
+      # Encrypts the connection whenever the server offers STARTTLS (Mailpit does not); the prod profile requires it.
+      "[mail.smtp.starttls.enable]": true
   cache:
     type: redis
     redis:

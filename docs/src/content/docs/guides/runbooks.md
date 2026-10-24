@@ -105,7 +105,9 @@ failures`, `Rate limit check failed` or `Could not check token revocation`.
 
 Emails were abandoned after every retry. Users did not get verification or password-reset links.
 
-1. Check the SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `SPRING_MAIL_USERNAME`) and the provider's status.
+1. Check the SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `SPRING_MAIL_USERNAME`) and the provider's status. A log line
+   with `STARTTLS is required but host does not support STARTTLS` means the server offers no TLS on that port: use
+   the provider's TLS port (see [Mail encryption](../production/#mail-encryption)).
 2. Users can request the email again (`/api/v1/auth/verify-email/resend`, `/api/v1/auth/password-reset`).
 
 ### EmailBacklog

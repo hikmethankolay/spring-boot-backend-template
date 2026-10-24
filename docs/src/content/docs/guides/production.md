@@ -103,11 +103,29 @@ Each instance opens up to `DB_POOL_SIZE` connections (10). Keep *maximum replica
 server's `max_connections`, or put PgBouncer in front of it. Every connection has `statement_timeout` (30 s) and
 `idle_in_transaction_session_timeout` (60 s), so a runaway query or a forgotten transaction cannot exhaust the pool.
 
+### Mail encryption
+
+The prod profile sends mail only over TLS, so neither the emails (with their reset links) nor the SMTP password cross
+the network in clear. SMTP starts TLS in one of two ways, and both work:
+
+| Port | How TLS starts | Settings |
+|------|----------------|----------|
+| 587 (used in `deploy/kubernetes`) | STARTTLS: the connection starts in plain text and is upgraded before the login | `MAIL_PORT=587` |
+| 465 | Implicit TLS: encrypted from the first byte | `MAIL_PORT=465` and `SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true` |
+
+Prefer 465 when your provider offers it: it has no plain-text phase, which is what RFC 8314 recommends. STARTTLS on
+587 is still safe here because the prod profile requires it (`MAIL_STARTTLS_REQUIRED=true`): if the server, or an
+attacker on the path, drops the upgrade, the email fails and is retried instead of going out unencrypted. On 465 the
+STARTTLS step is skipped, because the connection is already encrypted, so the setting can stay on.
+
+Set `MAIL_STARTTLS_REQUIRED=false` only for a relay without TLS on the same host or private network. The other
+profiles use STARTTLS when the server offers it, so the local Mailpit, which has no TLS, keeps working.
+
 ## Checklist
 
 - [ ] Set real values for `CORS_ALLOWED_ORIGINS` and `MAIL_LINK_BASE_URL`.
-- [ ] Use an SMTP server (`MAIL_HOST`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) and a sender of your own
-      domain (`MAIL_FROM`).
+- [ ] Use an SMTP server (`MAIL_HOST`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) over TLS on 465 or 587 (see
+      [Mail encryption](#mail-encryption)) and a sender of your own domain (`MAIL_FROM`).
 - [ ] Use a Redis with a password and TLS (`REDIS_PASSWORD`, `REDIS_SSL_ENABLED=true`).
 - [ ] Behind a proxy, set `FORWARD_HEADERS_STRATEGY=native` and allow only the proxy to reach the API port.
 - [ ] Keep port `8081` internal and scrape metrics there.
