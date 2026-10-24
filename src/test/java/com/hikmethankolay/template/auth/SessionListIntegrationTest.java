@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -143,6 +145,31 @@ class SessionListIntegrationTest extends IntegrationTest {
 
         String successor = refresh.get(10, TimeUnit.SECONDS);
         revoke.get(10, TimeUnit.SECONDS);
+        refresh(successor).andExpect(status().isUnauthorized());
+    }
+
+    /** Two refreshes with one token cannot both succeed: the second waits for the first and counts as reuse. */
+    @Test
+    void aSecondRefreshWithTheSameTokenDuringTheFirstEndsTheSession() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        Tokens login = loginTokens(username, PASSWORD);
+        CountDownLatch rotated = new CountDownLatch(1);
+
+        // The first refresh keeps its transaction open after issuing the successor, like a slow commit.
+        CompletableFuture<String> first = CompletableFuture.supplyAsync(() -> transaction.execute(status -> {
+            String successor =
+                    refreshTokens.rotate(login.refreshToken()).successor().value();
+            rotated.countDown();
+            pause(Duration.ofMillis(500));
+            return successor;
+        }));
+        assertThat(rotated.await(10, TimeUnit.SECONDS)).isTrue();
+        CompletableFuture<RefreshTokenService.Rotation> second =
+                CompletableFuture.supplyAsync(() -> refreshTokens.rotate(login.refreshToken()));
+
+        String successor = first.get(10, TimeUnit.SECONDS);
+        assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(BadCredentialsException.class);
         refresh(successor).andExpect(status().isUnauthorized());
     }
 
