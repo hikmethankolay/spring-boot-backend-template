@@ -30,4 +30,5 @@ exist already (managed services or their own charts).
 4. Route an Ingress or Gateway to the `app` Service (port 80) with TLS.
 
 Scrape `/actuator/prometheus` on port 8081 (the pods carry `prometheus.io/*` annotations) and load
-`ops/prometheus/alerts.yml` into Prometheus.
+`ops/prometheus/alerts.yml` into Prometheus. `AppInstanceDown` selects the scrape job `app`: name the job that scrapes
+these pods `app`, or change `job="app"` in that rule, or the alert never fires.
