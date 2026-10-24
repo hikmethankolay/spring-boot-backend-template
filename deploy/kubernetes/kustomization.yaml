@@ -18,4 +18,4 @@ resources:
 images:
   # A pinned release, so every apply deploys the same, signed image; bump it to deploy a new release.
   - name: ghcr.io/hikmethankolay/spring-boot-backend-template
-    newTag: "3.2.8"
+    newTag: "3.2.9"

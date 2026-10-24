@@ -6,6 +6,17 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [3.2.9] - 2026-10-24
+
+### Changed
+
+- Logout no longer stores the presented access token's id in Redis: ending its session (since 3.2.8) already
+  rejects it, so the separate entry changed nothing.
+
+### Fixed
+
+- The documentation site of 3.2.8 was not published: that redundancy lowered the mutation score below the 95% gate.
+
 ## [3.2.8] - 2026-10-24
 
 ### Fixed
@@ -231,7 +242,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.8...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.9...HEAD
+[3.2.9]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.8...v3.2.9
 [3.2.8]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.5...v3.2.8
 [3.2.5]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.1...v3.2.5
 [3.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.0...v3.2.1

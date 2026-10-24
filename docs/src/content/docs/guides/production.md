@@ -49,14 +49,14 @@ docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=prod \
 Check that an image was built by this repository's release workflow before deploying it:
 
 ```bash
-cosign verify ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.8 \
+cosign verify ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.9 \
   --certificate-identity-regexp '^https://github.com/hikmethankolay/spring-boot-backend-template/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # Build provenance (SLSA) and the SBOM (SPDX) attached to the image; needs Docker with buildx
-docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.8 \
+docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.9 \
   --format '{{ json (index .Provenance "linux/amd64").SLSA }}'
-docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.8 \
+docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.9 \
   --format '{{ json (index .SBOM "linux/amd64").SPDX }}'
 ```
 
@@ -65,7 +65,7 @@ Verify both before trusting the file
 ([slsa-verifier](https://github.com/slsa-framework/slsa-verifier) checks the provenance):
 
 ```bash
-tag=v3.2.8
+tag=v3.2.9
 gh release download "$tag" -R hikmethankolay/spring-boot-backend-template -p 'sbom.spdx.json*'
 cosign verify-blob sbom.spdx.json --bundle sbom.spdx.json.sigstore.json \
   --certificate-identity-regexp '^https://github.com/hikmethankolay/spring-boot-backend-template/\.github/workflows/release\.yml@refs/tags/v' \
