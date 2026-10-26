@@ -148,11 +148,14 @@ public record AppProperties(
      * @param requireVerifiedEmail      whether users must verify their email before they can log in
      * @param verificationTokenTtl      how long an email verification link is valid
      * @param passwordResetTokenTtl     how long a password reset link is valid
+     * @param pwnedCheckEnabled         whether new passwords are also checked against Have I Been Pwned;
+     *                                  only the first 5 hex digits of the password's SHA-1 leave the server
      */
     public record Account(
             boolean requireVerifiedEmail,
             @NotNull Duration verificationTokenTtl,
-            @NotNull Duration passwordResetTokenTtl) {}
+            @NotNull Duration passwordResetTokenTtl,
+            boolean pwnedCheckEnabled) {}
 
     /**
      * Outgoing email settings (the SMTP server itself is configured with {@code spring.mail.*}).

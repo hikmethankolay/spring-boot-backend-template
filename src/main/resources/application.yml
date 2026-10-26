@@ -164,6 +164,9 @@ app:
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:false}
     verification-token-ttl: 24h
     password-reset-token-ttl: 1h
+    # Also check new passwords against the Have I Been Pwned range API (k-anonymity: only a 5-character
+    # hash prefix is sent). The bundled list of common passwords is always checked.
+    pwned-check-enabled: ${PWNED_CHECK_ENABLED:false}
   mail:
     from: ${MAIL_FROM:no-reply@example.com}
     # Frontend that handles /verify-email?token=... and /reset-password?token=... links.

@@ -11,6 +11,7 @@ import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
 import com.hikmethankolay.template.user.dto.UpdateProfileRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
+import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.cache.annotation.CacheEvict;
@@ -30,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link ApiException}: 404 for unknown users, 409 for duplicate usernames or emails,
  * 400 for invalid operations.</p>
  *
- * <p>Changing a password or role ends all of the user's sessions (see {@link SessionsInvalidated}).</p>
+ * <p>Changing a password or role ends all of the user's sessions (see {@link SessionsInvalidated}).
+ * A new password needs {@value #MIN_PASSWORD_LENGTH} characters, or 8 (the {@code @ValidPassword}
+ * floor) for users with two-factor authentication, and must not be a common or breached password
+ * (NIST SP 800-63B-4).</p>
  *
  * <p>Lookups by id are cached in {@link CacheNames#USERS}; every method that changes a user
  * evicts its entry. Evictions take effect after the transaction commits (see {@code CacheConfig}).</p>
@@ -45,11 +49,16 @@ public class UserService {
      */
     public static final String SORTABLE_PROPERTIES = "id, username, email, role, emailVerified, createdAt, updatedAt";
 
+    /** Characters a new password needs without two-factor authentication (NIST SP 800-63B-4). */
+    public static final int MIN_PASSWORD_LENGTH = 15;
+
     private static final SortAllowList SORTING = new SortAllowList(List.of(SORTABLE_PROPERTIES.split(", ")));
 
     private final UserRepository userRepository;
 
     private final PasswordEncoder passwordEncoder;
+
+    private final BreachedPasswordValidator breachedPasswords;
 
     private final ApplicationEventPublisher events;
 
@@ -58,18 +67,21 @@ public class UserService {
     /**
      * Creates the service.
      *
-     * @param userRepository  user persistence
-     * @param passwordEncoder hashes and verifies passwords
-     * @param events          publishes user events
-     * @param audit           records security events
+     * @param userRepository    user persistence
+     * @param passwordEncoder   hashes and verifies passwords
+     * @param breachedPasswords rejects common and breached passwords
+     * @param events            publishes user events
+     * @param audit             records security events
      */
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
+            BreachedPasswordValidator breachedPasswords,
             ApplicationEventPublisher events,
             AuditLog audit) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.breachedPasswords = breachedPasswords;
         this.events = events;
         this.audit = audit;
     }
@@ -83,7 +95,8 @@ public class UserService {
      * @param role          role of the new user
      * @param emailVerified whether the address is already trusted (e.g. the configured admin)
      * @return the created user
-     * @throws ApiException 409 if the username or email is already taken
+     * @throws ApiException 400 if the password is too short or breached, 409 if the username or email is
+     *                      already taken
      */
     @Transactional
     public UserResponse register(String username, String email, String rawPassword, Role role, boolean emailVerified) {
@@ -91,7 +104,7 @@ public class UserService {
         ensureUsernameAvailable(username);
         ensureEmailAvailable(normalizedEmail);
 
-        User user = new User(username, normalizedEmail, passwordEncoder.encode(rawPassword), role);
+        User user = new User(username, normalizedEmail, encodeNewPassword(false, rawPassword), role);
         user.setEmailVerified(emailVerified);
         User saved = userRepository.save(user);
         audit.record(AuditEvent.USER_REGISTERED, saved.getId(), "role", role);
@@ -120,13 +133,13 @@ public class UserService {
      *
      * @param id          user id
      * @param rawPassword the new plain password, stored hashed
-     * @throws ApiException 404 if the user does not exist
+     * @throws ApiException 400 if the password is too short or breached, 404 if the user does not exist
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public void setPassword(long id, String rawPassword) {
         User user = findUser(id);
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), rawPassword));
         endSessions(user);
     }
 
@@ -190,7 +203,8 @@ public class UserService {
      *
      * @param id      user id
      * @param request current and new password
-     * @throws ApiException 404 if the user does not exist, 400 if the current password is wrong
+     * @throws ApiException 404 if the user does not exist, 400 if the current password is wrong or the
+     *                      new one is too short or breached
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
@@ -199,7 +213,7 @@ public class UserService {
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
         }
-        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.newPassword()));
         audit.record(AuditEvent.PASSWORD_CHANGED, id);
         endSessions(user);
     }
@@ -216,8 +230,8 @@ public class UserService {
      * @param requesterId id of the administrator making the request
      * @param request     the changes
      * @return the updated user
-     * @throws ApiException 400 if a role change is not confirmed with the requester's current password,
-     *                      403 if the change needs the owner, 404 if the user does not exist, 409 if the
+     * @throws ApiException 400 if a role change is not confirmed with the requester's current password or
+     *                      the new password is too short or breached, 403 if the change needs the owner, 404 if the user does not exist, 409 if the
      *                      new username or email is taken or the change would assign or remove the OWNER role
      */
     @Transactional
@@ -240,7 +254,7 @@ public class UserService {
         boolean identityChanged =
                 !user.getUsername().equals(oldUsername) || !user.getEmail().equals(oldEmail);
         if (request.password() != null) {
-            user.setPasswordHash(passwordEncoder.encode(request.password()));
+            user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.password()));
         }
         if (identityChanged || request.password() != null) {
             audit.record(
@@ -341,6 +355,29 @@ public class UserService {
             throw new ApiException(HttpStatus.FORBIDDEN, ProblemType.OWNER_REQUIRED, detail);
         }
         return requester;
+    }
+
+    /**
+     * Checks a new password against the length rule and the breached list, then hashes it.
+     *
+     * @param twoFactor   whether the user has two-factor authentication, which allows 8 characters
+     * @param rawPassword the new plain password
+     * @return the encoded password
+     * @throws ApiException 400 if the password is too short or breached
+     */
+    private String encodeNewPassword(boolean twoFactor, String rawPassword) {
+        // Code points, so a character outside the BMP counts once (NIST SP 800-63B-4).
+        if (!twoFactor && rawPassword.codePointCount(0, rawPassword.length()) < MIN_PASSWORD_LENGTH) {
+            throw ApiException.badRequest(
+                    ProblemType.PASSWORD_TOO_SHORT,
+                    "The password needs at least " + MIN_PASSWORD_LENGTH
+                            + " characters, or 8 with two-factor authentication.");
+        }
+        if (breachedPasswords.isBreached(rawPassword)) {
+            throw ApiException.badRequest(
+                    ProblemType.PASSWORD_BREACHED, "This password is too common or appeared in a data breach.");
+        }
+        return passwordEncoder.encode(rawPassword);
     }
 
     /**

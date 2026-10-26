@@ -11,5 +11,5 @@ import jakarta.validation.constraints.Size;
  * @param code            a code from the authenticator app, or an unused recovery code
  */
 public record DisableTotpRequest(
-        @NotBlank @Size(max = 72) String currentPassword,
+        @NotBlank @Size(max = 128) String currentPassword,
         @NotBlank @Size(max = 32) String code) {}

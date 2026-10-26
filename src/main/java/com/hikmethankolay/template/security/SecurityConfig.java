@@ -2,6 +2,7 @@ package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.config.AppProperties;
 import java.util.List;
+import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -16,8 +17,11 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsPasswordService;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -194,14 +198,20 @@ public class SecurityConfig {
     }
 
     /**
-     * Password hashing. The delegating encoder stores the algorithm id with each hash
-     * ({@code {bcrypt}...}), so the algorithm can be upgraded later without breaking old hashes.
+     * Password hashing with Argon2id at the OWASP minimum (19 MiB of memory, 2 iterations, 1 lane). The
+     * delegating encoder stores the algorithm id with each hash ({@code {argon2}...}); hashes from
+     * earlier versions ({@code {bcrypt}...}) still match and are rehashed at the next login.
      *
      * @return the password encoder
      */
     @Bean
     PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+        // Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8() uses 16 MiB, below the OWASP minimum.
+        return new DelegatingPasswordEncoder(
+                "argon2",
+                Map.of(
+                        "argon2", new Argon2PasswordEncoder(16, 32, 1, 19 * 1024, 2),
+                        "bcrypt", new BCryptPasswordEncoder()));
     }
 
     /**
@@ -209,13 +219,17 @@ public class SecurityConfig {
      *
      * @param userDetailsService loads users by username or email
      * @param passwordEncoder    verifies password hashes
+     * @param passwordUpgrade    stores the new hash when a login used an outdated algorithm or setting
      * @return the authentication manager
      */
     @Bean
     AuthenticationManager authenticationManager(
-            UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
+            UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder,
+            UserDetailsPasswordService passwordUpgrade) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
+        provider.setUserDetailsPasswordService(passwordUpgrade);
         return new ProviderManager(provider);
     }
 

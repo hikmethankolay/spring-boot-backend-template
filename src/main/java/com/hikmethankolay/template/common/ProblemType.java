@@ -37,6 +37,13 @@ public enum ProblemType {
     WRONG_PASSWORD(
             "wrong-password", "The caller's current password, required to confirm the change, is missing or wrong"),
 
+    /** The new password is shorter than 15 characters and the user has no two-factor authentication. */
+    PASSWORD_TOO_SHORT(
+            "password-too-short", "The new password needs 15 characters, or 8 with two-factor authentication"),
+
+    /** The new password is on the list of common and breached passwords. */
+    PASSWORD_BREACHED("password-breached", "The new password is common or appeared in a data breach; choose another"),
+
     /** An email verification or password reset token is unknown, used or expired. */
     INVALID_TOKEN("invalid-token", "The email verification or password reset token is unknown, used or expired"),
 

@@ -30,7 +30,7 @@ class AdminBootstrapTest {
     private UserService users;
 
     private AdminBootstrap bootstrap() {
-        return bootstrap("Owner#12345");
+        return bootstrap("Owner#12345-passphrase");
     }
 
     private AdminBootstrap bootstrap(String password) {

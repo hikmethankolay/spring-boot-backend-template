@@ -90,7 +90,7 @@ peak), `stress` (the peak, then twice and three times it), `spike` (a sudden jum
 between a user's requests. The test users are created in setup and deleted at the end.
 
 Each kind of request has its own threshold, so one slow kind cannot hide behind fast ones: p95 under 300 ms for
-reads, 500 ms for writes and 1.5 s for requests that check a password with BCrypt, with fewer than 1% failed
+reads, 500 ms for writes and 1.5 s for requests that check a password with Argon2id, with fewer than 1% failed
 requests or journeys and no 429. With the default `load` profile (25 users), one instance on a developer machine
 answered reads at a p95 of 4 ms, writes at 16 ms and password requests at 136 ms.
 

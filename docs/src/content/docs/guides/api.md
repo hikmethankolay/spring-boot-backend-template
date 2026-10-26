@@ -111,8 +111,8 @@ The notes endpoints belong to the sample feature (`note/`); see [Your first feat
 
 Every email field (`register`, `PATCH /users/me`, the admin update and the email endpoints) uses the same rule,
 `@ValidEmail`: a well-formed address of 3 to 254 characters. Tokens must not be empty. New passwords
-(`@ValidPassword`) have 8 to 72 characters, at most 72 bytes in UTF-8 (BCrypt's limit), and an uppercase letter, a
-lowercase letter, a digit and a symbol. See [Security](../security/#roles) for what admins and the owner may do.
+have 15 to 128 characters (8 for users with two-factor authentication) and no composition rules; common and breached
+passwords are refused (see [Security](../security/#passwords)). See [Security](../security/#roles) for what admins and the owner may do.
 
 ## Errors
 

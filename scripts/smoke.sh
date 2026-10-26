@@ -7,7 +7,7 @@ command -v curl >/dev/null 2>&1 || die "curl is required."
 
 base_url="${1:-http://localhost:${PORT:-8080}}"
 username="smoke_$(date +%s)"
-password="Smoke#12345"
+password="Smoke#12345-passphrase"
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
 

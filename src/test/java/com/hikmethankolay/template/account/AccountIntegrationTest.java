@@ -104,9 +104,9 @@ class AccountIntegrationTest extends IntegrationTest {
         assertThat(reset.getText()).contains("http://localhost:3000/reset-password?token=");
 
         postJson("/api/v1/auth/password-reset/confirm", json("""
-                {"token":"%s","newPassword":"Reset#4567"}""", CapturingMailSender.token(reset)), 204);
+                {"token":"%s","newPassword":"Reset#4567-passphrase"}""", CapturingMailSender.token(reset)), 204);
 
-        login(username, "Reset#4567");
+        login(username, "Reset#4567-passphrase");
         mockMvc.perform(post("/api/v1/auth/login")
                         .with(fromIp("10.0.2.1"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -125,7 +125,7 @@ class AccountIntegrationTest extends IntegrationTest {
         jdbc.update("UPDATE account_tokens SET expires_at = now() - interval '1 second' WHERE user_id = ?", userId);
 
         postJson("/api/v1/auth/password-reset/confirm", json("""
-                {"token":"%s","newPassword":"Reset#4567"}""", token), 400);
+                {"token":"%s","newPassword":"Reset#4567-passphrase"}""", token), 400);
     }
 
     @Test
@@ -212,7 +212,7 @@ class AccountIntegrationTest extends IntegrationTest {
                 .andExpect(status().isOk());
 
         postJson("/api/v1/auth/password-reset/confirm", json("""
-                {"token":"%s","newPassword":"Reset#4567"}""", resetToken), 400);
+                {"token":"%s","newPassword":"Reset#4567-passphrase"}""", resetToken), 400);
         postJson("/api/v1/auth/verify-email", json("""
                 {"token":"%s"}""", verificationToken), 400);
     }

@@ -119,6 +119,25 @@ Access-token revocation lives in Redis: denylisted session ids and per-user cut-
 affected tokens would have expired, and the JWT decoder checks both in one round trip on every request, on every
 instance. After a password change the client must log in again.
 
+## Passwords
+
+New passwords follow NIST SP 800-63B-4:
+
+- **Length, no composition rules.** 15 to 128 characters, counted as Unicode code points; 8 are enough for a user
+  with two-factor authentication. A shorter one is refused with `urn:problem:password-too-short`.
+- **Blocklist.** Every new password (registration, change, reset, admin update) is checked, ignoring case, against
+  the bundled `breached-passwords.txt`: the 46,000 entries of 8 or more characters from the NCSC top 100,000 list.
+  A match is refused with `urn:problem:password-breached`. With `PWNED_CHECK_ENABLED=true` the password is also
+  looked up in [Have I Been Pwned](https://haveibeenpwned.com/API/v3#PwnedPasswords): only the first 5 hex digits of
+  its SHA-1 are sent, with padding. If the API is unreachable, only the bundled list applies.
+- **Hashing.** Argon2id with 19 MiB of memory, 2 iterations and 1 lane (the OWASP minimum) and a random 16-byte salt
+  per hash, stored with the algorithm id: `{argon2}$argon2id$...`. Hashes from 3.2.x and earlier
+  (`{bcrypt}...`) still work and are rewritten as Argon2id at the user's next successful login. Argon2id costs
+  more memory per login than BCrypt: size pods for about 20 MiB per concurrent login.
+
+3.2.x and earlier cannot check `{argon2}` hashes. After a rollback to them, users who registered, changed their
+password or logged in on a newer version cannot log in until they reset their password.
+
 ## Account flows
 
 | Endpoint | Purpose |

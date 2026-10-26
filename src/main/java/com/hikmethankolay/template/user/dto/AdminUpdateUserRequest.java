@@ -26,5 +26,5 @@ public record AdminUpdateUserRequest(
                 description = "New role. Only the owner can change roles, confirmed with `currentPassword`")
         Role role,
 
-        @Schema(description = "The caller's own current password; required when `role` changes") @Size(max = 72)
+        @Schema(description = "The caller's own current password; required when `role` changes") @Size(max = 128)
         String currentPassword) {}

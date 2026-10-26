@@ -11,5 +11,5 @@ import jakarta.validation.constraints.Size;
  * @param code            the 6-digit code currently shown by the authenticator app
  */
 public record ConfirmTotpRequest(
-        @NotBlank @Size(max = 72) String currentPassword,
+        @NotBlank @Size(max = 128) String currentPassword,
         @NotBlank @Size(max = 32) String code) {}

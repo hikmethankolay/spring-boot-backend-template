@@ -80,7 +80,7 @@ class UserCacheIntegrationTest extends IntegrationTest {
                         .with(bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"currentPassword":"%s","newPassword":"Changed#456"}""", PASSWORD)))
+                                {"currentPassword":"%s","newPassword":"Changed#456-passphrase"}""", PASSWORD)))
                 .andExpect(status().isNoContent());
         assertThat(usersCache().get(id)).isNull();
 

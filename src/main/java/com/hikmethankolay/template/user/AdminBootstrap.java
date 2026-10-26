@@ -7,6 +7,7 @@ import com.hikmethankolay.template.user.validation.ValidPassword;
 import com.hikmethankolay.template.user.validation.ValidUsername;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -89,9 +90,15 @@ class AdminBootstrap implements ApplicationRunner {
         }
     }
 
-    /** The registration rules of {@code RegisterRequest}, applied to the configured credentials. */
+    /**
+     * The registration rules of {@code RegisterRequest}, applied to the configured credentials. The owner has
+     * no two-factor authentication yet, so the password needs {@link UserService#MIN_PASSWORD_LENGTH}
+     * characters; {@code UserService} also refuses a breached one.
+     */
     private record Credentials(
             @NotBlank @ValidUsername String username,
             @NotBlank @ValidEmail String email,
-            @NotBlank @ValidPassword String password) {}
+
+            @NotBlank @ValidPassword @Size(min = UserService.MIN_PASSWORD_LENGTH)
+            String password) {}
 }

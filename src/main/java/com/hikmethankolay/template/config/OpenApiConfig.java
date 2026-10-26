@@ -99,8 +99,8 @@ public class OpenApiConfig {
             "RateLimit-Reset",
             "Seconds until the window resets");
 
-    private static final String PASSWORD_RULE = "8-72 characters and at most 72 bytes in UTF-8, with an uppercase "
-            + "letter, a lowercase letter, a digit and a symbol";
+    private static final String PASSWORD_RULE = "15-128 characters (8 for users with two-factor authentication), "
+            + "no composition rules; common and breached passwords are rejected";
 
     /** Creates the configuration; Spring instantiates it. */
     public OpenApiConfig() {
@@ -223,7 +223,8 @@ public class OpenApiConfig {
                     if (property.toLowerCase(Locale.ROOT).endsWith("password")) {
                         propertySchema.setFormat("password");
                         propertySchema.setWriteOnly(true);
-                        if (propertySchema.getPattern() != null) {
+                        // Only new passwords (@ValidPassword) have a minimum length.
+                        if (propertySchema.getMinLength() != null && propertySchema.getMinLength() > 0) {
                             propertySchema.setDescription(PASSWORD_RULE);
                         }
                     }

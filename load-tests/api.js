@@ -31,8 +31,8 @@ const FAILED_LOGINS = __ENV.FAILED_LOGINS === 'true';
 const ADMIN_USERNAME = __ENV.ADMIN_USERNAME;
 const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD;
 
-const PASSWORD = 'Load#12345';
-const NEW_PASSWORD = 'Load#67890';
+const PASSWORD = 'Load#12345-passphrase';
+const NEW_PASSWORD = 'Load#67890-passphrase';
 const SORTABLE = ['id', 'username', 'email', 'role', 'emailVerified', 'createdAt', 'updatedAt'];
 
 // Load shapes as [stage duration, share of each journey's peak]. DURATION replaces the hold stages ('hold').
@@ -97,7 +97,7 @@ export const options = {
     // Token-checked reads and writes.
     'http_req_duration{kind:read}': ['p(95)<300'],
     'http_req_duration{kind:write}': ['p(95)<500'],
-    // Requests that hash or check a password with BCrypt (login, register, password change, account deletion).
+    // Requests that hash or check a password with Argon2id (login, register, password change, account deletion).
     'http_req_duration{kind:password}': ['p(95)<1500'],
   },
 };

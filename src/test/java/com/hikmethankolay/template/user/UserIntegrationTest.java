@@ -63,7 +63,7 @@ class UserIntegrationTest extends IntegrationTest {
     void changePasswordRequiresCurrentPassword() throws Exception {
         String username = uniqueUsername();
         String token = registerAndLogin(username);
-        String newPassword = "Changed#456";
+        String newPassword = "Changed#456-passphrase";
 
         mockMvc.perform(put("/api/v1/users/me/password")
                         .with(bearer(token))
@@ -183,7 +183,7 @@ class UserIntegrationTest extends IntegrationTest {
                         .with(bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"password":"Reset#1234"}"""))
+                                {"password":"Reset#1234-passphrase"}"""))
                 .andExpect(status().isOk());
         mockMvc.perform(patch("/api/v1/users/{id}", userId)
                         .with(bearer(adminToken))

@@ -28,6 +28,14 @@
         </Or>
     </Match>
     <!--
+      The Have I Been Pwned range API is keyed by SHA-1 (k-anonymity lookup); the digest is never stored or used to
+      protect anything. Passwords are hashed with Argon2id (SecurityConfig).
+    -->
+    <Match>
+        <Bug pattern="WEAK_MESSAGE_DIGEST_SHA1"/>
+        <Class name="com.hikmethankolay.template.user.validation.BreachedPasswordValidator"/>
+    </Match>
+    <!--
       ProductionSettingsCheck holds the local database password only to refuse it in production, and lower-cases
       URI hosts, which java.net.URI returns in ASCII (internationalized names stay in Punycode).
     -->

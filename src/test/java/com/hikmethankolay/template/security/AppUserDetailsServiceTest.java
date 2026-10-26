@@ -3,6 +3,7 @@ package com.hikmethankolay.template.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.hikmethankolay.template.user.Role;
@@ -37,6 +38,17 @@ class AppUserDetailsServiceTest {
         assertThat(details.toString())
                 .isEqualTo("AppUserDetails[id=5, username=alice, role=ADMIN]")
                 .doesNotContain("hash");
+    }
+
+    /** The upgraded hash replaces the one the login was checked against, and the returned user carries it. */
+    @Test
+    void updatePasswordStoresTheNewHashIfTheOldOneIsUnchanged() {
+        AppUserDetails user = new AppUserDetails(5L, "alice", "{bcrypt}old", Role.USER, true, 3);
+
+        UserDetails upgraded = service.updatePassword(user, "{argon2}new");
+
+        verify(users).upgradePasswordHash(5L, "{bcrypt}old", "{argon2}new");
+        assertThat(upgraded).isEqualTo(new AppUserDetails(5L, "alice", "{argon2}new", Role.USER, true, 3));
     }
 
     /** An unknown identifier is reported as not found. */

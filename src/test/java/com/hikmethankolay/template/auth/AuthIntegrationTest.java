@@ -138,18 +138,55 @@ class AuthIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void passwordOverBcryptByteLimitIsRejected() throws Exception {
-        // 64 characters, but each "ğ" takes 2 bytes in UTF-8: 124 bytes, over BCrypt's 72-byte limit.
-        String password = "Aa1!" + "ğ".repeat(60);
+    void passwordOver128CharactersIsRejected() throws Exception {
+        String username = uniqueUsername();
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, "a".repeat(129))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:validation-failed"))
+                .andExpect(jsonPath("$.errors[0].field").value("password"));
+    }
+
+    @Test
+    void longMultiByteLowerCasePasswordIsAccepted() throws Exception {
+        // No composition rules, and 124 bytes in UTF-8: over BCrypt's old 72-byte limit, fine for Argon2.
+        String password = "ğ".repeat(62);
         String username = uniqueUsername();
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, password)))
+                .andExpect(status().isCreated());
+        login(username, password);
+    }
+
+    @Test
+    void passwordUnder15CharactersIsRejectedWithoutTwoFactor() throws Exception {
+        String username = uniqueUsername();
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"username":"%s","email":"%s@example.com","password":"fourteen-chars"}""", username, username)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.type").value("urn:problem:validation-failed"))
-                .andExpect(jsonPath("$.errors[0].field").value("password"));
+                .andExpect(jsonPath("$.type").value("urn:problem:password-too-short"));
+    }
+
+    @Test
+    void breachedPasswordIsRejected() throws Exception {
+        String username = uniqueUsername();
+
+        // On the bundled list; compared in lower case.
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"username":"%s","email":"%s@example.com","password":"1Q2W3E4R5T6Y7U8I9O0P"}""", username, username)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:password-breached"));
     }
 
     @Test

@@ -27,6 +27,8 @@
         <java.version>25</java.version>
         <springdoc.version>3.1.1</springdoc.version>
         <archunit.version>1.5.1</archunit.version>
+        <!-- Argon2PasswordEncoder needs BouncyCastle; Spring Boot does not manage its version. -->
+        <bouncycastle.version>1.86</bouncycastle.version>
         <!-- 1.5.x uses Jackson 2, which springdoc already brings; validates responses against api/openapi.json. -->
         <json-schema-validator.version>1.5.9</json-schema-validator.version>
         <error-prone.version>2.50.0</error-prone.version>
@@ -65,6 +67,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
         </dependency>
         <dependency>
             <!-- Social login: the token exchange and user info clients only. Not the starter, whose

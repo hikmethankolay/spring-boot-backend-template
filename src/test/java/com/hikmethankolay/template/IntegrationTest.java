@@ -29,9 +29,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 public abstract class IntegrationTest {
 
-    protected static final String PASSWORD = "Secret#123";
+    protected static final String PASSWORD = "Secret#123-passphrase";
     protected static final String ADMIN_USERNAME = "admin";
-    protected static final String ADMIN_PASSWORD = "Admin#12345";
+    protected static final String ADMIN_PASSWORD = "Admin#12345-passphrase";
 
     @Autowired
     protected MockMvc mockMvc;

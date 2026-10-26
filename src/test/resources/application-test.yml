@@ -13,7 +13,7 @@ app:
   admin:
     username: admin
     email: admin@example.com
-    password: Admin#12345
+    password: Admin#12345-passphrase
   mfa:
     encryption-key: test-mfa-key-that-is-at-least-32-characters
   social-login:

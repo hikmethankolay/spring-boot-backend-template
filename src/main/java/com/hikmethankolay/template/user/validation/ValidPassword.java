@@ -9,25 +9,23 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 import jakarta.validation.ReportAsSingleViolation;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 /**
- * Password strength rule: 8-72 characters with at least one uppercase letter, one lowercase
- * letter, one digit and one symbol, and at most 72 bytes in UTF-8 (BCrypt's input limit; longer
- * input makes hashing fail), checked by {@link ValidPasswordValidator}.
+ * Password length rule: 8-128 characters and no composition rules (NIST SP 800-63B-4). This is the
+ * floor for users with two-factor authentication; {@code UserService} asks 15 characters of everyone
+ * else and checks every new password against {@code BreachedPasswordValidator}.
  *
  * <p>{@code null} is valid; combine with {@code @NotBlank} when the field is required.</p>
  */
 @Documented
-@Constraint(validatedBy = ValidPasswordValidator.class)
+@Constraint(validatedBy = {})
 @Target({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE})
 @Retention(RUNTIME)
-@Size(min = 8, max = 72)
-@Pattern(regexp = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[a-z])(?=.*[^0-9A-Za-z]).*$")
+@Size(min = 8, max = 128)
 @ReportAsSingleViolation
 public @interface ValidPassword {
 
@@ -36,8 +34,7 @@ public @interface ValidPassword {
      *
      * @return the message
      */
-    String message() default
-            "must be 8-72 characters (at most 72 bytes in UTF-8) and include an uppercase letter, a lowercase letter, a digit and a symbol";
+    String message() default "must be 8-128 characters";
 
     /**
      * Validation groups.

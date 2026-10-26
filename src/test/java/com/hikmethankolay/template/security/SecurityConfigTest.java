@@ -10,6 +10,7 @@ import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -17,6 +18,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.cors.CorsConfiguration;
@@ -68,15 +70,50 @@ class SecurityConfigTest {
                 .contains("ROLE_OWNER", "ROLE_ADMIN", "ROLE_USER");
     }
 
-    /** Passwords are hashed with bcrypt and stored with the algorithm id. */
+    /** Passwords are hashed with Argon2id at the OWASP minimum and stored with the algorithm id. */
     @Test
-    void passwordsAreHashedWithBcryptAndTheAlgorithmId() {
+    void passwordsAreHashedWithArgon2idAndTheAlgorithmId() {
         PasswordEncoder encoder = config.passwordEncoder();
 
-        String hash = encoder.encode("Secret#123");
+        String hash = encoder.encode("Secret#123-passphrase");
 
-        assertThat(hash).startsWith("{bcrypt}");
-        assertThat(encoder.matches("Secret#123", hash)).isTrue();
+        assertThat(hash).startsWith("{argon2}$argon2id$v=19$m=19456,t=2,p=1$");
+        assertThat(encoder.matches("Secret#123-passphrase", hash)).isTrue();
+        assertThat(encoder.upgradeEncoding(hash)).isFalse();
+    }
+
+    /** Hashes from earlier versions still match and are marked for an upgrade. */
+    @Test
+    void bcryptHashesStillMatchAndNeedAnUpgrade() {
+        PasswordEncoder encoder = config.passwordEncoder();
+        String legacy = "{bcrypt}" + new BCryptPasswordEncoder().encode("Secret#123-passphrase");
+
+        assertThat(encoder.matches("Secret#123-passphrase", legacy)).isTrue();
+        assertThat(encoder.matches("wrong", legacy)).isFalse();
+        assertThat(encoder.upgradeEncoding(legacy)).isTrue();
+    }
+
+    /** A login with a bcrypt hash hands an Argon2id hash of the same password to the upgrade service. */
+    @Test
+    void loginWithBcryptHashUpgradesIt() {
+        PasswordEncoder encoder = config.passwordEncoder();
+        AppUserDetails user = new AppUserDetails(
+                1L,
+                "alice",
+                "{bcrypt}" + new BCryptPasswordEncoder().encode("Secret#123-passphrase"),
+                Role.USER,
+                true,
+                0);
+        AtomicReference<String> upgraded = new AtomicReference<>();
+        AuthenticationManager manager = config.authenticationManager(username -> user, encoder, (details, hash) -> {
+            upgraded.set(hash);
+            return details;
+        });
+
+        manager.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "Secret#123-passphrase"));
+
+        assertThat(upgraded.get()).startsWith("{argon2}");
+        assertThat(encoder.matches("Secret#123-passphrase", upgraded.get())).isTrue();
     }
 
     /** The authentication manager checks passwords with the configured encoder. */
@@ -94,10 +131,12 @@ class SecurityConfigTest {
                 return encoded.equals(encode(raw));
             }
         };
-        AppUserDetails user = new AppUserDetails(1L, "alice", "plain:Secret#123", Role.USER, true, 0);
-        AuthenticationManager manager = config.authenticationManager(username -> user, plain);
+        AppUserDetails user = new AppUserDetails(1L, "alice", "plain:Secret#123-passphrase", Role.USER, true, 0);
+        AuthenticationManager manager =
+                config.authenticationManager(username -> user, plain, (details, hash) -> details);
 
-        assertThat(manager.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "Secret#123"))
+        assertThat(manager.authenticate(
+                                UsernamePasswordAuthenticationToken.unauthenticated("alice", "Secret#123-passphrase"))
                         .getPrincipal())
                 .isEqualTo(user);
         assertThatThrownBy(() ->

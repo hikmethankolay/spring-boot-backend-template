@@ -7,12 +7,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hikmethankolay.template.TestProperties;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
+import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.Optional;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -43,15 +45,21 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordEncoder, events, new AuditLog(new SimpleMeterRegistry()));
+        userService = new UserService(
+                userRepository,
+                passwordEncoder,
+                new BreachedPasswordValidator(TestProperties.create()),
+                events,
+                new AuditLog(new SimpleMeterRegistry()));
     }
 
     @Test
     void registerNormalizesEmailAndHashesPassword() {
-        when(passwordEncoder.encode("Secret#123")).thenReturn("hashed");
+        when(passwordEncoder.encode("Secret#123-passphrase")).thenReturn("hashed");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
 
-        UserResponse response = userService.register("alice", "  Alice@Example.COM ", "Secret#123", Role.USER, false);
+        UserResponse response =
+                userService.register("alice", "  Alice@Example.COM ", "Secret#123-passphrase", Role.USER, false);
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(saved.capture());
@@ -68,7 +76,8 @@ class UserServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("hashed");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 2L));
 
-        UserResponse response = userService.register("root", "root@example.com", "Secret#123", Role.ADMIN, true);
+        UserResponse response =
+                userService.register("root", "root@example.com", "Secret#123-passphrase", Role.ADMIN, true);
 
         assertThat(response.emailVerified()).isTrue();
         verify(events, never()).publishEvent(any());
@@ -78,7 +87,8 @@ class UserServiceTest {
     void registerRejectsTakenEmail() {
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> userService.register("alice", "alice@example.com", "Secret#123", Role.USER, false))
+        assertThatThrownBy(() ->
+                        userService.register("alice", "alice@example.com", "Secret#123-passphrase", Role.USER, false))
                 .isInstanceOfSatisfying(
                         ApiException.class, ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(userRepository, never()).save(any());
@@ -94,6 +104,61 @@ class UserServiceTest {
                 .isInstanceOfSatisfying(
                         ApiException.class, ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         assertThat(user.getPasswordHash()).isEqualTo("hashed");
+    }
+
+    @Test
+    void newPasswordNeeds15CharactersWithoutTwoFactor() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current", "hashed")).thenReturn(true);
+
+        assertProblem(
+                () -> userService.changePassword(1L, new ChangePasswordRequest("current", "fourteen-chars")),
+                HttpStatus.BAD_REQUEST,
+                "urn:problem:password-too-short");
+        assertThat(user.getPasswordHash()).isEqualTo("hashed");
+    }
+
+    @Test
+    void twoFactorUsersMaySet8Characters() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        user.startTotpEnrollment("encrypted");
+        user.enableTotp(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current", "hashed")).thenReturn(true);
+        when(passwordEncoder.encode("tq8-vbmz")).thenReturn("short-hash");
+
+        userService.changePassword(1L, new ChangePasswordRequest("current", "tq8-vbmz"));
+
+        assertThat(user.getPasswordHash()).isEqualTo("short-hash");
+    }
+
+    @Test
+    void breachedPasswordIsRejectedEvenWithTwoFactor() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        user.startTotpEnrollment("encrypted");
+        user.enableTotp(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertProblem(
+                () -> userService.setPassword(1L, "Password123456"),
+                HttpStatus.BAD_REQUEST,
+                "urn:problem:password-breached");
+        assertThat(user.getPasswordHash()).isEqualTo("hashed");
+    }
+
+    @Test
+    void passwordLengthCountsCodePoints() {
+        // 15 emoji are 30 UTF-16 chars but 15 characters.
+        when(passwordEncoder.encode("😀".repeat(15))).thenReturn("hashed");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
+
+        userService.register("alice", "alice@example.com", "😀".repeat(15), Role.USER, true);
+
+        assertProblem(
+                () -> userService.register("bob", "bob@example.com", "😀".repeat(14), Role.USER, true),
+                HttpStatus.BAD_REQUEST,
+                "urn:problem:password-too-short");
     }
 
     @Test
@@ -201,10 +266,10 @@ class UserServiceTest {
     void administratorsCanManageRegularUsersWithoutTheOwner() {
         User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(passwordEncoder.encode("Reset#1234")).thenReturn("new-hash");
+        when(passwordEncoder.encode("Reset#1234-passphrase")).thenReturn("new-hash");
         when(userRepository.saveAndFlush(user)).thenReturn(user);
 
-        userService.update(1L, 5L, new AdminUpdateUserRequest(null, null, "Reset#1234", null, null));
+        userService.update(1L, 5L, new AdminUpdateUserRequest(null, null, "Reset#1234-passphrase", null, null));
 
         assertThat(user.getPasswordHash()).isEqualTo("new-hash");
     }
@@ -289,9 +354,9 @@ class UserServiceTest {
     void deletingOwnAccountEndsItsSessions() {
         User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 5L);
         when(userRepository.findById(5L)).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches("Secret#123", "hashed")).thenReturn(true);
+        when(passwordEncoder.matches("Secret#123-passphrase", "hashed")).thenReturn(true);
 
-        userService.deleteOwnAccount(5L, new DeleteAccountRequest("Secret#123"));
+        userService.deleteOwnAccount(5L, new DeleteAccountRequest("Secret#123-passphrase"));
 
         verify(userRepository).delete(user);
         verify(events).publishEvent(new SessionsInvalidated(5L));

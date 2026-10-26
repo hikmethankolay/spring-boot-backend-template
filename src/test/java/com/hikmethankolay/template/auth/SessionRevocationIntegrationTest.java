@@ -53,13 +53,13 @@ class SessionRevocationIntegrationTest extends IntegrationTest {
                         .with(bearer(laptop.accessToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"currentPassword":"%s","newPassword":"Changed#456"}""", PASSWORD)))
+                                {"currentPassword":"%s","newPassword":"Changed#456-passphrase"}""", PASSWORD)))
                 .andExpect(status().isNoContent());
 
         expectSessionEnded(laptop);
         expectSessionEnded(phone);
         // A login right after the change (same second) is not caught by the revocation.
-        String fresh = login(username, "Changed#456");
+        String fresh = login(username, "Changed#456-passphrase");
         mockMvc.perform(get("/api/v1/users/me").with(bearer(fresh))).andExpect(status().isOk());
     }
 
@@ -79,7 +79,7 @@ class SessionRevocationIntegrationTest extends IntegrationTest {
         mockMvc.perform(post("/api/v1/auth/password-reset/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"token":"%s","newPassword":"Reset#4567"}""", resetToken)))
+                                {"token":"%s","newPassword":"Reset#4567-passphrase"}""", resetToken)))
                 .andExpect(status().isNoContent());
 
         expectSessionEnded(session);

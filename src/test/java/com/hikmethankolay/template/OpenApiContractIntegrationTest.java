@@ -84,9 +84,9 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
                         .value("password"))
                 .andExpect(jsonPath(
                         "$.components.schemas.RegisterRequest.properties.password.description",
-                        containsString("72 bytes")))
+                        containsString("15-128 characters")))
                 .andExpect(jsonPath("$.components.schemas.LoginRequest.properties.password.maxLength")
-                        .value(72))
+                        .value(128))
                 .andExpect(jsonPath("$.components.schemas.UserResponse.properties.email.format")
                         .value("email"))
                 .andExpect(
