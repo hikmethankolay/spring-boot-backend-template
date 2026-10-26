@@ -20,6 +20,7 @@ import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,7 +44,9 @@ class RefreshTokenServiceTest {
 
     private static final String RAW = "raw-refresh-token";
     private static final UUID FAMILY = UUID.randomUUID();
-    private static final Instant STARTED = Instant.parse("2026-01-01T00:00:00Z");
+    // Recent, so the session is within its absolute lifetime.
+    private static final Instant STARTED =
+            Instant.now().minus(Duration.ofHours(1)).truncatedTo(ChronoUnit.SECONDS);
 
     private final RefreshTokenRepository tokens = mock(RefreshTokenRepository.class);
     private final UserRepository users = mock(UserRepository.class);
@@ -176,6 +179,45 @@ class RefreshTokenServiceTest {
         verify(tokens, never()).save(any());
     }
 
+    /**
+     * A session past its absolute lifetime cannot be refreshed, even with an unexpired token from before the cap
+     * existed: the session is deleted and the event audited.
+     */
+    @Test
+    void sessionPastItsAbsoluteLifetimeEnds() {
+        stored(false, 0, Instant.now().minus(Duration.ofDays(7)).minusSeconds(1));
+
+        assertThatThrownBy(() -> service.rotate(RAW))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage(RefreshTokenService.INVALID_REFRESH_TOKEN);
+
+        verify(tokens).deleteAllByFamilyId(FAMILY);
+        verify(audit).record(AuditEvent.SESSION_EXPIRED_ABSOLUTE, 1L, "sessionId", FAMILY);
+        verify(tokens, never()).save(any());
+    }
+
+    /** Remember-me sessions use the longer absolute lifetime. */
+    @Test
+    void rememberMeSessionOutlivesTheNormalAbsoluteLifetime() {
+        stored(true, 0, Instant.now().minus(Duration.ofDays(8)));
+        userWithSessionVersion(0);
+
+        assertThat(service.rotate(RAW).successor().rememberMe()).isTrue();
+    }
+
+    /** Near the absolute lifetime the successor expires with the session, not a full refresh lifetime later. */
+    @Test
+    void successorExpiresWithTheSession() {
+        Instant started = Instant.now().minus(Duration.ofDays(7)).plus(Duration.ofHours(12));
+        stored(false, 0, started);
+        userWithSessionVersion(0);
+
+        Duration ttl = service.rotate(RAW).successor().ttl();
+
+        assertThat(ttl).isBetween(Duration.ofHours(11), Duration.ofHours(12));
+        assertThat(savedToken().getExpiresAt()).isEqualTo(started.plus(Duration.ofDays(7)));
+    }
+
     /** Ending every session reports how many tokens were deleted. */
     @Test
     void revokeAllReturnsTheNumberOfEndedTokens() {
@@ -232,6 +274,10 @@ class RefreshTokenServiceTest {
      * @return the stored token
      */
     private RefreshToken stored(boolean rememberMe, int sessionVersion) {
+        return stored(rememberMe, sessionVersion, STARTED);
+    }
+
+    private RefreshToken stored(boolean rememberMe, int sessionVersion, Instant startedAt) {
         RefreshToken token = new RefreshToken(
                 1L,
                 FAMILY,
@@ -239,7 +285,7 @@ class RefreshTokenServiceTest {
                 SecureTokens.hash(RAW),
                 rememberMe,
                 Instant.now().plusSeconds(60),
-                STARTED,
+                startedAt,
                 "Firefox",
                 "203.0.113.7");
         when(tokens.findByTokenHash(SecureTokens.hash(RAW))).thenReturn(Optional.of(token));

@@ -41,10 +41,10 @@ in `.env`.
 
 ```bash
 curl -i -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
-  -d '{"username":"alice","email":"alice@example.com","password":"Secret#123"}'
+  -d '{"username":"alice","email":"alice@example.com","password":"lantern-orbit-maple-42"}'
 
 TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
-  -d '{"identifier":"alice","password":"Secret#123"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+  -d '{"identifier":"alice","password":"lantern-orbit-maple-42"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
 
 curl -s localhost:8080/api/v1/users/me -H "Authorization: Bearer $TOKEN"
 ```

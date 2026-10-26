@@ -14,6 +14,7 @@ import com.hikmethankolay.template.user.dto.UserResponse;
 import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
@@ -103,8 +104,47 @@ public class UserService {
         String normalizedEmail = normalizeEmail(email);
         ensureUsernameAvailable(username);
         ensureEmailAvailable(normalizedEmail);
+        return create(username, normalizedEmail, encodeNewPassword(false, rawPassword), role, emailVerified);
+    }
 
-        User user = new User(username, normalizedEmail, encodeNewPassword(false, rawPassword), role);
+    /**
+     * Self-service registration of a {@link Role#USER} that does not reveal whether the email address already has
+     * an account (OWASP: no account enumeration). For a registered address nothing is created and its owner is
+     * told by email ({@link RegistrationRepeated}); the caller sees the same outcome either way. The password is
+     * checked and hashed on both paths, so the response time does not tell them apart either.
+     *
+     * @param username    unique username; usernames are public, so a taken one is still reported
+     * @param email       email; stored trimmed and in lower case
+     * @param rawPassword plain password, stored hashed
+     * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
+     */
+    @Transactional
+    public void signUp(String username, String email, String rawPassword) {
+        String normalizedEmail = normalizeEmail(email);
+        ensureUsernameAvailable(username);
+        String passwordHash = encodeNewPassword(false, rawPassword);
+        Optional<User> existing = userRepository.findByEmail(normalizedEmail);
+        if (existing.isPresent()) {
+            audit.record(AuditEvent.REGISTRATION_REPEATED, existing.get().getId());
+            events.publishEvent(new RegistrationRepeated(existing.get().getId()));
+            return;
+        }
+        create(username, normalizedEmail, passwordHash, Role.USER, false);
+    }
+
+    /**
+     * Stores a new user. Unverified users get a verification email after the transaction commits.
+     *
+     * @param username        checked username
+     * @param normalizedEmail checked, normalised email
+     * @param passwordHash    encoded password
+     * @param role            role of the new user
+     * @param emailVerified   whether the address is already trusted
+     * @return the created user
+     */
+    private UserResponse create(
+            String username, String normalizedEmail, String passwordHash, Role role, boolean emailVerified) {
+        User user = new User(username, normalizedEmail, passwordHash, role);
         user.setEmailVerified(emailVerified);
         User saved = userRepository.save(user);
         audit.record(AuditEvent.USER_REGISTERED, saved.getId(), "role", role);

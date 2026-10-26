@@ -870,7 +870,7 @@
     },
     "/api/v1/auth/register" : {
       "post" : {
-        "description" : "Creates an account with the USER role and sends a verification email.",
+        "description" : "Creates an account with the USER role and sends a verification email. If the email address already has an account, nothing is created and its owner is emailed instead; the response is the same, so it does not tell whether an address is registered.",
         "operationId" : "registerUser",
         "requestBody" : {
           "content" : {
@@ -883,24 +883,9 @@
           "required" : true
         },
         "responses" : {
-          "201" : {
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/UserResponse"
-                }
-              }
-            },
-            "description" : "User created",
+          "202" : {
+            "description" : "Registration accepted; check the inbox",
             "headers" : {
-              "Location" : {
-                "description" : "URL of the new user",
-                "schema" : {
-                  "type" : "string",
-                  "format" : "uri"
-                },
-                "style" : "simple"
-              },
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
               },
@@ -926,7 +911,7 @@
                 }
               }
             },
-            "description" : "Username or email already taken",
+            "description" : "Username already taken",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -3363,7 +3348,7 @@
             "minLength" : 43
           }
         },
-        "required" : [ "code" ]
+        "required" : [ "code", "codeVerifier" ]
       },
       "SocialProviderResponse" : {
         "type" : "object",

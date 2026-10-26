@@ -3,6 +3,7 @@ package com.hikmethankolay.template;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.hikmethankolay.template.user.UserRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ public abstract class IntegrationTest {
     @Autowired
     protected MockMvc mockMvc;
 
+    @Autowired
+    private UserRepository registeredUsers;
+
     protected static String uniqueUsername() {
         return "user_" + UUID.randomUUID().toString().substring(0, 8);
     }
@@ -46,15 +50,16 @@ public abstract class IntegrationTest {
 
     /** Registers a user whose email is {@code <username>@example.com} and returns its id. */
     protected long register(String username) throws Exception {
-        String body = mockMvc.perform(post("/api/v1/auth/register")
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, PASSWORD)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        return ((Number) JsonPath.read(body, "$.id")).longValue();
+                .andExpect(status().isAccepted());
+        // The response has no body, so it cannot tell new and existing addresses apart.
+        return registeredUsers
+                .findByUsernameOrEmail(username, username)
+                .orElseThrow()
+                .getId();
     }
 
     protected String login(String identifier, String password) throws Exception {

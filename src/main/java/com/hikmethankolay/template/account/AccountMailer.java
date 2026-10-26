@@ -63,6 +63,25 @@ public class AccountMailer {
     }
 
     /**
+     * Tells the owner of an address that someone tried to sign up with it, with a password reset link in case
+     * it was them and they forgot that they have an account.
+     *
+     * @param to    recipient address
+     * @param token the raw reset token
+     * @param ttl   how long the link is valid
+     */
+    public void sendAlreadyRegistered(String to, String token, Duration ttl) {
+        outbox.enqueue(
+                to,
+                "You already have an account",
+                ("Someone tried to create an account with this email address, which already has one. If that was "
+                                + "you, log in, or reset your password with this link:%n%n%s%n%n"
+                                + "The link expires in %d minutes. If it was not you, ignore this email: nothing "
+                                + "was changed.")
+                        .formatted(link("/reset-password", token), ttl.toMinutes()));
+    }
+
+    /**
      * Builds a frontend link carrying the token.
      *
      * @param path  frontend path

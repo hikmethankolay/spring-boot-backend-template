@@ -51,7 +51,7 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 
 | Page | What it does |
 |------|--------------|
-| Sign up | `POST /api/v1/auth/register` with `username`, `email`, `password` (8–72 characters with upper and lower case, a digit and a symbol) |
+| Sign up | `POST /api/v1/auth/register` with `username`, `email`, `password` (15–128 characters, no composition rules). The answer is `202` whether or not the address already has an account: show "Check your inbox" either way |
 | Log in | `POST /api/v1/auth/login` with `identifier` (username or email), `password` and optional `rememberMe`; see [Logging in](#logging-in) |
 | `/verify-email?token=…` | `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL; offer `POST /api/v1/auth/verify-email/resend` |
 | Forgot password | `POST /api/v1/auth/password-reset` with `{"email": "…"}`; it answers `202` even for unknown addresses |
@@ -130,7 +130,8 @@ add an `errors` list with one entry per field. Branch on `type`, never on `title
 | `urn:problem:email-not-verified` | A hint to check the inbox, with the resend button |
 | `urn:problem:invalid-mfa-code` / `mfa-challenge-expired` | Ask for the code again / restart the login |
 | `urn:problem:login-locked` / `rate-limited` | Wait `Retry-After` seconds |
-| `urn:problem:username-taken` / `email-taken` | Mark the field |
+| `urn:problem:username-taken` / `email-taken` | Mark the field (registration never answers `email-taken`) |
+| `urn:problem:password-too-short` / `password-breached` | Ask for a longer or a different password |
 
 Every type is listed in [API overview](../api/#errors). Put the `X-Trace-Id` response header into error reports: it
 finds the request in the server logs.

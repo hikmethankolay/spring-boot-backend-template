@@ -33,6 +33,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
+    private static final String PASSPHRASE = "glacier-umbrella-tractor-71";
+
     @Mock
     private UserRepository userRepository;
 
@@ -93,6 +95,45 @@ class UserServiceTest {
                 .isInstanceOfSatisfying(
                         ApiException.class, ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void signUpWithANewAddressCreatesAnUnverifiedUser() {
+        when(passwordEncoder.encode(PASSPHRASE)).thenReturn("hashed");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 4L));
+
+        userService.signUp("alice", " Alice@Example.COM ", PASSPHRASE);
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getEmail()).isEqualTo("alice@example.com");
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.USER);
+        assertThat(saved.getValue().isEmailVerified()).isFalse();
+        verify(events).publishEvent(new EmailVerificationRequired(4L));
+    }
+
+    @Test
+    void signUpWithARegisteredAddressCreatesNothingButStillHashes() {
+        User existing = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(existing));
+        when(passwordEncoder.encode(PASSPHRASE)).thenReturn("unused");
+
+        userService.signUp("mallory", "ALICE@example.com", PASSPHRASE);
+
+        // Hashed anyway, so the response time is the same as for a new address.
+        verify(passwordEncoder).encode(PASSPHRASE);
+        verify(userRepository, never()).save(any());
+        verify(events).publishEvent(new RegistrationRepeated(1L));
+    }
+
+    @Test
+    void signUpStillReportsATakenUsername() {
+        when(userRepository.existsByUsername("alice")).thenReturn(true);
+
+        assertProblem(
+                () -> userService.signUp("alice", "new@example.com", PASSPHRASE),
+                HttpStatus.CONFLICT,
+                "urn:problem:username-taken");
     }
 
     @Test

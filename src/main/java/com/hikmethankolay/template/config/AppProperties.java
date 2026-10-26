@@ -57,6 +57,8 @@ public record AppProperties(
      * @param accessTokenTtl  lifetime of an access token (JWT); keep it short
      * @param refreshTokenTtl inactivity after which a session ends
      * @param rememberMeTtl   inactivity after which a session started with "remember me" ends
+     * @param maxSessionTtl   time after the login when a session ends however often it is refreshed
+     * @param rememberMeMaxSessionTtl the same for sessions started with "remember me"
      */
     public record Jwt(
             @NotNull Algorithm algorithm,
@@ -65,7 +67,9 @@ public record AppProperties(
             @NotBlank String issuer,
             @NotNull Duration accessTokenTtl,
             @NotNull Duration refreshTokenTtl,
-            @NotNull Duration rememberMeTtl) {
+            @NotNull Duration rememberMeTtl,
+            @NotNull Duration maxSessionTtl,
+            @NotNull Duration rememberMeMaxSessionTtl) {
 
         /**
          * Requires the keys of the selected algorithm.

@@ -64,7 +64,7 @@ public class SocialProfileClient {
      *
      * @param registration the provider
      * @param code         the authorization code from the redirect
-     * @param codeVerifier the PKCE verifier the frontend generated, or {@code null} without PKCE
+     * @param codeVerifier the PKCE verifier the frontend generated
      * @return the profile
      * @throws BadCredentialsException if the provider rejects the code or cannot be reached (mapped to 401)
      */
@@ -110,11 +110,7 @@ public class SocialProfileClient {
                 .redirectUri(registration.getRedirectUri())
                 .scopes(registration.getScopes())
                 .state(UNUSED_STATE)
-                .attributes(attributes -> {
-                    if (codeVerifier != null) {
-                        attributes.put(PkceParameterNames.CODE_VERIFIER, codeVerifier);
-                    }
-                })
+                .attributes(attributes -> attributes.put(PkceParameterNames.CODE_VERIFIER, codeVerifier))
                 .build();
         OAuth2AuthorizationResponse response = OAuth2AuthorizationResponse.success(code)
                 .redirectUri(registration.getRedirectUri())

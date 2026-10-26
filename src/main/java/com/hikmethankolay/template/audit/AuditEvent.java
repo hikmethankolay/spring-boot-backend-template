@@ -11,6 +11,9 @@ public enum AuditEvent {
     /** A new account was registered. */
     USER_REGISTERED("user.registered", Level.INFO),
 
+    /** Someone signed up with the email address of an existing account; its owner was told by email. */
+    REGISTRATION_REPEATED("user.registration_repeated", Level.INFO),
+
     /** A user confirmed their email address. */
     EMAIL_VERIFIED("user.email_verified", Level.INFO),
 
@@ -34,6 +37,9 @@ public enum AuditEvent {
 
     /** All sessions of a user were revoked, e.g. after a password change. */
     SESSIONS_REVOKED("auth.sessions_revoked", Level.INFO),
+
+    /** A refresh was refused because the session reached its absolute lifetime ({@code app.jwt.max-session-ttl}). */
+    SESSION_EXPIRED_ABSOLUTE("auth.session_expired_absolute", Level.INFO),
 
     /** A user ended one of their sessions ({@code DELETE /api/v1/users/me/sessions/{id}}). */
     SESSION_REVOKED("auth.session_revoked", Level.INFO),

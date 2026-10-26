@@ -7,6 +7,7 @@ import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.user.EmailVerificationRequired;
+import com.hikmethankolay.template.user.RegistrationRepeated;
 import com.hikmethankolay.template.user.SessionsInvalidated;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
@@ -110,6 +111,24 @@ public class AccountService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onEmailVerificationRequired(EmailVerificationRequired event) {
         users.findById(event.userId()).ifPresent(this::sendVerification);
+    }
+
+    /**
+     * Tells the owner of an address that someone tried to sign up with it, once the transaction has committed.
+     * The email carries a password reset link and shares the reset email's cooldown, so repeated sign-ups cannot
+     * flood the inbox.
+     *
+     * @param event identifies the account the address belongs to
+     */
+    @TransactionalEventListener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onRegistrationRepeated(RegistrationRepeated event) {
+        users.findById(event.userId())
+                .filter(user -> !recentlyIssued(user.getId(), AccountTokenType.PASSWORD_RESET))
+                .ifPresent(user -> mailer.sendAlreadyRegistered(
+                        user.getEmail(),
+                        issue(user.getId(), AccountTokenType.PASSWORD_RESET, properties.passwordResetTokenTtl()),
+                        properties.passwordResetTokenTtl()));
     }
 
     /**

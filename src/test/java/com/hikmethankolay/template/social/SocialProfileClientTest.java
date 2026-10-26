@@ -71,18 +71,21 @@ class SocialProfileClientTest {
 
     @Test
     void googleProfileComesFromUserInfo() {
-        SocialProfile profile =
-                client.fetch(registration(CommonOAuth2Provider.GOOGLE, "google", "/token", "/userinfo"), "c-2", null);
+        String verifier = "w".repeat(43);
+
+        SocialProfile profile = client.fetch(
+                registration(CommonOAuth2Provider.GOOGLE, "google", "/token", "/userinfo"), "c-2", verifier);
 
         assertThat(profile).isEqualTo(new SocialProfile("google", "g-1", "g@example.com", true, null));
-        assertThat(tokenRequest.get()).doesNotContain("code_verifier");
+        assertThat(tokenRequest.get()).contains("code_verifier=" + verifier);
     }
 
     @Test
     void aRejectedCodeIsBadCredentialsAndLoggedOnOneLine(CapturedOutput output) {
         ClientRegistration registration = registration(CommonOAuth2Provider.GITHUB, "github", "/bad-token", "/user");
 
-        assertThatThrownBy(() -> client.fetch(registration, "c-3", null)).isInstanceOf(BadCredentialsException.class);
+        assertThatThrownBy(() -> client.fetch(registration, "c-3", "v".repeat(43)))
+                .isInstanceOf(BadCredentialsException.class);
         // The provider's line break would otherwise forge a log line.
         assertThat(output).contains("Forged line").doesNotContain("\nForged line");
     }

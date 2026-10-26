@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,20 +29,23 @@ class AuthIntegrationTest extends IntegrationTest {
     private MeterRegistry meters;
 
     @Test
-    void registerReturnsCreatedUserWithoutPassword() throws Exception {
+    void registerIsAcceptedWithoutABodyAndStoresANormalUser() throws Exception {
         String username = uniqueUsername();
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"username":"%s","email":"%s@EXAMPLE.com","password":"%s"}""", username, username, PASSWORD)))
-                .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, matchesPattern("http://localhost/api/v1/users/\\d+")))
-                .andExpect(jsonPath("$.username").value(username))
+                .andExpect(status().isAccepted())
+                .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
+                .andExpect(content().string(""));
+
+        String token = login(username, PASSWORD);
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(username + "@example.com"))
                 .andExpect(jsonPath("$.role").value("USER"))
-                .andExpect(jsonPath("$.password").doesNotExist())
-                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+                .andExpect(jsonPath("$.emailVerified").value(false));
     }
 
     @Test
@@ -160,7 +162,7 @@ class AuthIntegrationTest extends IntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, password)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isAccepted());
         login(username, password);
     }
 

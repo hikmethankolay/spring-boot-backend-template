@@ -81,7 +81,7 @@ push and type-checks it, but check the generator you choose against your own bui
 
 | Method | Path | Access | Success |
 |--------|------|--------|---------|
-| `POST` | `/api/v1/auth/register` | public | `201` + `Location`, sends a verification email |
+| `POST` | `/api/v1/auth/register` | public | `202`, no body; sends a verification email, or tells the owner of an already registered address ([why](../security/#account-flows)) |
 | `POST` | `/api/v1/auth/login` | public | `200` access + refresh token, cookies; `202` + `mfaToken` with 2FA |
 | `POST` | `/api/v1/auth/login/mfa` | MFA token | `200` access + refresh token, cookies |
 | `GET` | `/api/v1/auth/oauth2/providers` | public | `200` configured providers (GitHub, Google) |
@@ -155,7 +155,9 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:user-not-found` | 404 | No user has this id |
 | `urn:problem:note-not-found` | 404 | The caller has no note with this id (other users' notes look missing too) |
 | `urn:problem:session-not-found` | 404 | The caller has no session with this id (other users' sessions look missing too) |
-| `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account |
+| `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account (registration never answers `email-taken`) |
+| `urn:problem:password-too-short` | 400 | The new password has fewer than 15 characters (8 with two-factor authentication) |
+| `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |
 | `urn:problem:owner-protected` | 409 | The owner cannot be deleted or demoted, and `OWNER` cannot be assigned |
 | `urn:problem:conflict` | 409 | A concurrent change got there first; retry |
 | `urn:problem:login-locked` / `rate-limited` | 429 | Too many failed logins / requests; wait `Retry-After` seconds |

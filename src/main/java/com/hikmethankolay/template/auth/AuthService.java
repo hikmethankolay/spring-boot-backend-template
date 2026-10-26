@@ -21,7 +21,6 @@ import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
 import com.hikmethankolay.template.user.UserService;
-import com.hikmethankolay.template.user.dto.UserResponse;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -127,14 +126,14 @@ public class AuthService {
     }
 
     /**
-     * Registers a new user with the {@link Role#USER} role and sends a verification email.
+     * Registers a new user with the {@link Role#USER} role and sends a verification email, or, if the email
+     * address already has an account, emails its owner instead; the caller cannot tell which.
      *
      * @param request registration data
-     * @return the created user
-     * @throws ApiException 409 if the username or email is already taken
+     * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
      */
-    public UserResponse register(RegisterRequest request) {
-        return userService.register(request.username(), request.email(), request.password(), Role.USER, false);
+    public void register(RegisterRequest request) {
+        userService.signUp(request.username(), request.email(), request.password());
     }
 
     /**
@@ -261,7 +260,7 @@ public class AuthService {
      *
      * @param provider     registration id from the path
      * @param code         the authorization code the provider sent to the frontend
-     * @param codeVerifier the PKCE code verifier, or {@code null}
+     * @param codeVerifier the PKCE code verifier
      * @return the tokens, or an MFA token if the user has two-factor authentication
      * @throws ApiException            404 if the provider is not configured, 403 or 409 if the account cannot
      *                                 be linked

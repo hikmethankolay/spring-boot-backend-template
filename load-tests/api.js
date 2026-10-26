@@ -144,7 +144,7 @@ function login(identifier, password, rememberMe = false) {
 function register(username) {
   const response = call('POST', '/api/v1/auth/register',
     { body: { username, email: `${username}@example.com`, password: PASSWORD }, kind: 'password' });
-  return expect(response, 201, 'register');
+  return expect(response, 202, 'register');
 }
 
 // Runs one journey, recording whether every step passed and how long it took.

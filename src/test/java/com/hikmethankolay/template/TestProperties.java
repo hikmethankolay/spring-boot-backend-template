@@ -25,7 +25,9 @@ public final class TestProperties {
                 issuer,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
-                Duration.ofDays(30));
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90));
     }
 
     /** Default test properties with different JWT settings. */

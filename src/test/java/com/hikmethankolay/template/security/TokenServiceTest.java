@@ -150,7 +150,9 @@ class TokenServiceTest {
                 TestProperties.ISSUER,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
-                Duration.ofDays(30)));
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90)));
         String token = tokenService(rs256).issue(9L, "dave", Role.USER, SESSION).value();
 
         JWKSet published = JWKSet.parse(new JwtKeys(rs256).publicJwks());
@@ -177,7 +179,9 @@ class TokenServiceTest {
                 TestProperties.ISSUER,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
-                Duration.ofDays(30)));
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90)));
 
         assertThatThrownBy(() -> new JwtKeys(weak))
                 .isInstanceOf(IllegalStateException.class)
@@ -203,7 +207,9 @@ class TokenServiceTest {
                 TestProperties.ISSUER,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
-                Duration.ofDays(30)));
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90)));
 
         assertThatThrownBy(() -> new JwtKeys(broken))
                 .isInstanceOf(IllegalStateException.class)

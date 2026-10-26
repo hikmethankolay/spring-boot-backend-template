@@ -2,6 +2,7 @@ package com.hikmethankolay.template.social;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,6 +23,9 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** Login with GitHub, with the calls to GitHub replaced by a mock of {@link SocialProfileClient}. */
 class SocialLoginIntegrationTest extends IntegrationTest {
+
+    /** A PKCE code verifier: 43 characters from the unreserved set (RFC 7636). */
+    private static final String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
     @MockitoBean
     private SocialProfileClient profiles;
@@ -96,6 +100,18 @@ class SocialLoginIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void loginWithoutAPkceVerifierIsRejected() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/oauth2/github")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"code-6"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:validation-failed"))
+                .andExpect(jsonPath("$.errors[0].field").value("codeVerifier"));
+        verifyNoInteractions(profiles);
+    }
+
+    @Test
     void loginsWithoutAVerifiedEmailOrWithABadCodeAreRefused() throws Exception {
         givenProfile("code-5", new SocialProfile("github", UUID.randomUUID().toString(), "x@example.com", false, "x"));
         when(profiles.fetch(any(), eq("bad-code"), any()))
@@ -109,8 +125,8 @@ class SocialLoginIntegrationTest extends IntegrationTest {
                 .andExpect(jsonPath("$.type").value("urn:problem:invalid-credentials"));
         mockMvc.perform(post("/api/v1/auth/oauth2/google")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"code":"code-5"}"""))
+                        .content(json("""
+                                {"code":"code-5","codeVerifier":"%s"}""", VERIFIER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.type").value("urn:problem:provider-not-configured"));
     }
@@ -123,6 +139,6 @@ class SocialLoginIntegrationTest extends IntegrationTest {
         return mockMvc.perform(post("/api/v1/auth/oauth2/github")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json("""
-                        {"code":"%s"}""", code)));
+                        {"code":"%s","codeVerifier":"%s"}""", code, VERIFIER)));
     }
 }

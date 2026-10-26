@@ -84,6 +84,8 @@ class AppPropertiesTest {
                 "issuer",
                 Duration.ofMinutes(15),
                 Duration.ofDays(7),
-                Duration.ofDays(30));
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90));
     }
 }

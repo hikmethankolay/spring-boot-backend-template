@@ -145,6 +145,9 @@ app:
     # A session ends after this much inactivity (no refresh); "remember me" sessions use the longer value.
     refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:1d}
     remember-me-ttl: ${JWT_REMEMBER_ME_TTL:30d}
+    # Absolute session lifetime: a session ends this long after the login, however often it is refreshed.
+    max-session-ttl: ${JWT_MAX_SESSION_TTL:7d}
+    remember-me-max-session-ttl: ${JWT_REMEMBER_ME_MAX_SESSION_TTL:90d}
   cookie:
     name: auth_token
     refresh-name: refresh_token

@@ -31,8 +31,11 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
 
     @Test
     void statusCodesMatchTheRuntimeBehaviour() throws Exception {
-        spec().andExpect(jsonPath(AUTH + "register'].post.responses['201'].headers.Location")
-                        .exists())
+        // 202 without a body or Location for new and registered addresses alike (no account enumeration).
+        spec().andExpect(jsonPath(AUTH + "register'].post.responses['202']").exists())
+                .andExpect(jsonPath(AUTH + "register'].post.responses['202'].content")
+                        .doesNotExist())
+                .andExpect(jsonPath(AUTH + "register'].post.responses['201']").doesNotExist())
                 .andExpect(jsonPath(AUTH + "register'].post.responses['200']").doesNotExist())
                 .andExpect(jsonPath(AUTH + "register'].post.responses['409']").exists())
                 .andExpect(jsonPath(AUTH + "logout'].post.responses['204']").exists())

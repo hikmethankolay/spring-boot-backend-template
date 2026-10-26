@@ -17,6 +17,10 @@ Authentication is stateless, using JWTs and Spring Security's OAuth2 resource se
   browser only sends to `/api/v1/auth`) for a new access token **and** a new refresh token.
 - A session ends after `JWT_REFRESH_TOKEN_TTL` (1 day) without a refresh, or `JWT_REMEMBER_ME_TTL` (30 days) when
   logging in with `"rememberMe": true`. Remember-me sessions get persistent cookies; others get session cookies.
+- However often it is refreshed, a session also ends `JWT_MAX_SESSION_TTL` (7 days) after the login, or
+  `JWT_REMEMBER_ME_MAX_SESSION_TTL` (90 days) for remember-me sessions. Refresh tokens never outlive that point; a
+  refresh after it is refused like any invalid token, the session is deleted and `auth.session_expired_absolute` is
+  audited.
 - Public endpoints, including `/refresh`, have their own filter chain without token processing, so an expired or stale
   access token can never block login or refresh.
 - Everything else requires a valid access token. Role checks use `@PreAuthorize("hasRole('ADMIN')")`.
@@ -154,6 +158,11 @@ password or logged in on a newer version cannot log in until they reset their pa
   the previous one.
 - The `202` endpoints answer the same way for unknown addresses, so they cannot be used to find accounts. They send at
   most one email per account per minute, so nobody can flood an inbox.
+- Registration (`POST /api/v1/auth/register`) answers `202` with no body whether or not the address already has an
+  account, and checks and hashes the password on both paths so the response time does not tell either. For a
+  registered address nothing is created; its owner gets an email with a password reset link (same one-per-minute
+  limit) and `user.registration_repeated` is audited. A taken username is still reported (`409`): usernames are
+  public.
 - Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword`, marks the new address unverified, sends a new
   verification email and revokes every reset and verification link sent to the old address.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding
@@ -197,7 +206,8 @@ frontend runs the redirect and hands the code to the API.
 2. The frontend adds a random `state` and a PKCE `code_challenge` (`S256`), keeps `state` and the `code_verifier` in
    `sessionStorage`, and sends the user there.
 3. The provider redirects to `OAUTH2_REDIRECT_URI?code=…&state=…`. The frontend checks `state`, then calls
-   `POST /api/v1/auth/oauth2/{provider}` with `{"code": "…", "codeVerifier": "…"}`.
+   `POST /api/v1/auth/oauth2/{provider}` with `{"code": "…", "codeVerifier": "…"}`. The verifier is required
+   (RFC 9700): a request without one gets `400` and the code is never sent to the provider.
 4. The API exchanges the code (with the client secret, which never leaves the server), reads the profile and answers
    like `/login`: `200` with tokens and cookies, or `202` when the user has 2FA.
 
@@ -285,7 +295,7 @@ Security events are written to the `audit` logger and counted in the `security_a
 |-------|------|
 | `auth.login_succeeded`, `auth.login_failed`, `auth.login_blocked`, `auth.login_unverified` | Login attempts |
 | `auth.mfa_failed`, `auth.recovery_code_used`, `auth.social_account_linked` | Second factor and social login |
-| `auth.logout`, `auth.session_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused` | Session changes |
+| `auth.logout`, `auth.session_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused`, `auth.session_expired_absolute` | Session changes |
 | `user.mfa_enabled`, `user.mfa_disabled` | Two-factor authentication turned on or off |
 | `user.registered`, `user.email_verified`, `user.password_changed` | Account changes |
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |

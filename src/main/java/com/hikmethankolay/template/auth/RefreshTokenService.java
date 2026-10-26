@@ -36,7 +36,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * so users can recognise their sessions in {@code GET /api/v1/users/me/sessions} and end the ones they don't.</p>
  *
  * <p>Expiry is sliding: each exchange starts a new {@code app.jwt.refresh-token-ttl} (or
- * {@code app.jwt.remember-me-ttl}) period, so a session ends after that much inactivity.</p>
+ * {@code app.jwt.remember-me-ttl}) period, so a session ends after that much inactivity. It is also absolute: a
+ * session ends {@code app.jwt.max-session-ttl} (or {@code app.jwt.remember-me-max-session-ttl}) after the login,
+ * however often it is refreshed. Tokens never outlive that point, and an exchange after it ends the session.</p>
  *
  * <p>Each token also carries the user's session version. Ending a user's sessions bumps it, so a
  * token issued under the old version, even by a login or exchange that raced the change, is rejected.</p>
@@ -112,8 +114,8 @@ public class RefreshTokenService {
      *
      * @param rawToken the token presented by the client
      * @return the user the session belongs to and the successor token
-     * @throws BadCredentialsException if the token is unknown, expired, already used or from ended
-     *                                 sessions (mapped to 401)
+     * @throws BadCredentialsException if the token is unknown, expired, already used, from ended sessions or
+     *                                 from a session past its absolute lifetime (mapped to 401)
      */
     @Transactional(noRollbackFor = BadCredentialsException.class)
     public Rotation rotate(String rawToken) {
@@ -124,6 +126,12 @@ public class RefreshTokenService {
             tokens.deleteAllByFamilyId(current.getFamilyId());
             revocations.revokeSession(current.getFamilyId());
             audit.record(AuditEvent.REFRESH_TOKEN_REUSED, current.getUserId(), "sessionId", current.getFamilyId());
+            throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
+        }
+        // Before the expiry check, so tokens issued without the cap (before it existed) are caught and audited.
+        if (!now.isBefore(sessionEnd(current.getSessionStartedAt(), current.isRememberMe()))) {
+            tokens.deleteAllByFamilyId(current.getFamilyId());
+            audit.record(AuditEvent.SESSION_EXPIRED_ABSOLUTE, current.getUserId(), "sessionId", current.getFamilyId());
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
         if (current.isExpired(now)) {
@@ -257,7 +265,12 @@ public class RefreshTokenService {
      */
     private IssuedRefreshToken issue(
             long userId, UUID familyId, int sessionVersion, boolean rememberMe, Instant startedAt) {
+        Instant now = Instant.now();
         Duration ttl = rememberMe ? properties.rememberMeTtl() : properties.refreshTokenTtl();
+        Instant sessionEnd = sessionEnd(startedAt, rememberMe);
+        if (now.plus(ttl).isAfter(sessionEnd)) {
+            ttl = Duration.between(now, sessionEnd);
+        }
         String token = SecureTokens.generate();
         HttpServletRequest request = RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes a
                 ? a.getRequest()
@@ -268,11 +281,22 @@ public class RefreshTokenService {
                 sessionVersion,
                 SecureTokens.hash(token),
                 rememberMe,
-                Instant.now().plus(ttl),
+                now.plus(ttl),
                 startedAt,
                 request == null ? null : truncate(request.getHeader(HttpHeaders.USER_AGENT), MAX_USER_AGENT_LENGTH),
                 request == null ? null : truncate(request.getRemoteAddr(), MAX_IP_ADDRESS_LENGTH)));
         return new IssuedRefreshToken(token, ttl, rememberMe, familyId);
+    }
+
+    /**
+     * Computes when a session reaches its absolute lifetime.
+     *
+     * @param startedAt  when the session started (the login)
+     * @param rememberMe whether it was started with "remember me"
+     * @return the time after which it can no longer be refreshed
+     */
+    private Instant sessionEnd(Instant startedAt, boolean rememberMe) {
+        return startedAt.plus(rememberMe ? properties.rememberMeMaxSessionTtl() : properties.maxSessionTtl());
     }
 
     /**
@@ -290,7 +314,7 @@ public class RefreshTokenService {
      * A freshly issued refresh token.
      *
      * @param value      the opaque token to give to the client
-     * @param ttl        how long it is valid
+     * @param ttl        how long it is valid; shorter than the configured lifetime near the session's end
      * @param rememberMe whether the session was started with "remember me"
      * @param sessionId  the session (family) the token belongs to
      */

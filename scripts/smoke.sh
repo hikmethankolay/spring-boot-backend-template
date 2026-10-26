@@ -32,7 +32,7 @@ json_number() {
 }
 
 request GET  /actuator/health 200
-request POST /api/v1/auth/register 201 "{\"username\":\"$username\",\"email\":\"$username@example.com\",\"password\":\"$password\"}"
+request POST /api/v1/auth/register 202 "{\"username\":\"$username\",\"email\":\"$username@example.com\",\"password\":\"$password\"}"
 request POST /api/v1/auth/login 200 "{\"identifier\":\"$username\",\"password\":\"$password\"}"
 token="$(json_field accessToken)"
 refresh_token="$(json_field refreshToken)"
