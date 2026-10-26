@@ -2,6 +2,7 @@ package com.hikmethankolay.template.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -55,12 +56,33 @@ class AccountIntegrationTest extends IntegrationTest {
 
         postJson("/api/v1/auth/register/complete", body, 201);
         login(username, PASSWORD);
-        // The address now has an account, so the same link cannot create a second one.
+        // A link works once.
         mockMvc.perform(post("/api/v1/auth/register/complete")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body.replace(username, username + "2")))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.type").value("urn:problem:email-taken"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:invalid-token"));
+    }
+
+    @Test
+    void aUsedLinkCannotCreateAnotherAccountAfterTheFirstIsDeleted() throws Exception {
+        String username = uniqueUsername();
+        String address = username + "@example.com";
+        String token = registerAndLogin(username);
+        String link = signUpToken(address);
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"password":"%s"}""", PASSWORD)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/auth/register/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"token":"%s","username":"%s","password":"%s"}""", link, username + "x", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:invalid-token"));
     }
 
     @Test

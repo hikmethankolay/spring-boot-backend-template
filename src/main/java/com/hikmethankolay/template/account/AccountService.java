@@ -19,7 +19,10 @@ import java.util.Locale;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -63,6 +66,10 @@ public class AccountService {
 
     private final AuditLog audit;
 
+    private final StringRedisTemplate redis;
+
+    private final String signUpCooldownPrefix;
+
     /**
      * Creates the service.
      *
@@ -73,6 +80,8 @@ public class AccountService {
      * @param mailer      sends the emails
      * @param properties  application properties holding the token lifetimes
      * @param audit       records security events
+     * @param redis       throttles sign-up emails per address
+     * @param applicationName prefix of the Redis keys
      */
     public AccountService(
             AccountTokenRepository tokens,
@@ -81,7 +90,9 @@ public class AccountService {
             UserService userService,
             AccountMailer mailer,
             AppProperties properties,
-            AuditLog audit) {
+            AuditLog audit,
+            StringRedisTemplate redis,
+            @Value("${spring.application.name}") String applicationName) {
         this.tokens = tokens;
         this.signUpTokens = signUpTokens;
         this.users = users;
@@ -89,6 +100,8 @@ public class AccountService {
         this.mailer = mailer;
         this.properties = properties.account();
         this.audit = audit;
+        this.redis = redis;
+        this.signUpCooldownPrefix = applicationName + ":sign-up-cooldown:";
     }
 
     /**
@@ -127,13 +140,18 @@ public class AccountService {
 
     /**
      * Starts a sign-up: emails the address a link to finish it, or, if the address already has an account, a
-     * notice saying so. Either way the answer is the same and nothing is stored.
+     * notice saying so. Either way the answer is the same and nothing is stored in the database. At most one such
+     * email goes to an address per {@link #RESEND_COOLDOWN}, checked before the address is looked up so both
+     * cases are throttled alike; if Redis is unavailable the email is sent.
      *
      * @param email the email address
      */
     @Transactional
     public void signUp(String email) {
         String address = normalize(email);
+        if (!firstSignUpEmailInCooldown(address)) {
+            return;
+        }
         Optional<User> existing = users.findByEmail(address);
         if (existing.isPresent()) {
             audit.record(AuditEvent.REGISTRATION_REPEATED, existing.get().getId());
@@ -158,7 +176,29 @@ public class AccountService {
         String address = signUpTokens
                 .verify(token)
                 .orElseThrow(() -> ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN));
-        return userService.registerConfirmed(username, address, userService.encodeNewPassword(false, rawPassword));
+        UserResponse user =
+                userService.registerConfirmed(username, address, userService.encodeNewPassword(false, rawPassword));
+        signUpTokens.markUsed(token);
+        return user;
+    }
+
+    /**
+     * Claims the sign-up email of an address for the next {@link #RESEND_COOLDOWN}. Only a hash of the address
+     * goes to Redis.
+     *
+     * @param address the normalised address
+     * @return {@code true} if no sign-up email went to the address within the cooldown
+     */
+    private boolean firstSignUpEmailInCooldown(String address) {
+        try {
+            return Boolean.TRUE.equals(redis.opsForValue()
+                    .setIfAbsent(signUpCooldownPrefix + SecureTokens.hash(address), "1", RESEND_COOLDOWN));
+        } catch (DataAccessException ex) {
+            log.warn(
+                    "Sign-up email cooldown unavailable, sending anyway: {}",
+                    ex.getClass().getSimpleName());
+            return true;
+        }
     }
 
     /**
