@@ -1,0 +1,18 @@
+# gitleaks settings (the secrets job in .github/workflows/ci.yml); the default rules plus the allowlist below.
+[extend]
+useDefault = true
+
+# Values only the test suite uses, matched exactly: a real secret, or a changed fixture, is still reported. By value
+# rather than by commit, so it also holds in repositories created from this template, whose history starts anew.
+[[allowlists]]
+description = "Test fixtures"
+regexTarget = "secret"
+regexes = [
+  # A password from the bundled breached-password list (AuthIntegrationTest).
+  '''^1Q2W3E4R5T6Y7U8I9O0P$''',
+  # The RFC 6238 test vector secret (TotpTest).
+  '''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''',
+  # The JWT secret and MFA key of the test profile (application-test.yml).
+  '''^test-secret-that-is-at-least-32-characters-long$''',
+  '''^test-mfa-key-that-is-at-least-32-characters$''',
+]

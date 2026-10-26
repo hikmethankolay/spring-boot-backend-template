@@ -1,13 +1,5 @@
-# Findings gitleaks may ignore, by fingerprint (commit:file:rule:line); anything new still fails the scan.
-# Each one was checked; the comment above it says why it is not a live secret.
-# test password from the bundled breached-password list
-21e3e04d05d070ef574ce302bdc4f82e3232e388:src/test/java/com/hikmethankolay/template/auth/AuthIntegrationTest.java:generic-api-key:187
-# test-profile key, used only by the test suite
-61301f0471e491919287e33e64da279620e84274:src/test/resources/application-test.yml:generic-api-key:18
-# RFC 6238 test vector secret
-61301f0471e491919287e33e64da279620e84274:src/test/java/com/hikmethankolay/template/mfa/TotpTest.java:generic-api-key:56
-# test-profile key, used only by the test suite
-24bf04484976979b200a0b8b2f19c16f76b2e212:src/test/resources/application-test.yml:generic-api-key:3
+# Findings in the history of this repository only (the earlier user-auth-system project), by fingerprint
+# (commit:file:rule:line). Test fixtures are allowlisted by value in .gitleaks.toml instead.
 # test secret of the earlier user-auth-system project
 06cbc01ed2cdcd73b85eca427bf716ea062986cf:user-auth-system/src/test/java/com/hikmethankolay/user_auth_system/util/JwtUtilsTest.java:generic-api-key:46
 # JWT_SECRET of the earlier user-auth-system project, committed in history; rotate it if it was ever used

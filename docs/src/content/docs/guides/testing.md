@@ -111,8 +111,9 @@ same machine.
 
 1. It runs the tests.
 2. It builds the Docker image and scans it with Trivy, failing on fixable critical or high vulnerabilities.
-3. It scans the pushed or pull request commits for secrets with gitleaks. Findings that were checked and are not
-   live secrets (test fixtures) are listed by fingerprint in `.gitleaksignore`; anything new fails the job.
+3. It scans the pushed or pull request commits for secrets with gitleaks. The test fixtures that look like secrets
+   are allowlisted by exact value in `.gitleaks.toml` (so this also works in a repository created from the template);
+   `.gitleaksignore` lists two findings from this repository's own history. Anything new fails the job.
 4. It starts the app with `docker compose --profile app` and runs a ZAP baseline scan against it, failing on any
    alert that `.zap/rules.tsv` does not ignore with a reason. The scan is passive and reaches what is public without
    a token (security headers, error responses); Swagger UI and the OpenAPI document are out of its scope.
