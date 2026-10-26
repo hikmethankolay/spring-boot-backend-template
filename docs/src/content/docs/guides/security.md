@@ -199,8 +199,10 @@ Users can protect their account with an authenticator app (TOTP, RFC 6238: Googl
 Once it is on, a correct password (or GitHub/Google login) answers `202` with an `mfaToken` instead of tokens; the
 client sends it with a code to `/login/mfa` within `MFA_CHALLENGE_TTL` (5 minutes) and gets the usual token response.
 
-- Secrets are encrypted with AES-256-GCM under `MFA_ENCRYPTION_KEY`, bound to the user id, so a database dump alone
-  does not reveal them. Keep the key out of database backups. Changing it breaks every enrolled authenticator; the
+- Secrets are encrypted with AES-256-GCM under a key derived from `MFA_ENCRYPTION_KEY` with HKDF-SHA256 (RFC 5869),
+  bound to the user id, so a database dump alone does not reveal them. Stored values carry a version prefix (`v1:`),
+  so a later key or scheme can coexist with this one; values from before 3.3 (no prefix, key = SHA-256 of the
+  setting) still decrypt. Keep the key out of database backups. Changing it breaks every enrolled authenticator; the
   affected users log in with a recovery code and enroll again.
 - A code is accepted within one 30-second step of the server clock, and only once: the step of the last accepted code
   is stored. Recovery codes are stored as SHA-256 hashes and work once.
@@ -339,6 +341,13 @@ logins include the `identifier` that was tried. With the prod profile these are 
 
 Entries are written after the transaction commits, so rolled-back actions never appear. Add an `AuditEvent` and call
 `AuditLog.record(...)` for your own sensitive actions, and ship the `audit` logger to long-term storage.
+
+Every entry is also stored in the `audit_events` table (columns for the event, user, actor and IP; the other fields as
+JSON in `details`). The table is append-only: a trigger refuses changes and removals from every role but the table
+owner, so the app's role (see [Production](../production/#database-roles)) cannot alter the trail even if the app is
+compromised. Rows older than `AUDIT_RETENTION` (365 days) are removed daily through the database function
+`purge_audit_events`, which keeps the last 90 days whoever calls it. If storing a row fails, the error is logged and
+the request goes on; the log line still has the event.
 
 ## Redis outages
 

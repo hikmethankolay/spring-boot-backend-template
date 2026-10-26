@@ -37,6 +37,7 @@ defaults marked *prod: must change* below.
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_ACCOUNT_MAX_ATTEMPTS` / `LOGIN_LOCK_DURATION` | `10` / `100` / `1h` | Brute-force lockout: failed logins per IP, per account, and how long a block lasts ([details](../security/#brute-force-protection)) |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | `true` / `120` | Per-IP API rate limit |
 | `REQUIRE_VERIFIED_EMAIL` | `false` (`true` in prod) | Block login until a changed email address is confirmed (sign-ups are verified by their link) |
+| `AUDIT_RETENTION` | `365d` | How long the `audit_events` table keeps security events (at least 90 days) |
 | `PWNED_CHECK_ENABLED` | `false` | Also check new passwords against Have I Been Pwned ([details](../security/#passwords)) |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` | `localhost`, `1025`, `no-reply@example.com` | Outgoing mail (Mailpit by default). Set `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` for a real SMTP server (*prod: Mailpit's `localhost:1025` and `example.com` senders are refused*) |
 | `MAIL_STARTTLS_REQUIRED` | `true` (*prod only*) | The prod profile refuses to send without STARTTLS on port 587; port 465 with implicit TLS (`SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`) also works. Set `false` only for a relay without TLS. Other profiles use STARTTLS when the server offers it. See [Production](../production/#mail-encryption) |

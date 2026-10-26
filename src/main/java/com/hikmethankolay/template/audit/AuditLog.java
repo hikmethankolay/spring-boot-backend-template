@@ -5,17 +5,23 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Records security events as structured log lines on the {@code audit} logger and counts them in
@@ -26,8 +32,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * separate JSON attributes, so a log platform can filter on them; route the {@code audit} logger
  * to long-term storage to keep an audit trail.</p>
  *
- * <p>Inside a transaction the entry is written only after the commit, so actions that are rolled
- * back never appear in the audit trail.</p>
+ * <p>Each entry is also stored in the append-only {@code audit_events} table (V12), which the app's
+ * database role cannot change or delete from, so the trail survives a compromised app or a lost log.
+ * Inside a transaction the entry is written only after the commit, so actions that are rolled
+ * back never appear in the audit trail. The row is stored in a transaction of its own; if that
+ * fails, the error is logged and the request is not affected.</p>
  */
 @Service
 public class AuditLog {
@@ -40,15 +49,37 @@ public class AuditLog {
 
     private static final Logger log = LoggerFactory.getLogger(LOGGER_NAME);
 
+    private static final Logger errors = LoggerFactory.getLogger(AuditLog.class);
+
+    private static final String INSERT = "INSERT INTO audit_events (action, user_id, actor_id, client_ip, details) "
+            + "VALUES (?, ?, ?, ?, CAST(? AS jsonb))";
+
+    /** Fields stored in their own columns; the rest go to {@code details}. */
+    private static final Set<String> COLUMNS = Set.of("event", "userId", "actorId", "clientIp");
+
     private final MeterRegistry meterRegistry;
+
+    private final JdbcTemplate jdbc;
+
+    private final TransactionTemplate ownTransaction;
+
+    private final JsonMapper json;
 
     /**
      * Creates the audit log.
      *
      * @param meterRegistry registry for the event counters
+     * @param jdbc          stores the events
+     * @param transactions  runs each insert in a transaction of its own
+     * @param json          writes the details as JSON
      */
-    public AuditLog(MeterRegistry meterRegistry) {
+    public AuditLog(
+            MeterRegistry meterRegistry, JdbcTemplate jdbc, PlatformTransactionManager transactions, JsonMapper json) {
         this.meterRegistry = meterRegistry;
+        this.jdbc = jdbc;
+        this.ownTransaction = new TransactionTemplate(transactions);
+        this.ownTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.json = json;
     }
 
     /**
@@ -109,6 +140,7 @@ public class AuditLog {
             message.add(field.getKey() + "=" + text);
         }
         entry.log(message.toString());
+        store(event, fields);
         Counter.builder(METRIC_NAME)
                 .description("Security audit events")
                 .tag("event", event.action())
@@ -121,6 +153,33 @@ public class AuditLog {
      *
      * @return the authenticated principal's name (the user id for JWTs), or {@code null} if anonymous
      */
+    /**
+     * Stores an entry in {@code audit_events}.
+     *
+     * @param event  what happened
+     * @param fields the entry's fields
+     */
+    private void store(AuditEvent event, Map<String, Object> fields) {
+        Map<String, Object> details = new LinkedHashMap<>(fields);
+        details.keySet().removeAll(COLUMNS);
+        try {
+            String detailsJson = json.writeValueAsString(details);
+            ownTransaction.executeWithoutResult(status -> jdbc.update(
+                    INSERT,
+                    event.action(),
+                    fields.get("userId"),
+                    fields.get("actorId"),
+                    fields.get("clientIp"),
+                    detailsJson));
+        } catch (RuntimeException ex) {
+            // The log line above still has the event; a request must not fail because its audit row did.
+            errors.error(
+                    "Could not store audit event {}: {}",
+                    event.action(),
+                    ex.getClass().getSimpleName());
+        }
+    }
+
     private static String currentActor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null

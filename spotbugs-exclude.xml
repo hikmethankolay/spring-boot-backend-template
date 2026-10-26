@@ -28,6 +28,19 @@
         </Or>
     </Match>
     <!--
+      Log lines whose values cannot hold a line break: AuditLog's storage error names the event's fixed action and an
+      exception class; DevelopmentSettingsWarning names a database host parsed by java.net.URI from configuration.
+    -->
+    <Match>
+        <Bug pattern="CRLF_INJECTION_LOGS"/>
+        <Class name="com.hikmethankolay.template.audit.AuditLog"/>
+        <Method name="store"/>
+    </Match>
+    <Match>
+        <Bug pattern="CRLF_INJECTION_LOGS"/>
+        <Class name="com.hikmethankolay.template.config.DevelopmentSettingsWarning"/>
+    </Match>
+    <!--
       CookieCsrfFilter reads Origin, Host and X-Requested-With to stop cross-site requests. In such a request the
       victim's browser sets them: pages cannot forge Origin or Host, and adding X-Requested-With from another site
       needs a CORS preflight the API refuses. A client that forges them itself already holds the cookie.

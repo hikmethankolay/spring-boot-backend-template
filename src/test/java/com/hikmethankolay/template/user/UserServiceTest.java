@@ -3,6 +3,7 @@ package com.hikmethankolay.template.user;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,8 +28,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import tools.jackson.databind.json.JsonMapper;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -53,7 +57,11 @@ class UserServiceTest {
                 passwordEncoder,
                 new BreachedPasswordValidator(TestProperties.create()),
                 events,
-                new AuditLog(new SimpleMeterRegistry()));
+                new AuditLog(
+                        new SimpleMeterRegistry(),
+                        mock(JdbcTemplate.class),
+                        mock(PlatformTransactionManager.class),
+                        JsonMapper.builder().build()));
     }
 
     @Test

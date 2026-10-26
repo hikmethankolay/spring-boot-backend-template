@@ -189,6 +189,9 @@ app:
       - path: /api/v1/auth/password-reset/**
         requests: 5
         window: 1h
+  audit:
+    # How long the audit_events table keeps events (at least 90 days, which the database enforces).
+    retention: ${AUDIT_RETENTION:365d}
   account:
     # true in the prod profile: unverified users cannot log in.
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:false}
