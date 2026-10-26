@@ -8,8 +8,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ### Added
 
-- `scripts/release.sh <version>` (`scripts\release.bat` on Windows) makes the release commit (CHANGELOG, the image tag in `deploy/kubernetes`, the
-  version in the guides' examples) and the tag, and pushes them after asking.
+- `scripts/release.sh <version>` (`scripts\release.bat` on Windows) makes the release commit (CHANGELOG, the image
+  tag in `deploy/kubernetes`, the version in the guides' examples) and the tag, and pushes them after asking.
 - The release workflow commits the published image's digest to `deploy/kubernetes` on `main`, so the manifests no
   longer need it set by hand.
 

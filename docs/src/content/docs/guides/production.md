@@ -134,9 +134,10 @@ For an existing database migrated by `app` itself, transfer the tables to `app_o
 
 #### Releasing to Kubernetes
 
-1. Write the release notes under `[Unreleased]` in `CHANGELOG.md`, then run `scripts/release.sh <version>` (`scripts\release.bat`
-   on Windows) on an up-to-date `main`. It moves the notes under the version, sets `newTag` in `kustomization.yaml` and the image tag of
-   `migrate-job.yaml`, updates the version in the guides' examples, commits, tags, and pushes after asking.
+1. Write the release notes under `[Unreleased]` in `CHANGELOG.md`, then run `scripts/release.sh <version>`
+   (`scripts\release.bat` on Windows) on an up-to-date `main`. It moves the notes under the version, sets `newTag` in
+   `kustomization.yaml` and the image tag of `migrate-job.yaml`, updates the version in the guides' examples, commits,
+   tags, and pushes after asking.
 2. The pushed tag starts the release workflow. Once it has published and signed the image, its `pin-digest` job
    commits the image digest to `kustomization.yaml` and `migrate-job.yaml` on `main`
    (`chore(deploy): pin the <version> image digest`). Pull it; until then the manifests still pin the previous digest.
