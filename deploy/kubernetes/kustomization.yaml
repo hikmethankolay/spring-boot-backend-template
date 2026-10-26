@@ -21,4 +21,4 @@ images:
   # name:tag@digest, so a moved tag cannot change what runs. migrate-job.yaml is kept on the same image.
   - name: ghcr.io/hikmethankolay/spring-boot-backend-template
     newTag: "4.0.3"
-    digest: sha256:0079755d97c22eb98596a4ee637321462258942ecdf175a09e51c40e965c21e8
+    digest: sha256:8d8b210cab92d26acb4f4ca0c2c8a16bab5298cf8348350fe879c68b0925d717
