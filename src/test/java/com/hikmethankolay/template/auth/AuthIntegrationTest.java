@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -29,48 +30,56 @@ class AuthIntegrationTest extends IntegrationTest {
     private MeterRegistry meters;
 
     @Test
-    void registerIsAcceptedWithoutABodyAndStoresANormalUser() throws Exception {
+    void signUpStartsWithTheAddressAndCreatesTheUserWhenCompleted() throws Exception {
         String username = uniqueUsername();
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"username":"%s","email":"%s@EXAMPLE.com","password":"%s"}""", username, username, PASSWORD)))
+                                {"email":"%s@EXAMPLE.com"}""", username)))
                 .andExpect(status().isAccepted())
                 .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(content().string(""));
-        confirmEmail(username + "@example.com");
-
-        String token = login(username, PASSWORD);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
-                .andExpect(status().isOk())
+        mockMvc.perform(post("/api/v1/auth/register/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"token":"%s","username":"%s","password":"%s"}""", signUpToken(username + "@example.com"), username, PASSWORD)))
+                .andExpect(status().isCreated())
+                .andExpect(header().string(HttpHeaders.LOCATION, matchesPattern("http://localhost/api/v1/users/\\d+")))
+                .andExpect(jsonPath("$.username").value(username))
                 .andExpect(jsonPath("$.email").value(username + "@example.com"))
                 .andExpect(jsonPath("$.role").value("USER"))
-                .andExpect(jsonPath("$.emailVerified").value(true));
+                .andExpect(jsonPath("$.emailVerified").value(true))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        login(username, PASSWORD);
     }
 
     @Test
-    void registerRejectsInvalidInputWithFieldErrors() throws Exception {
+    void signUpRejectsInvalidInputWithFieldErrors() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"a b","email":"not-an-email","password":"weak"}"""))
+                                {"email":"not-an-email"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'email')]").exists());
+        mockMvc.perform(post("/api/v1/auth/register/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"token":"","username":"a b","password":"weak"}"""))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors[?(@.field == 'token')]").exists())
                 .andExpect(jsonPath("$.errors[?(@.field == 'username')]").exists())
-                .andExpect(jsonPath("$.errors[?(@.field == 'email')]").exists())
                 .andExpect(jsonPath("$.errors[?(@.field == 'password')]").exists());
     }
 
     @Test
-    void registerRejectsDuplicateUsername() throws Exception {
+    void signUpRejectsDuplicateUsername() throws Exception {
         String username = uniqueUsername();
         register(username);
 
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"username":"%s","email":"other-%s@example.com","password":"%s"}""", username, username, PASSWORD)))
+        completeSignUp("other-" + username + "@example.com", username, PASSWORD)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Username is already taken."));
     }
@@ -144,10 +153,7 @@ class AuthIntegrationTest extends IntegrationTest {
     void passwordOver128CharactersIsRejected() throws Exception {
         String username = uniqueUsername();
 
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, "a".repeat(129))))
+        completeSignUp(username + "@example.com", username, "a".repeat(129))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:validation-failed"))
                 .andExpect(jsonPath("$.errors[0].field").value("password"));
@@ -159,12 +165,7 @@ class AuthIntegrationTest extends IntegrationTest {
         String password = "ğ".repeat(62);
         String username = uniqueUsername();
 
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, password)))
-                .andExpect(status().isAccepted());
-        confirmEmail(username + "@example.com");
+        completeSignUp(username + "@example.com", username, password).andExpect(status().isCreated());
         login(username, password);
     }
 
@@ -172,10 +173,7 @@ class AuthIntegrationTest extends IntegrationTest {
     void passwordUnder15CharactersIsRejectedWithoutTwoFactor() throws Exception {
         String username = uniqueUsername();
 
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"username":"%s","email":"%s@example.com","password":"fourteen-chars"}""", username, username)))
+        completeSignUp(username + "@example.com", username, "fourteen-chars")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:password-too-short"));
     }
@@ -185,10 +183,7 @@ class AuthIntegrationTest extends IntegrationTest {
         String username = uniqueUsername();
 
         // On the bundled list; compared in lower case.
-        mockMvc.perform(post("/api/v1/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"username":"%s","email":"%s@example.com","password":"1Q2W3E4R5T6Y7U8I9O0P"}""", username, username)))
+        completeSignUp(username + "@example.com", username, "1Q2W3E4R5T6Y7U8I9O0P")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:password-breached"));
     }

@@ -67,6 +67,7 @@ public class SecurityConfig {
     /** Paths reachable without authentication. Add new public endpoints here. */
     static final String[] PUBLIC_PATHS = {
         "/api/v1/auth/register",
+        "/api/v1/auth/register/complete",
         "/api/v1/auth/login",
         "/api/v1/auth/login/mfa",
         "/api/v1/auth/oauth2/*",

@@ -29,59 +29,52 @@ class AccountIntegrationTest extends IntegrationTest {
                 .orElseThrow(() -> new AssertionError("No '" + subjectPart + "' email for " + username));
     }
 
-    /** Signs up without opening the link, so the account does not exist yet. */
-    private void signUp(String username) throws Exception {
-        postJson("/api/v1/auth/register", json("""
-                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, PASSWORD), 202);
-    }
-
     private void postJson(String path, String body, int expectedStatus) throws Exception {
         mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().is(expectedStatus));
     }
 
     @Test
-    void signUpCreatesTheAccountOnlyWhenTheLinkIsOpened() throws Exception {
+    void aSignUpLinkCreatesTheAccountOnce() throws Exception {
         String username = uniqueUsername();
-        signUp(username);
+        String address = username + "@example.com";
+        postJson("/api/v1/auth/register", json("""
+                {"email":"%s"}""", address), 202);
 
-        // Until the link is opened there is no account: login fails like for any unknown user.
+        // Until the link is used there is no account: login fails like for any unknown user.
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
+                                {"identifier":"%s","password":"%s"}""", address, PASSWORD)))
                 .andExpect(status().isUnauthorized());
-        SimpleMailMessage verification = latestMail(username, "Confirm your email");
-        assertThat(verification.getText()).contains("http://localhost:3000/verify-email?token=");
-        String verificationToken = CapturingMailSender.token(verification);
+        SimpleMailMessage link =
+                mail.latest(address, "Finish creating your account").orElseThrow();
+        assertThat(link.getText()).contains("http://localhost:3000/sign-up?token=");
+        String body = json("""
+                {"token":"%s","username":"%s","password":"%s"}""", CapturingMailSender.token(link), username, PASSWORD);
 
-        postJson("/api/v1/auth/verify-email", json("""
-                {"token":"%s"}""", verificationToken), 204);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(login(username, PASSWORD))))
-                .andExpect(jsonPath("$.emailVerified").value(true))
-                .andExpect(jsonPath("$.role").value("USER"));
-
-        // Tokens are single-use.
-        postJson("/api/v1/auth/verify-email", json("""
-                {"token":"%s"}""", verificationToken), 400);
+        postJson("/api/v1/auth/register/complete", body, 201);
+        login(username, PASSWORD);
+        // The address now has an account, so the same link cannot create a second one.
+        mockMvc.perform(post("/api/v1/auth/register/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace(username, username + "2")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:problem:email-taken"));
     }
 
     @Test
-    void aUsernameTakenBeforeTheLinkIsOpenedIsAConflict() throws Exception {
-        String username = uniqueUsername();
-        signUp(username);
-        String link = CapturingMailSender.token(latestMail(username, "Confirm your email"));
-        // Someone else signs up with the same username, with another address, and confirms first.
-        postJson("/api/v1/auth/register", json("""
-                {"username":"%s","email":"other-%s@example.com","password":"%s"}""", username, username, PASSWORD), 202);
-        confirmEmail("other-" + username + "@example.com");
+    void onlySignUpTokensCompleteASignUp() throws Exception {
+        String accessToken = registerAndLogin(uniqueUsername());
 
-        mockMvc.perform(post("/api/v1/auth/verify-email")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"token":"%s"}""", link)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.type").value("urn:problem:username-taken"));
+        for (String token : new String[] {"definitely-not-a-real-token", accessToken}) {
+            mockMvc.perform(post("/api/v1/auth/register/complete")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json("""
+                                    {"token":"%s","username":"%s","password":"%s"}""", token, uniqueUsername(), PASSWORD)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:problem:invalid-token"));
+        }
     }
 
     @Test
@@ -95,17 +88,39 @@ class AccountIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void resendWithinTheCooldownSendsNothingAndKeepsTheLink() throws Exception {
+    void resendReachesOnlyAnUnconfirmedAddressAndRespectsTheCooldown() throws Exception {
         String username = uniqueUsername();
-        signUp(username);
-        SimpleMailMessage first = latestMail(username, "Confirm your email");
+        String token = registerAndLogin(username);
+        String newAddress = "moved-" + username + "@example.com";
+        changeEmail(token, newAddress);
+        SimpleMailMessage first = mail.latest(newAddress, "Confirm your email").orElseThrow();
 
+        // Within the cooldown nothing is sent and the first link still works later.
         postJson("/api/v1/auth/verify-email/resend", json("""
-                {"email":"%s@example.com"}""", username), 202);
-
-        assertThat(latestMail(username, "Confirm your email")).isSameAs(first);
+                {"email":"%s"}""", newAddress), 202);
+        assertThat(mail.latest(newAddress, "Confirm your email")).containsSame(first);
+        // After it, a new link replaces the old one.
+        jdbc.update(
+                "UPDATE account_tokens SET created_at = now() - interval '2 minutes' "
+                        + "WHERE user_id = (SELECT id FROM users WHERE username = ?)",
+                username);
+        postJson("/api/v1/auth/verify-email/resend", json("""
+                {"email":"%s"}""", newAddress), 202);
+        SimpleMailMessage second = mail.latest(newAddress, "Confirm your email").orElseThrow();
+        assertThat(second).isNotSameAs(first);
         postJson("/api/v1/auth/verify-email", json("""
-                {"token":"%s"}""", CapturingMailSender.token(first)), 204);
+                {"token":"%s"}""", CapturingMailSender.token(first)), 400);
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", CapturingMailSender.token(second)), 204);
+
+        // A confirmed address gets nothing.
+        jdbc.update(
+                "UPDATE account_tokens SET created_at = now() - interval '2 minutes' "
+                        + "WHERE user_id = (SELECT id FROM users WHERE username = ?)",
+                username);
+        postJson("/api/v1/auth/verify-email/resend", json("""
+                {"email":"%s"}""", newAddress), 202);
+        assertThat(mail.latest(newAddress, "Confirm your email")).containsSame(second);
     }
 
     @Test
@@ -272,7 +287,7 @@ class AccountIntegrationTest extends IntegrationTest {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"username":"%s","email":"%s","password":"%s"}""", uniqueUsername(), tooLong, PASSWORD)))
+                                {"email":"%s"}""", tooLong)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[?(@.field == 'email')]").exists());
         mockMvc.perform(patch("/api/v1/users/me")

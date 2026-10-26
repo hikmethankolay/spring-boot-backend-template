@@ -160,15 +160,15 @@ password or logged in on a newer version cannot log in until they reset their pa
   the previous one.
 - The `202` endpoints answer the same way for unknown addresses, so they cannot be used to find accounts. They send at
   most one email per account per minute, so nobody can flood an inbox.
-- Registration (`POST /api/v1/auth/register`) creates no account. It stores a pending sign-up (username, address,
-  Argon2id hash, link expiry) and emails a verification link; the account is created, already verified, when the
-  link is opened (`POST /api/v1/auth/verify-email`). If the username or address was taken in the meantime that
-  answers `409` and the user signs up again. Pending sign-ups expire with the link and are deleted hourly.
-- A sign-up with an address that already has an account emails its owner a password reset link instead and audits
-  `user.registration_repeated`. Both paths answer `202` with no body, check and hash the password, and send one
-  email (at most one per address per minute). Until a link is opened nothing is visible: no account, no login, no
-  reserved username, so registration cannot be used to find out which addresses are registered. A username taken
-  by an existing account is still reported (`409`): usernames are public.
+- Sign-up is email-first. `POST /api/v1/auth/register` takes only the address and always answers `202` with no
+  body: a new address gets a link to finish the sign-up, an address that already has an account gets a notice
+  without a link (and `user.registration_repeated` is audited). Nothing is created or stored, so registration
+  cannot be used to find out which addresses are registered.
+- The link's page chooses the username and password and calls `POST /api/v1/auth/register/complete`, which
+  creates the account with the address already verified (`201`). Whoever opens the link sets the credentials, so
+  nobody can prepare an account on someone else's address. The token is a JWT of its own type (`sign-up+jwt`)
+  holding the address, signed with the JWT keys and valid for 24 hours; nothing is stored for it. A link used
+  twice answers `409 email-taken`, a taken username `409 username-taken` (usernames are public).
 - Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword`, marks the new address unverified, sends a new
   verification email and revokes every reset and verification link sent to the old address.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding

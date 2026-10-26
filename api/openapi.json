@@ -870,7 +870,7 @@
     },
     "/api/v1/auth/register" : {
       "post" : {
-        "description" : "Emails a link that creates the account (USER role) when it is opened with POST /api/v1/auth/verify-email; until then the account does not exist. If the email address already has an account, its owner is emailed instead. The response is the same either way, so it does not tell whether an address is registered.",
+        "description" : "Emails the address a link to finish the sign-up (POST /api/v1/auth/register/complete), or, if it already has an account, a notice. The response is the same either way and nothing is created, so it does not tell whether an address is registered.",
         "operationId" : "registerUser",
         "requestBody" : {
           "content" : {
@@ -884,7 +884,7 @@
         },
         "responses" : {
           "202" : {
-            "description" : "Registration accepted; check the inbox",
+            "description" : "Check the inbox",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -903,6 +903,89 @@
           "400" : {
             "$ref" : "#/components/responses/BadRequest"
           },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Start a sign-up",
+        "tags" : [ "Authentication" ]
+      }
+    },
+    "/api/v1/auth/register/complete" : {
+      "post" : {
+        "description" : "Creates the account (USER role, email already verified) for the address the sign-up link was sent to, with the chosen username and password.",
+        "operationId" : "completeRegistration",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CompleteRegistrationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "User created",
+            "headers" : {
+              "Location" : {
+                "description" : "URL of the new user",
+                "schema" : {
+                  "type" : "string",
+                  "format" : "uri"
+                },
+                "style" : "simple"
+              },
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Invalid or expired link, or an invalid username or password",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
           "409" : {
             "content" : {
               "application/problem+json" : {
@@ -911,7 +994,7 @@
                 }
               }
             },
-            "description" : "Username already taken",
+            "description" : "Username taken, or the address already has an account",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -935,7 +1018,7 @@
           }
         },
         "security" : [ ],
-        "summary" : "Register a new user",
+        "summary" : "Finish a sign-up",
         "tags" : [ "Authentication" ]
       }
     },
@@ -2985,6 +3068,31 @@
         },
         "required" : [ "currentPassword", "newPassword" ]
       },
+      "CompleteRegistrationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "password" : {
+            "type" : "string",
+            "format" : "password",
+            "description" : "15-128 characters (8 for users with two-factor authentication), no composition rules; common and breached passwords are rejected",
+            "maxLength" : 128,
+            "minLength" : 8,
+            "writeOnly" : true
+          },
+          "token" : {
+            "type" : "string",
+            "maxLength" : 2048,
+            "minLength" : 0
+          },
+          "username" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 3,
+            "pattern" : "^[A-Za-z0-9._-]+$"
+          }
+        },
+        "required" : [ "password", "token", "username" ]
+      },
       "ConfirmTotpRequest" : {
         "type" : "object",
         "properties" : {
@@ -3307,23 +3415,9 @@
             "format" : "email",
             "maxLength" : 254,
             "minLength" : 3
-          },
-          "password" : {
-            "type" : "string",
-            "format" : "password",
-            "description" : "15-128 characters (8 for users with two-factor authentication), no composition rules; common and breached passwords are rejected",
-            "maxLength" : 128,
-            "minLength" : 8,
-            "writeOnly" : true
-          },
-          "username" : {
-            "type" : "string",
-            "maxLength" : 32,
-            "minLength" : 3,
-            "pattern" : "^[A-Za-z0-9._-]+$"
           }
         },
-        "required" : [ "email", "password", "username" ]
+        "required" : [ "email" ]
       },
       "SessionResponse" : {
         "type" : "object",

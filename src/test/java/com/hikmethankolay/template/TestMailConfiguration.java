@@ -29,7 +29,7 @@ public class TestMailConfiguration {
     /** Stores sent messages so tests can read the links they contain. */
     public static class CapturingMailSender implements MailSender {
 
-        private static final Pattern TOKEN = Pattern.compile("[?&]token=([A-Za-z0-9_-]+)");
+        private static final Pattern TOKEN = Pattern.compile("[?&]token=([A-Za-z0-9_.-]+)");
 
         private final List<SimpleMailMessage> messages = new CopyOnWriteArrayList<>();
 

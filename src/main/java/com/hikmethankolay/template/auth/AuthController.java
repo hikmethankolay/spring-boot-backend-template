@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.auth;
 
+import com.hikmethankolay.template.auth.dto.CompleteRegistrationRequest;
 import com.hikmethankolay.template.auth.dto.LoginRequest;
 import com.hikmethankolay.template.auth.dto.MfaChallengeResponse;
 import com.hikmethankolay.template.auth.dto.MfaLoginRequest;
@@ -10,6 +11,7 @@ import com.hikmethankolay.template.auth.dto.SocialProviderResponse;
 import com.hikmethankolay.template.auth.dto.TokenResponse;
 import com.hikmethankolay.template.common.ApiDocs;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,6 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.http.CacheControl;
@@ -35,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.web.util.WebUtils;
 
 /**
@@ -49,6 +53,7 @@ import org.springframework.web.util.WebUtils;
  *   <caption>Endpoints</caption>
  *   <tr><th>Method</th><th>Path</th><th>Access</th><th>Success</th></tr>
  *   <tr><td>POST</td><td>/register</td><td>public</td><td>202</td></tr>
+ *   <tr><td>POST</td><td>/register/complete</td><td>sign-up link</td><td>201 + Location</td></tr>
  *   <tr><td>POST</td><td>/login</td><td>public</td><td>200, or 202 when a second factor is needed</td></tr>
  *   <tr><td>POST</td><td>/login/mfa</td><td>MFA token</td><td>200</td></tr>
  *   <tr><td>GET</td><td>/oauth2/providers</td><td>public</td><td>200</td></tr>
@@ -97,18 +102,52 @@ public class AuthController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Operation(
             operationId = "registerUser",
-            summary = "Register a new user",
-            description = "Emails a link that creates the account (USER role) when it is opened with "
-                    + "POST /api/v1/auth/verify-email; until then the account does not exist. If the email address "
-                    + "already has an account, its owner is emailed instead. The response is the same either way, so "
-                    + "it does not tell whether an address is registered.")
-    @ApiResponse(responseCode = "202", description = "Registration accepted; check the inbox")
-    @ApiResponse(
-            responseCode = "409",
-            description = "Username already taken",
-            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+            summary = "Start a sign-up",
+            description = "Emails the address a link to finish the sign-up (POST /api/v1/auth/register/complete), "
+                    + "or, if it already has an account, a notice. The response is the same either way and nothing "
+                    + "is created, so it does not tell whether an address is registered.")
+    @ApiResponse(responseCode = "202", description = "Check the inbox")
     public void register(@Valid @RequestBody RegisterRequest request) {
         authService.register(request);
+    }
+
+    /**
+     * Finishes a sign-up with the token from the emailed link.
+     *
+     * @param request the token, username and password
+     * @return 201 with the created user and its URL
+     */
+    @PostMapping("/register/complete")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            operationId = "completeRegistration",
+            summary = "Finish a sign-up",
+            description = "Creates the account (USER role, email already verified) for the address the sign-up link "
+                    + "was sent to, with the chosen username and password.")
+    @ApiResponse(
+            responseCode = "201",
+            description = "User created",
+            headers =
+                    @Header(
+                            name = HttpHeaders.LOCATION,
+                            description = "URL of the new user",
+                            schema = @Schema(type = "string", format = "uri")),
+            content = @Content(schema = @Schema(implementation = UserResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid or expired link, or an invalid username or password",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Username taken, or the address already has an account",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public ResponseEntity<UserResponse> completeRegistration(@Valid @RequestBody CompleteRegistrationRequest request) {
+        UserResponse user = authService.completeRegistration(request);
+        URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/v1/users/{id}")
+                .buildAndExpand(user.id())
+                .toUri();
+        return ResponseEntity.created(location).body(user);
     }
 
     /**

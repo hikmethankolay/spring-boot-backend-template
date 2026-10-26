@@ -474,12 +474,12 @@ public class UserService {
     }
 
     /**
-     * Fails if a username is taken. Usernames are public, so telling that one is taken reveals nothing.
+     * Fails if a username is taken.
      *
      * @param username username to check
      * @throws ApiException 409 if the username is taken
      */
-    public void ensureUsernameAvailable(String username) {
+    private void ensureUsernameAvailable(String username) {
         if (userRepository.existsByUsername(username)) {
             throw ApiException.conflict(ProblemType.USERNAME_TAKEN, "Username is already taken.");
         }

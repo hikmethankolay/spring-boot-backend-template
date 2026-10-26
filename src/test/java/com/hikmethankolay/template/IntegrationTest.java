@@ -4,7 +4,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
-import com.hikmethankolay.template.user.UserRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -39,9 +39,6 @@ public abstract class IntegrationTest {
     protected MockMvc mockMvc;
 
     @Autowired
-    private UserRepository registeredUsers;
-
-    @Autowired
     private CapturingMailSender signUpMail;
 
     protected static String uniqueUsername() {
@@ -52,21 +49,34 @@ public abstract class IntegrationTest {
         return template.formatted(args);
     }
 
-    /**
-     * Registers a user whose email is {@code <username>@example.com} and returns its id. Sign-ups create the account
-     * only when the emailed link is opened, so this opens it too.
-     */
+    /** Signs a user up whose email is {@code <username>@example.com} and returns its id. */
     protected long register(String username) throws Exception {
+        String body = completeSignUp(username + "@example.com", username, PASSWORD)
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return ((Number) JsonPath.read(body, "$.id")).longValue();
+    }
+
+    /** Starts a sign-up for an address and finishes it with the token from the emailed link. */
+    protected ResultActions completeSignUp(String address, String username, String password) throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, PASSWORD)))
+                                {"email":"%s"}""", address)))
                 .andExpect(status().isAccepted());
-        confirmEmail(username + "@example.com");
-        return registeredUsers
-                .findByUsernameOrEmail(username, username)
-                .orElseThrow()
-                .getId();
+        return mockMvc.perform(post("/api/v1/auth/register/complete")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("""
+                        {"token":"%s","username":"%s","password":"%s"}""", signUpToken(address), username, password)));
+    }
+
+    /** Returns the token from the newest sign-up link sent to an address. */
+    protected String signUpToken(String address) {
+        return CapturingMailSender.token(signUpMail
+                .latest(address, "Finish creating your account")
+                .orElseThrow(() -> new AssertionError("No sign-up email for " + address)));
     }
 
     /** Opens the newest "Confirm your email" link sent to an address. */

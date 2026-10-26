@@ -2,8 +2,8 @@
 # End-to-end smoke test against a running app: health, register, login, /me, the notes example, refresh,
 # logout, then account deletion, so repeated runs leave no users behind.
 # Usage: scripts/smoke.sh [base-url]   (default http://localhost:8080)
-# Sign-ups create the account only when the emailed link is opened: the link is read from Mailpit
-# (MAILPIT_URL, default http://localhost:8025).
+# Sign-up is email-first: the link that finishes it is read from Mailpit (MAILPIT_URL, default
+# http://localhost:8025).
 source "$(dirname "$0")/lib.sh"
 command -v curl >/dev/null 2>&1 || die "curl is required."
 
@@ -30,8 +30,8 @@ json_field() {
   sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p" "$body_file"
 }
 
-# confirm_email ADDRESS: opens the newest verification link Mailpit caught for the address.
-confirm_email() {
+# finish_sign_up ADDRESS: finishes the sign-up with the newest link Mailpit caught for the address.
+finish_sign_up() {
   local id="" token=""
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     id="$(curl -s --get "$mailpit_url/api/v1/search" --data-urlencode "query=to:$1" --data-urlencode "limit=1" \
@@ -39,9 +39,10 @@ confirm_email() {
     [[ -n "$id" ]] && break
     sleep 0.5
   done
-  [[ -n "$id" ]] || die "No verification email for $1 in Mailpit ($mailpit_url)"
-  token="$(curl -s "$mailpit_url/api/v1/message/$id" | grep -o 'verify-email?token=[A-Za-z0-9_-]*' | head -1 | cut -d= -f2)"
-  request POST /api/v1/auth/verify-email 204 "{\"token\":\"$token\"}"
+  [[ -n "$id" ]] || die "No sign-up email for $1 in Mailpit ($mailpit_url)"
+  token="$(curl -s "$mailpit_url/api/v1/message/$id" | grep -o 'sign-up?token=[A-Za-z0-9_.-]*' | head -1 | cut -d= -f2)"
+  request POST /api/v1/auth/register/complete 201 \
+    "{\"token\":\"$token\",\"username\":\"$username\",\"password\":\"$password\"}"
 }
 
 json_number() {
@@ -49,8 +50,8 @@ json_number() {
 }
 
 request GET  /actuator/health 200
-request POST /api/v1/auth/register 202 "{\"username\":\"$username\",\"email\":\"$username@example.com\",\"password\":\"$password\"}"
-confirm_email "$username@example.com"
+request POST /api/v1/auth/register 202 "{\"email\":\"$username@example.com\"}"
+finish_sign_up "$username@example.com"
 request POST /api/v1/auth/login 200 "{\"identifier\":\"$username\",\"password\":\"$password\"}"
 token="$(json_field accessToken)"
 refresh_token="$(json_field refreshToken)"

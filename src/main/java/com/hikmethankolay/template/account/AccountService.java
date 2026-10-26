@@ -6,11 +6,13 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.security.SignUpTokens;
 import com.hikmethankolay.template.user.EmailVerificationRequired;
 import com.hikmethankolay.template.user.SessionsInvalidated;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
 import com.hikmethankolay.template.user.UserService;
+import com.hikmethankolay.template.user.dto.UserResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -27,10 +29,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * Self-service sign-up, email verification and password reset.
  *
- * <p>A sign-up creates no account: it stores a {@link PendingRegistration} and emails a link, and the account is
- * created when the link is opened. A sign-up with an address that already has an account emails its owner
- * instead. Either way nothing visible happens until the link is opened (no account, no reserved username, no
- * login), so sign-ups cannot be used to find out which addresses are registered.</p>
+ * <p>Sign-up is email-first: {@link #signUp} only takes an address and emails a link; the username and password
+ * are chosen when the link is opened ({@link #completeSignUp}). An address that already has an account gets a
+ * notice instead. Nothing is created or stored before the link is opened, so sign-ups reveal nothing about which
+ * addresses are registered, and nobody can prepare an account for someone else's address.</p>
  *
  * <p>Tokens are 256-bit random values sent by email; only their SHA-256 hash is stored (see
  * {@link SecureTokens}). Each token is single-use, expires, and issuing a new one invalidates the
@@ -49,7 +51,7 @@ public class AccountService {
 
     private final AccountTokenRepository tokens;
 
-    private final PendingRegistrationRepository pending;
+    private final SignUpTokens signUpTokens;
 
     private final UserRepository users;
 
@@ -65,7 +67,7 @@ public class AccountService {
      * Creates the service.
      *
      * @param tokens      token persistence
-     * @param pending     sign-ups waiting for their email link
+     * @param signUpTokens issues and checks the tokens in sign-up links
      * @param users       user lookups
      * @param userService user changes
      * @param mailer      sends the emails
@@ -74,14 +76,14 @@ public class AccountService {
      */
     public AccountService(
             AccountTokenRepository tokens,
-            PendingRegistrationRepository pending,
+            SignUpTokens signUpTokens,
             UserRepository users,
             UserService userService,
             AccountMailer mailer,
             AppProperties properties,
             AuditLog audit) {
         this.tokens = tokens;
-        this.pending = pending;
+        this.signUpTokens = signUpTokens;
         this.users = users;
         this.userService = userService;
         this.mailer = mailer;
@@ -124,69 +126,62 @@ public class AccountService {
     }
 
     /**
-     * Signs a user up with the {@link com.hikmethankolay.template.user.Role#USER} role: emails a link that creates
-     * the account when opened. If the address already has an account, its owner is emailed a notice with a
-     * password reset link instead. The caller cannot tell which happened: both paths check and hash the password,
-     * store one token and send one email, and both send at most one email per address per {@link #RESEND_COOLDOWN}.
+     * Starts a sign-up: emails the address a link to finish it, or, if the address already has an account, a
+     * notice saying so. Either way the answer is the same and nothing is stored.
      *
-     * @param username    the requested username; usernames are public, so a taken one is still reported
-     * @param email       the email address
-     * @param rawPassword the plain password
-     * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
+     * @param email the email address
      */
     @Transactional
-    public void signUp(String username, String email, String rawPassword) {
+    public void signUp(String email) {
         String address = normalize(email);
-        userService.ensureUsernameAvailable(username);
-        String passwordHash = userService.encodeNewPassword(false, rawPassword);
         Optional<User> existing = users.findByEmail(address);
         if (existing.isPresent()) {
-            notifyAlreadyRegistered(existing.get());
-        } else if (!pending.existsByEmailAndCreatedAtAfter(
-                address, Instant.now().minus(RESEND_COOLDOWN))) {
-            startRegistration(username, address, passwordHash);
+            audit.record(AuditEvent.REGISTRATION_REPEATED, existing.get().getId());
+            mailer.sendAlreadyRegistered(address);
+        } else {
+            mailer.sendSignUpLink(address, signUpTokens.issue(address), properties.verificationTokenTtl());
         }
     }
 
     /**
-     * Sends a new verification email if the address belongs to an unverified account or to a sign-up still
-     * waiting for its link.
+     * Finishes a sign-up: creates the account, already verified, for the address the link was sent to.
+     *
+     * @param token       the token from the sign-up link
+     * @param username    the chosen username
+     * @param rawPassword the chosen password
+     * @return the created user
+     * @throws ApiException 400 if the token is forged or expired or the password is too short or breached, 409 if
+     *                      the username is taken or the address already has an account (e.g. the link was used)
+     */
+    @Transactional
+    public UserResponse completeSignUp(String token, String username, String rawPassword) {
+        String address = signUpTokens
+                .verify(token)
+                .orElseThrow(() -> ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN));
+        return userService.registerConfirmed(username, address, userService.encodeNewPassword(false, rawPassword));
+    }
+
+    /**
+     * Sends a new verification email if the address belongs to an unverified account.
      *
      * @param email the address to verify
      */
     @Transactional
     public void resendVerification(String email) {
-        String address = normalize(email);
-        users.findByEmail(address)
+        users.findByEmail(normalize(email))
                 .filter(user -> !user.isEmailVerified())
                 .filter(user -> !recentlyIssued(user.getId(), AccountTokenType.EMAIL_VERIFICATION))
                 .ifPresent(this::sendVerification);
-        Instant now = Instant.now();
-        pending.findFirstByEmailOrderByCreatedAtDesc(address)
-                .filter(registration -> !registration.isExpired(now))
-                .filter(registration -> !pending.existsByEmailAndCreatedAtAfter(address, now.minus(RESEND_COOLDOWN)))
-                .ifPresent(registration ->
-                        startRegistration(registration.getUsername(), address, registration.getPasswordHash()));
     }
 
     /**
-     * Confirms an email address: completes a sign-up (creating the account) or verifies the address of an
-     * existing account.
+     * Confirms a changed email address.
      *
      * @param token the token from the verification email
-     * @throws ApiException 400 if the token is unknown, already used or expired, 409 if the sign-up's username or
-     *                      address was taken since
+     * @throws ApiException 400 if the token is unknown, already used or expired
      */
     @Transactional
     public void verifyEmail(String token) {
-        Optional<PendingRegistration> registration = pending.findByTokenHash(SecureTokens.hash(token))
-                .filter(candidate -> !candidate.isExpired(Instant.now()));
-        if (registration.isPresent()) {
-            PendingRegistration signUp = registration.get();
-            pending.deleteAllByEmail(signUp.getEmail());
-            userService.registerConfirmed(signUp.getUsername(), signUp.getEmail(), signUp.getPasswordHash());
-            return;
-        }
         userService.markEmailVerified(
                 consume(token, AccountTokenType.EMAIL_VERIFICATION).getUserId());
     }
@@ -227,45 +222,9 @@ public class AccountService {
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void deleteExpiredTokens() {
-        Instant now = Instant.now();
-        int deleted = tokens.deleteAllExpiredBefore(now) + pending.deleteAllExpiredBefore(now);
+        int deleted = tokens.deleteAllExpiredBefore(Instant.now());
         if (deleted > 0) {
-            log.info("Deleted {} expired account tokens and sign-ups", deleted);
-        }
-    }
-
-    /**
-     * Stores a sign-up, replacing earlier ones for the address, and emails its link.
-     *
-     * @param username     the requested username
-     * @param address      the normalised address
-     * @param passwordHash the encoded password
-     */
-    private void startRegistration(String username, String address, String passwordHash) {
-        Duration ttl = properties.verificationTokenTtl();
-        pending.deleteAllByEmail(address);
-        String token = SecureTokens.generate();
-        pending.save(new PendingRegistration(
-                username,
-                address,
-                passwordHash,
-                SecureTokens.hash(token),
-                Instant.now().plus(ttl)));
-        mailer.sendEmailVerification(address, token, ttl);
-    }
-
-    /**
-     * Tells the owner of an address that someone tried to sign up with it, with a password reset link in case it
-     * was them; shares the reset email's cooldown.
-     *
-     * @param user the account the address belongs to
-     */
-    private void notifyAlreadyRegistered(User user) {
-        audit.record(AuditEvent.REGISTRATION_REPEATED, user.getId());
-        if (!recentlyIssued(user.getId(), AccountTokenType.PASSWORD_RESET)) {
-            Duration ttl = properties.passwordResetTokenTtl();
-            mailer.sendAlreadyRegistered(
-                    user.getEmail(), issue(user.getId(), AccountTokenType.PASSWORD_RESET, ttl), ttl);
+            log.info("Deleted {} expired account tokens", deleted);
         }
     }
 

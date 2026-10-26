@@ -3,6 +3,7 @@ package com.hikmethankolay.template.auth;
 import com.hikmethankolay.template.account.AccountService;
 import com.hikmethankolay.template.audit.AuditEvent;
 import com.hikmethankolay.template.audit.AuditLog;
+import com.hikmethankolay.template.auth.dto.CompleteRegistrationRequest;
 import com.hikmethankolay.template.auth.dto.LoginRequest;
 import com.hikmethankolay.template.auth.dto.RegisterRequest;
 import com.hikmethankolay.template.auth.dto.SocialProviderResponse;
@@ -21,6 +22,7 @@ import com.hikmethankolay.template.social.SocialProfileClient;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
+import com.hikmethankolay.template.user.dto.UserResponse;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -126,14 +128,25 @@ public class AuthService {
     }
 
     /**
-     * Signs a user up: emails a link that creates the account with the {@link Role#USER} role when opened, or, if
-     * the address already has an account, emails its owner instead; the caller cannot tell which.
+     * Starts a sign-up: emails a link to finish it, or, if the address already has an account, a notice; the
+     * caller cannot tell which.
      *
-     * @param request registration data
-     * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
+     * @param request the address
      */
     public void register(RegisterRequest request) {
-        accounts.signUp(request.username(), request.email(), request.password());
+        accounts.signUp(request.email());
+    }
+
+    /**
+     * Finishes a sign-up: creates the account with the {@link Role#USER} role, already verified.
+     *
+     * @param request the token from the link, the username and the password
+     * @return the created user
+     * @throws ApiException 400 if the token is invalid or expired or the password too short or breached, 409 if the
+     *                      username is taken or the address already has an account
+     */
+    public UserResponse completeRegistration(CompleteRegistrationRequest request) {
+        return accounts.completeSignUp(request.token(), request.username(), request.password());
     }
 
     /**

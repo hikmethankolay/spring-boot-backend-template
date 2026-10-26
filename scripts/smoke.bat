@@ -2,8 +2,8 @@
 rem End-to-end smoke test against a running app: health, register, login, /me, the notes example, refresh,
 rem logout, then account deletion, so repeated runs leave no users behind.
 rem Usage: scripts\smoke.bat [base-url]   (default http://localhost:8080)
-rem Sign-ups create the account only when the emailed link is opened: the link is read from Mailpit
-rem (MAILPIT_URL, default http://localhost:8025).
+rem Sign-up is email-first: the link that finishes it is read from Mailpit (MAILPIT_URL, default
+rem http://localhost:8025).
 setlocal
 set "BASE_URL=%~1"
 if "%BASE_URL%"=="" set "BASE_URL=http://localhost:8080"
@@ -19,12 +19,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  if ($status -ne $expected) { throw \"$method $path: expected $expected, got $status\" };" ^
   "  Write-Host ('==> {0} {1} -> {2}' -f $method, $path, $status); return $content };" ^
   "Check GET '/actuator/health' 200 | Out-Null;" ^
-  "Check POST '/api/v1/auth/register' 202 (@{ username = $user; email = \"$user@example.com\"; password = $pw } | ConvertTo-Json) | Out-Null;" ^
+  "Check POST '/api/v1/auth/register' 202 (@{ email = \"$user@example.com\" } | ConvertTo-Json) | Out-Null;" ^
   "$mp = if ($env:MAILPIT_URL) { $env:MAILPIT_URL } else { 'http://localhost:8025' }; $id = $null;" ^
   "for ($i = 0; $i -lt 10 -and -not $id; $i++) { $id = (Invoke-RestMethod ($mp + '/api/v1/search?limit=1&query=' + [uri]::EscapeDataString('to:' + $user + '@example.com'))).messages | Select-Object -First 1 -ExpandProperty ID; if (-not $id) { Start-Sleep -Milliseconds 500 } };" ^
-  "if (-not $id) { throw \"No verification email for $user@example.com in Mailpit ($mp)\" };" ^
-  "$tok = [regex]::Match((Invoke-RestMethod ($mp + '/api/v1/message/' + $id)).Text, 'verify-email\?token=([A-Za-z0-9_-]+)').Groups[1].Value;" ^
-  "Check POST '/api/v1/auth/verify-email' 204 (@{ token = $tok } | ConvertTo-Json) | Out-Null;" ^
+  "if (-not $id) { throw \"No sign-up email for $user@example.com in Mailpit ($mp)\" };" ^
+  "$tok = [regex]::Match((Invoke-RestMethod ($mp + '/api/v1/message/' + $id)).Text, 'sign-up\?token=([A-Za-z0-9_.-]+)').Groups[1].Value;" ^
+  "Check POST '/api/v1/auth/register/complete' 201 (@{ token = $tok; username = $user; password = $pw } | ConvertTo-Json) | Out-Null;" ^
   "$login = Check POST '/api/v1/auth/login' 200 (@{ identifier = $user; password = $pw } | ConvertTo-Json) | ConvertFrom-Json;" ^
   "Check GET '/api/v1/users/me' 200 $null $login.accessToken | Out-Null;" ^
   "$note = Check POST '/api/v1/notes' 201 (@{ title = 'Smoke test'; body = 'Created by scripts/smoke.bat' } | ConvertTo-Json) $login.accessToken | ConvertFrom-Json;" ^

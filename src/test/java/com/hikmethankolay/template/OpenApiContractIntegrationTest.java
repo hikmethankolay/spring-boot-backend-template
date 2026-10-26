@@ -37,7 +37,11 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
                         .doesNotExist())
                 .andExpect(jsonPath(AUTH + "register'].post.responses['201']").doesNotExist())
                 .andExpect(jsonPath(AUTH + "register'].post.responses['200']").doesNotExist())
-                .andExpect(jsonPath(AUTH + "register'].post.responses['409']").exists())
+                .andExpect(jsonPath(AUTH + "register'].post.responses['409']").doesNotExist())
+                .andExpect(jsonPath(AUTH + "register/complete'].post.responses['201'].headers.Location")
+                        .exists())
+                .andExpect(jsonPath(AUTH + "register/complete'].post.responses['409']")
+                        .exists())
                 .andExpect(jsonPath(AUTH + "logout'].post.responses['204']").exists())
                 .andExpect(jsonPath(AUTH + "logout'].post.responses['200']").doesNotExist())
                 .andExpect(jsonPath(AUTH + "login'].post.responses['401']").exists())
@@ -81,12 +85,12 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
                         containsInAnyOrder("number", "size", "totalElements", "totalPages")))
                 .andExpect(jsonPath(
                         "$.components.schemas.PagedModelUserResponse.required", containsInAnyOrder("content", "page")))
-                .andExpect(jsonPath("$.components.schemas.RegisterRequest.properties.password.writeOnly")
+                .andExpect(jsonPath("$.components.schemas.CompleteRegistrationRequest.properties.password.writeOnly")
                         .value(true))
-                .andExpect(jsonPath("$.components.schemas.RegisterRequest.properties.password.format")
+                .andExpect(jsonPath("$.components.schemas.CompleteRegistrationRequest.properties.password.format")
                         .value("password"))
                 .andExpect(jsonPath(
-                        "$.components.schemas.RegisterRequest.properties.password.description",
+                        "$.components.schemas.CompleteRegistrationRequest.properties.password.description",
                         containsString("15-128 characters")))
                 .andExpect(jsonPath("$.components.schemas.LoginRequest.properties.password.maxLength")
                         .value(128))

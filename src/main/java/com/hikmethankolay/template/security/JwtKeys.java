@@ -83,8 +83,10 @@ public class JwtKeys {
                 JWSAlgorithm.parse(keys.getKeys().getFirst().getAlgorithm().getName());
         DefaultJWTProcessor<SecurityContext> processor = new DefaultJWTProcessor<>();
         processor.setJWSKeySelector(new JWSVerificationKeySelector<>(algorithm, new ImmutableJWKSet<>(keys)));
-        // Spring Security's validators check the claims, as with its own decoder builders.
+        // Spring Security's validators check the claims and the typ header (JwtTypeValidator), as with its own
+        // decoder builders; Nimbus's own typ check would accept only "JWT", not access or sign-up tokens.
         processor.setJWTClaimsSetVerifier((claims, context) -> {});
+        processor.setJWSTypeVerifier((type, context) -> {});
         return new NimbusJwtDecoder(processor);
     }
 

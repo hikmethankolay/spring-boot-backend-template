@@ -35,11 +35,11 @@ defaults marked *prod: must change* below.
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins (*prod: must change*) |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_ACCOUNT_MAX_ATTEMPTS` / `LOGIN_LOCK_DURATION` | `10` / `100` / `1h` | Brute-force lockout: failed logins per IP, per account, and how long a block lasts ([details](../security/#brute-force-protection)) |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | `true` / `120` | Per-IP API rate limit |
-| `REQUIRE_VERIFIED_EMAIL` | `false` (`true` in prod) | Block login until a changed email address is confirmed (sign-ups always need the link) |
+| `REQUIRE_VERIFIED_EMAIL` | `false` (`true` in prod) | Block login until a changed email address is confirmed (sign-ups are verified by their link) |
 | `PWNED_CHECK_ENABLED` | `false` | Also check new passwords against Have I Been Pwned ([details](../security/#passwords)) |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` | `localhost`, `1025`, `no-reply@example.com` | Outgoing mail (Mailpit by default). Set `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` for a real SMTP server (*prod: Mailpit's `localhost:1025` and `example.com` senders are refused*) |
 | `MAIL_STARTTLS_REQUIRED` | `true` (*prod only*) | The prod profile refuses to send without STARTTLS on port 587; port 465 with implicit TLS (`SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`) also works. Set `false` only for a relay without TLS. Other profiles use STARTTLS when the server offers it. See [Production](../production/#mail-encryption) |
-| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Frontend that handles `/verify-email?token=…` and `/reset-password?token=…` (*prod: must change*) |
+| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Frontend that handles `/sign-up?token=…`, `/verify-email?token=…` and `/reset-password?token=…` (*prod: must change*) |
 | `MAIL_MAX_ATTEMPTS` / `MAIL_RETRY_DELAY` / `MAIL_OUTBOX_POLL_INTERVAL` | `10` / `30s` / `10s` | Email outbox retries (the delay doubles after each failure, up to 1 hour) |
 | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | *(none; `setup` fills them in)* | The owner account (role `OWNER`, see [Security](../security/#roles)), created only when all three are set and no owner exists; they must pass the registration rules or startup fails |
 | `TRACING_SAMPLING_PROBABILITY` | `1.0` (`0.1` in prod) | Share of requests traced |

@@ -2,8 +2,6 @@ package com.hikmethankolay.template.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
@@ -14,13 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /** {@code POST /auth/register} does not reveal whether an email address already has an account. */
 class RegisterEnumerationIntegrationTest extends IntegrationTest {
-
-    private static final String NOTICE = "You already have an account";
 
     @Autowired
     private CapturingMailSender mail;
@@ -29,92 +24,46 @@ class RegisterEnumerationIntegrationTest extends IntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
-    void registeredAddressGetsTheSameResponseAndItsOwnerAnEmail() throws Exception {
+    void registeredAndNewAddressesGetTheSameResponseAndNothingIsCreated() throws Exception {
         String owner = uniqueUsername();
         register(owner);
-        String address = owner + "@example.com";
+        String registered = owner + "@example.com";
+        String fresh = uniqueUsername() + "@example.com";
 
-        MockHttpServletResponse fresh = signUp(uniqueUsername(), uniqueUsername() + "@example.com", PASSWORD);
-        MockHttpServletResponse taken = signUp(uniqueUsername(), address.toUpperCase(), PASSWORD);
+        MockHttpServletResponse forFresh = start(fresh);
+        MockHttpServletResponse forRegistered = start(registered.toUpperCase());
 
-        assertThat(taken.getStatus()).isEqualTo(fresh.getStatus()).isEqualTo(202);
-        assertThat(taken.getContentAsString())
-                .isEqualTo(fresh.getContentAsString())
+        assertThat(forRegistered.getStatus()).isEqualTo(forFresh.getStatus()).isEqualTo(202);
+        assertThat(forRegistered.getContentAsString())
+                .isEqualTo(forFresh.getContentAsString())
                 .isEmpty();
-        assertThat(taken.getHeader(HttpHeaders.LOCATION)).isNull();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, address))
-                .isEqualTo(1);
-        SimpleMailMessage notice = mail.latest(address, NOTICE).orElseThrow();
-        assertThat(CapturingMailSender.token(notice)).isNotBlank();
-    }
-
-    @Test
-    void neitherLoginNorTheUsernameRevealsARegisteredAddress() throws Exception {
-        String owner = uniqueUsername();
-        register(owner);
-        String probeNew = uniqueUsername();
-        String probeTaken = uniqueUsername();
-
-        signUp(probeNew, uniqueUsername() + "@example.com", PASSWORD);
-        signUp(probeTaken, owner + "@example.com", PASSWORD);
-
-        // No account exists for either probe until a link is opened: login and the username look the same.
-        for (String probe : new String[] {probeNew, probeTaken}) {
-            mockMvc.perform(post("/api/v1/auth/login")
-                            .with(fromIp("10.0.77.1"))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(json("""
-                                    {"identifier":"%s","password":"%s"}""", probe, PASSWORD)))
-                    .andExpect(status().isUnauthorized())
-                    .andExpect(jsonPath("$.type").value("urn:problem:invalid-credentials"));
-            assertThat(signUp(probe, uniqueUsername() + "@example.com", PASSWORD)
-                            .getStatus())
-                    .isEqualTo(202);
-        }
-    }
-
-    @Test
-    void repeatedAttemptsSendOneEmailPerCooldown() throws Exception {
-        String owner = uniqueUsername();
-        register(owner);
-        String address = owner + "@example.com";
-
-        signUp(uniqueUsername(), address, PASSWORD);
-        SimpleMailMessage first = mail.latest(address, NOTICE).orElseThrow();
-        signUp(uniqueUsername(), address, PASSWORD);
-
-        assertThat(mail.latest(address, NOTICE)).containsSame(first);
-    }
-
-    @Test
-    void passwordRulesApplyWhetherOrNotTheAddressIsRegistered() throws Exception {
-        String owner = uniqueUsername();
-        register(owner);
-
-        assertThat(signUp(uniqueUsername(), owner + "@example.com", "fourteen-chars")
-                        .getStatus())
-                .isEqualTo(signUp(uniqueUsername(), uniqueUsername() + "@example.com", "fourteen-chars")
-                        .getStatus())
-                .isEqualTo(400);
-        assertThat(mail.latest(owner + "@example.com", NOTICE)).isEmpty();
+        assertThat(forRegistered.getHeader(HttpHeaders.LOCATION)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, fresh))
+                .isZero();
+        // The owner of the registered address is told, without a link; the new address gets its sign-up link.
+        assertThat(mail.latest(registered, "You already have an account")
+                        .orElseThrow()
+                        .getText())
+                .doesNotContain("token=");
+        assertThat(mail.latest(fresh, "Finish creating your account")).isPresent();
     }
 
     @Test
     void responseTimeDoesNotRevealARegisteredAddress() throws Exception {
         String owner = uniqueUsername();
         register(owner);
-        String address = owner + "@example.com";
+        String registered = owner + "@example.com";
         // Warm up both paths, so JIT compilation and pool growth are not measured.
         for (int i = 0; i < 3; i++) {
-            signUp(uniqueUsername(), uniqueUsername() + "@example.com", PASSWORD);
-            signUp(uniqueUsername(), address, PASSWORD);
+            start(uniqueUsername() + "@example.com");
+            start(registered);
         }
 
         long[] fresh = new long[7];
         long[] taken = new long[7];
         for (int i = 0; i < fresh.length; i++) {
             fresh[i] = timed(uniqueUsername() + "@example.com");
-            taken[i] = timed(address);
+            taken[i] = timed(registered);
         }
 
         assertThat(Math.abs(median(fresh) - median(taken)))
@@ -123,7 +72,7 @@ class RegisterEnumerationIntegrationTest extends IntegrationTest {
 
     private long timed(String email) throws Exception {
         long start = System.nanoTime();
-        signUp(uniqueUsername(), email, PASSWORD);
+        start(email);
         return System.nanoTime() - start;
     }
 
@@ -133,11 +82,11 @@ class RegisterEnumerationIntegrationTest extends IntegrationTest {
         return sorted[sorted.length / 2];
     }
 
-    private MockHttpServletResponse signUp(String username, String email, String password) throws Exception {
+    private MockHttpServletResponse start(String email) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"username":"%s","email":"%s","password":"%s"}""", username, email, password)))
+                                {"email":"%s"}""", email)))
                 .andReturn()
                 .getResponse();
     }

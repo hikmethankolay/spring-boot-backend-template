@@ -41,13 +41,16 @@ in `.env`.
 
 ```bash
 curl -i -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
-  -d '{"username":"alice","email":"alice@example.com","password":"lantern-orbit-maple-42"}'
+  -d '{"email":"alice@example.com"}'
 ```
 
-The account is created when the link in the verification email is opened: open Mailpit at
-<http://localhost:8025>, click the link (or post its `token` to `/api/v1/auth/verify-email`), then log in:
+Sign-up is email-first. Open Mailpit at <http://localhost:8025>, copy the `token` from the link in the
+"Finish creating your account" email, choose the username and password, then log in:
 
 ```bash
+curl -i -X POST localhost:8080/api/v1/auth/register/complete -H 'Content-Type: application/json' \
+  -d '{"token":"<token from the link>","username":"alice","password":"lantern-orbit-maple-42"}'
+
 TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"identifier":"alice","password":"lantern-orbit-maple-42"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
 

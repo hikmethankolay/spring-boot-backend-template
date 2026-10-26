@@ -1,18 +1,11 @@
 package com.hikmethankolay.template.auth.dto;
 
 import com.hikmethankolay.template.user.validation.ValidEmail;
-import com.hikmethankolay.template.user.validation.ValidPassword;
-import com.hikmethankolay.template.user.validation.ValidUsername;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Body of {@code POST /api/v1/auth/register}.
+ * Body of {@code POST /api/v1/auth/register}: the first step of an email-first sign-up.
  *
- * @param username unique username; see {@link ValidUsername}
- * @param email    unique email address
- * @param password password; see {@link ValidPassword}
+ * @param email the address to send the sign-up link to
  */
-public record RegisterRequest(
-        @NotBlank @ValidUsername String username,
-        @NotBlank @ValidEmail String email,
-        @NotBlank @ValidPassword String password) {}
+public record RegisterRequest(@NotBlank @ValidEmail String email) {}

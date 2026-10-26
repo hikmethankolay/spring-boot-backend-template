@@ -11,7 +11,7 @@ This page lists what the frontend has to do; [Security](../security/) explains w
 | Variable | Locally | In production |
 |----------|---------|---------------|
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Your frontend's origin, e.g. `https://app.example.com` |
-| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/verify-email` and `/reset-password` pages |
+| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email` and `/reset-password` pages |
 | `OAUTH2_REDIRECT_URI` | `http://localhost:3000/oauth2/callback` | Your callback page, registered at GitHub and Google |
 
 With `SPRING_PROFILES_ACTIVE=prod` the app refuses to start while any of these still points to localhost.
@@ -51,9 +51,10 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 
 | Page | What it does |
 |------|--------------|
-| Sign up | `POST /api/v1/auth/register` with `username`, `email`, `password` (15–128 characters, no composition rules). The answer is `202` whether or not the address already has an account: show "Check your inbox" either way. The account exists only once the link is opened |
+| Sign up | `POST /api/v1/auth/register` with `email` only. The answer is `202` whether or not the address already has an account: show "Check your inbox" either way |
+| `/sign-up?token=…` | Ask for `username` and `password` (15–128 characters, no composition rules), then `POST /api/v1/auth/register/complete` with them and the `token` from the URL; `201` means the account exists, so send the user to log in. On `409 email-taken` the account was already created: offer login or password reset |
 | Log in | `POST /api/v1/auth/login` with `identifier` (username or email), `password` and optional `rememberMe`; see [Logging in](#logging-in) |
-| `/verify-email?token=…` | `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL, then send the user to log in (a new account exists from this moment); on `409` ask them to sign up again; offer `POST /api/v1/auth/verify-email/resend` |
+| `/verify-email?token=…` | After an email change: `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL; offer `POST /api/v1/auth/verify-email/resend` |
 | Forgot password | `POST /api/v1/auth/password-reset` with `{"email": "…"}`; it answers `202` even for unknown addresses |
 | `/reset-password?token=…` | `POST /api/v1/auth/password-reset/confirm` with `{"token": "…", "newPassword": "…"}`, then send the user to log in |
 | `/oauth2/callback` | Only with GitHub or Google login: check `state`, then `POST /api/v1/auth/oauth2/{provider}` with `code` and `codeVerifier`; see [the steps](../security/#login-with-github-and-google) |
