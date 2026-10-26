@@ -64,8 +64,8 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
      * @param properties application properties holding the cookie names
      */
     public ApiDocsSecurityCustomizer(AppProperties properties) {
-        this.cookieName = properties.cookie().name();
-        this.refreshCookieName = properties.cookie().refreshName();
+        this.cookieName = properties.cookie().accessCookieName();
+        this.refreshCookieName = properties.cookie().refreshCookieName();
     }
 
     /**

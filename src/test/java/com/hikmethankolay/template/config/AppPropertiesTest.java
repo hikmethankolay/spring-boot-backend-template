@@ -49,6 +49,23 @@ class AppPropertiesTest {
     }
 
     @Test
+    void secureCookiesGetTheHostAndSecurePrefixes() {
+        assertThat(new AppProperties.Cookie("auth_token", "refresh_token", true, "Strict").accessCookieName())
+                .isEqualTo("__Host-auth_token");
+        assertThat(new AppProperties.Cookie("auth_token", "refresh_token", true, "Strict").refreshCookieName())
+                .isEqualTo("__Secure-refresh_token");
+        assertThat(new AppProperties.Cookie("auth_token", "refresh_token", false, "Strict").accessCookieName())
+                .isEqualTo("auth_token");
+        assertThat(new AppProperties.Cookie("auth_token", "refresh_token", false, "Strict").refreshCookieName())
+                .isEqualTo("refresh_token");
+    }
+
+    @Test
+    void aMissingRouteListMeansNoRouteLimits() {
+        assertThat(new AppProperties.RateLimit(true, 120, null).routes()).isEmpty();
+    }
+
+    @Test
     void adminIsConfiguredOnlyWithEveryField() {
         assertThat(new AppProperties.Admin("owner", "owner@acme.test", "pw").isConfigured())
                 .isTrue();

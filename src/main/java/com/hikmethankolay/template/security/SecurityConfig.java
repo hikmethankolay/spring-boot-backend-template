@@ -268,7 +268,7 @@ public class SecurityConfig {
      */
     @Bean
     BearerTokenResolver bearerTokenResolver(AppProperties properties) {
-        return new CookieBearerTokenResolver(properties.cookie().name());
+        return new CookieBearerTokenResolver(properties.cookie().accessCookieName());
     }
 
     /**

@@ -28,6 +28,15 @@
         </Or>
     </Match>
     <!--
+      CookieCsrfFilter reads Origin, Host and X-Requested-With to stop cross-site requests. In such a request the
+      victim's browser sets them: pages cannot forge Origin or Host, and adding X-Requested-With from another site
+      needs a CORS preflight the API refuses. A client that forges them itself already holds the cookie.
+    -->
+    <Match>
+        <Bug pattern="SERVLET_HEADER,SERVLET_SERVER_NAME"/>
+        <Class name="com.hikmethankolay.template.security.CookieCsrfFilter"/>
+    </Match>
+    <!--
       The Have I Been Pwned range API is keyed by SHA-1 (k-anonymity lookup); the digest is never stored or used to
       protect anything. Passwords are hashed with Argon2id (SecurityConfig).
     -->

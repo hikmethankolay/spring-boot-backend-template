@@ -340,6 +340,7 @@ class AuthIntegrationTest extends IntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .cookie(new Cookie("auth_token", "expired-or-garbage"))
+                        .header("X-Requested-With", "XMLHttpRequest")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
@@ -379,7 +380,9 @@ class AuthIntegrationTest extends IntegrationTest {
         register(username);
         Tokens login = loginTokens(username, PASSWORD);
 
-        mockMvc.perform(post("/api/v1/auth/refresh").cookie(new Cookie("refresh_token", login.refreshToken())))
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new Cookie("refresh_token", login.refreshToken()))
+                        .header("X-Requested-With", "XMLHttpRequest"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(header().stringValues(
@@ -510,7 +513,9 @@ class AuthIntegrationTest extends IntegrationTest {
         register(username);
         Tokens login = loginTokens(username, PASSWORD);
 
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(new Cookie("refresh_token", login.refreshToken())))
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refresh_token", login.refreshToken()))
+                        .header("X-Requested-With", "XMLHttpRequest"))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/v1/users/me").with(bearer(login.accessToken())))

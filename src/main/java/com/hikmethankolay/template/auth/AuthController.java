@@ -374,7 +374,7 @@ public class AuthController {
         if (request != null && request.refreshToken() != null) {
             return request.refreshToken();
         }
-        Cookie cookie = WebUtils.getCookie(httpRequest, cookieProperties.refreshName());
+        Cookie cookie = WebUtils.getCookie(httpRequest, cookieProperties.refreshCookieName());
         return cookie != null ? cookie.getValue() : null;
     }
 
@@ -432,7 +432,7 @@ public class AuthController {
      * @return the cookie
      */
     private ResponseCookie accessCookie(String value, Duration maxAge) {
-        return cookie(cookieProperties.name(), value, "/", maxAge);
+        return cookie(cookieProperties.accessCookieName(), value, "/", maxAge);
     }
 
     /**
@@ -443,7 +443,7 @@ public class AuthController {
      * @return the cookie
      */
     private ResponseCookie refreshCookie(String value, Duration maxAge) {
-        return cookie(cookieProperties.refreshName(), value, "/api/v1/auth", maxAge);
+        return cookie(cookieProperties.refreshCookieName(), value, "/api/v1/auth", maxAge);
     }
 
     /**

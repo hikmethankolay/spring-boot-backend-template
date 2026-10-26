@@ -27,6 +27,11 @@ public enum ProblemType {
     /** The access token is missing, invalid, expired or revoked. */
     UNAUTHENTICATED("unauthenticated", "The access token is missing, invalid, expired or revoked"),
 
+    /** A state-changing request authenticated by cookie came from an unknown origin (CSRF protection). */
+    CROSS_SITE_REQUEST(
+            "cross-site-request",
+            "A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest"),
+
     /** The caller is authenticated but lacks the required role. */
     FORBIDDEN("forbidden", "The caller is authenticated but lacks the required role"),
 

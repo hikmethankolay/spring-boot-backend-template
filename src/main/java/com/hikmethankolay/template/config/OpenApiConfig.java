@@ -7,6 +7,7 @@ import com.hikmethankolay.template.common.TraceIdResponseFilter;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
@@ -75,6 +76,9 @@ public class OpenApiConfig {
 
     /** Component name of the 403 response of operations that need a role. */
     public static final String FORBIDDEN = "Forbidden";
+
+    /** Reusable response: a state-changing request authenticated by cookie from an origin that is not allowed. */
+    public static final String CROSS_SITE_REQUEST = "CrossSiteRequest";
 
     /** Component name of the 404 response of operations on {@code {id}}. */
     static final String USER_NOT_FOUND = "UserNotFound";
@@ -155,6 +159,10 @@ public class OpenApiConfig {
                 problem("Missing, invalid, expired or revoked access token")
                         .addHeaderObject(HttpHeaders.WWW_AUTHENTICATE, headerRef(HttpHeaders.WWW_AUTHENTICATE)));
         components.addResponses(FORBIDDEN, problem("Authenticated, but not allowed"));
+        components.addResponses(
+                CROSS_SITE_REQUEST,
+                problem("Authenticated by cookie without an allowed `Origin` or `X-Requested-With: XMLHttpRequest` "
+                        + "(`urn:problem:cross-site-request`), or authenticated but not allowed"));
         components.addResponses(USER_NOT_FOUND, problem("No user with this id"));
         components.addResponses(
                 TOO_MANY_REQUESTS,
@@ -180,8 +188,12 @@ public class OpenApiConfig {
             @Value("${spring.data.web.pageable.max-page-size:2000}") int maxPageSize) {
         return openApi -> {
             openApi.getPaths()
-                    .forEach((path, item) -> item.readOperations().forEach(operation -> {
+                    .forEach((path, item) -> item.readOperationsMap().forEach((method, operation) -> {
                         ApiResponses responses = operation.getResponses();
+                        // CookieCsrfFilter answers 403 to state-changing requests from unknown origins.
+                        if (method != PathItem.HttpMethod.GET) {
+                            responses.putIfAbsent("403", responseRef(CROSS_SITE_REQUEST));
+                        }
                         if (hasInput(operation)) {
                             responses.putIfAbsent("400", responseRef(BAD_REQUEST));
                         }

@@ -24,7 +24,10 @@ is only sent to `/api/v1/auth`). Pick one:
 - **Cookies**, for a browser app on the same site as the API (`app.example.com` and `api.example.com`, or
   `localhost:3000` and `localhost:8080`). Call the API with `credentials: "include"` and ignore the tokens in the body:
   JavaScript never sees the cookies, so an XSS bug cannot steal them. The cookies are `SameSite=Strict`, so the
-  browser does not send them from another site.
+  browser does not send them from another site. Put the frontend's origin in `CORS_ALLOWED_ORIGINS` (or send
+  `X-Requested-With: XMLHttpRequest`): state-changing requests authenticated by cookie from anywhere else are
+  refused (`403 cross-site-request`). In production the cookies are named `__Host-auth_token` and
+  `__Secure-refresh_token`; with `credentials: "include"` that needs no change in the frontend.
 - **Bearer tokens**, for mobile and desktop apps, or a browser app on a different site. Send
   `Authorization: Bearer <accessToken>` and pass `refreshToken` in the body of `/refresh` and `/logout`. Keep the
   tokens in memory or in the platform's secure storage (Keychain, Keystore), not in `localStorage`.

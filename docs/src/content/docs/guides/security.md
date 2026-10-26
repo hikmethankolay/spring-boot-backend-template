@@ -26,7 +26,14 @@ Authentication is stateless, using JWTs and Spring Security's OAuth2 resource se
 - Everything else requires a valid access token. Role checks use `@PreAuthorize("hasRole('ADMIN')")`.
 - CORS exposes every response header the API documents (`X-Trace-Id`, `RateLimit-*`, `Retry-After`, `Location`,
   `Content-Disposition`) to the origins in `CORS_ALLOWED_ORIGINS`.
-- CSRF protection is off, because the API is stateless and the cookies are `SameSite=Strict`.
+- The cookies are `HttpOnly` and `SameSite=Strict`. With `COOKIE_SECURE=true` (prod) they are named
+  `__Host-auth_token` and `__Secure-refresh_token`: browsers then accept them only over HTTPS, and the access cookie
+  only for this host, so a sibling subdomain cannot set or shadow it.
+- `SameSite` does not stop sibling subdomains, which count as the same site, so a state-changing request
+  authenticated by cookie (not by an `Authorization` header) must also carry `X-Requested-With: XMLHttpRequest` or
+  come from an `Origin` in `CORS_ALLOWED_ORIGINS` (or the API's own). Otherwise it is refused with
+  `403 cross-site-request` (OWASP CSRF Prevention). Browsers send `Origin` on every `POST`, `PUT`, `PATCH` and
+  `DELETE`, so frontends on an allowed origin need nothing extra. Spring's CSRF tokens stay off: the API is stateless.
 
 A client keeps calling the API with the access token, and when it gets `401`, calls `/refresh` once and retries.
 

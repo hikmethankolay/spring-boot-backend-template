@@ -32,6 +32,7 @@ class RateLimitWindowTest {
         Window route = new Window(3, 5, 3000);
 
         assertThat(RateLimitFilter.stricter(global, route)).isSameAs(route);
+        assertThat(RateLimitFilter.stricter(route, global)).isSameAs(route);
         assertThat(route.remaining()).isEqualTo(2);
         assertThat(new Window(9, 5, 1).remaining()).isZero();
     }

@@ -302,6 +302,9 @@
               }
             }
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -386,6 +389,9 @@
           },
           "400" : {
             "$ref" : "#/components/responses/BadRequest"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -693,6 +699,9 @@
           "400" : {
             "$ref" : "#/components/responses/BadRequest"
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -759,6 +768,9 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -856,6 +868,9 @@
               }
             }
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -902,6 +917,9 @@
           },
           "400" : {
             "$ref" : "#/components/responses/BadRequest"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -985,6 +1003,9 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "409" : {
             "content" : {
@@ -1078,6 +1099,9 @@
               }
             }
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "409" : {
             "content" : {
               "application/problem+json" : {
@@ -1147,6 +1171,9 @@
           },
           "400" : {
             "$ref" : "#/components/responses/BadRequest"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -1295,6 +1322,9 @@
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -1346,6 +1376,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "404" : {
             "content" : {
@@ -1518,6 +1551,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "404" : {
             "content" : {
@@ -1730,6 +1766,9 @@
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "409" : {
             "content" : {
               "application/problem+json" : {
@@ -1878,6 +1917,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "409" : {
             "content" : {
@@ -2032,6 +2074,9 @@
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "409" : {
             "content" : {
               "application/problem+json" : {
@@ -2125,6 +2170,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "409" : {
             "content" : {
@@ -2232,6 +2280,9 @@
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
           },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
           "409" : {
             "content" : {
               "application/problem+json" : {
@@ -2330,6 +2381,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -2434,6 +2488,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
           },
           "404" : {
             "content" : {
@@ -2866,6 +2923,30 @@
           }
         },
         "description" : "Invalid input; validation errors are listed in `errors`",
+        "headers" : {
+          "RateLimit-Limit" : {
+            "$ref" : "#/components/headers/RateLimit-Limit"
+          },
+          "RateLimit-Remaining" : {
+            "$ref" : "#/components/headers/RateLimit-Remaining"
+          },
+          "RateLimit-Reset" : {
+            "$ref" : "#/components/headers/RateLimit-Reset"
+          },
+          "X-Trace-Id" : {
+            "$ref" : "#/components/headers/X-Trace-Id"
+          }
+        }
+      },
+      "CrossSiteRequest" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "Authenticated by cookie without an allowed `Origin` or `X-Requested-With: XMLHttpRequest` (`urn:problem:cross-site-request`), or authenticated but not allowed",
         "headers" : {
           "RateLimit-Limit" : {
             "$ref" : "#/components/headers/RateLimit-Limit"
@@ -3379,7 +3460,7 @@
           "type" : {
             "type" : "string",
             "format" : "uri",
-            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted or demoted, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete their own account through the admin endpoint\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
+            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted or demoted, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete their own account through the admin endpoint\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
             "example" : "urn:problem:validation-failed"
           }
         },

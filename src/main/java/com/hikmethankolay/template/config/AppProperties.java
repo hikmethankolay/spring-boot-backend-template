@@ -125,7 +125,29 @@ public record AppProperties(
             @NotBlank String name,
             @NotBlank String refreshName,
             boolean secure,
-            @NotBlank String sameSite) {}
+            @NotBlank String sameSite) {
+
+        /**
+         * Returns the name the access token cookie is sent under. With {@code secure}, the {@code __Host-} prefix
+         * makes browsers accept it only over HTTPS, for this host alone and for path {@code /}, so a sibling
+         * subdomain cannot set or shadow it.
+         *
+         * @return the cookie name
+         */
+        public String accessCookieName() {
+            return secure ? "__Host-" + name : name;
+        }
+
+        /**
+         * Returns the name the refresh token cookie is sent under. With {@code secure}, the {@code __Secure-} prefix
+         * makes browsers accept it only over HTTPS ({@code __Host-} does not allow its {@code /api/v1/auth} path).
+         *
+         * @return the cookie name
+         */
+        public String refreshCookieName() {
+            return secure ? "__Secure-" + refreshName : refreshName;
+        }
+    }
 
     /**
      * CORS settings.
