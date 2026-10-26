@@ -64,6 +64,18 @@ class BreachedPasswordValidatorTest {
     }
 
     @Test
+    void emptyResponseIsNotBreached() {
+        BreachedPasswordValidator validator = new BreachedPasswordValidator(pwnedEnabled()) {
+            @Override
+            String range(String prefix) {
+                return null;
+            }
+        };
+
+        assertThat(validator.isBreached("correct horse battery staple")).isFalse();
+    }
+
+    @Test
     void unreachableApiFallsBackToTheBundledList() {
         BreachedPasswordValidator validator = new BreachedPasswordValidator(pwnedEnabled()) {
             @Override

@@ -146,7 +146,7 @@ class TokenServiceTest {
         AppProperties rs256 = TestProperties.withJwt(new AppProperties.Jwt(
                 AppProperties.Jwt.Algorithm.RS256,
                 List.of(),
-                List.of(rsaPrivateKeyPem()),
+                List.of(rsaPrivateKeyPem(2048)),
                 TestProperties.ISSUER,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
@@ -161,6 +161,36 @@ class TokenServiceTest {
         Jwt jwt = NimbusJwtDecoder.withPublicKey(publicKey).build().decode(token);
         assertThat(TokenService.userId(jwt)).isEqualTo(9L);
         assertThat(jwt.getHeaders()).containsEntry("alg", "RS256");
+    }
+
+    /**
+     * An RSA key shorter than 2048 bits stops the application.
+     *
+     * @throws Exception if the test key cannot be generated
+     */
+    @Test
+    void shortRsaKeyFailsAtStartup() throws Exception {
+        AppProperties weak = TestProperties.withJwt(new AppProperties.Jwt(
+                AppProperties.Jwt.Algorithm.RS256,
+                List.of(),
+                List.of(rsaPrivateKeyPem(1024)),
+                TestProperties.ISSUER,
+                Duration.ofMinutes(15),
+                Duration.ofDays(1),
+                Duration.ofDays(30)));
+
+        assertThatThrownBy(() -> new JwtKeys(weak))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2048 bits");
+    }
+
+    /** Tokens issued before sessions were listed have no {@code sid} claim and no session id. */
+    @Test
+    void tokenWithoutSessionClaimHasNoSessionId() {
+        Jwt jwt =
+                Jwt.withTokenValue("token").header("alg", "HS256").subject("1").build();
+
+        assertThat(TokenService.sessionId(jwt)).isNull();
     }
 
     /** A value that is not an RSA private key stops the application with a message naming the setting. */
@@ -201,14 +231,15 @@ class TokenServiceTest {
     }
 
     /**
-     * Generates a 2048-bit RSA private key in PKCS#8 PEM format.
+     * Generates an RSA private key in PKCS#8 PEM format.
      *
+     * @param bits key size
      * @return the PEM text
      * @throws Exception if no RSA key generator is available
      */
-    private static String rsaPrivateKeyPem() throws Exception {
+    private static String rsaPrivateKeyPem(int bits) throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
+        generator.initialize(bits);
         String body = Base64.getMimeEncoder()
                 .encodeToString(generator.generateKeyPair().getPrivate().getEncoded());
         return "-----BEGIN PRIVATE KEY-----\n" + body + "\n-----END PRIVATE KEY-----\n";

@@ -13,6 +13,7 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
+import com.hikmethankolay.template.user.dto.UpdateProfileRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
 import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -159,6 +160,60 @@ class UserServiceTest {
                 () -> userService.register("bob", "bob@example.com", "😀".repeat(14), Role.USER, true),
                 HttpStatus.BAD_REQUEST,
                 "urn:problem:password-too-short");
+    }
+
+    @Test
+    void profileUpdateWithTheSameEmailNeedsNoPassword() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        user.setEmailVerified(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        userService.updateProfile(1L, new UpdateProfileRequest("alice", " Alice@Example.COM ", null));
+
+        // Same address after normalising: still verified, no new verification email.
+        assertThat(user.isEmailVerified()).isTrue();
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void profileUpdateOfTheUsernameAloneNeedsNoPassword() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        UserResponse response = userService.updateProfile(1L, new UpdateProfileRequest("alice2", null, null));
+
+        assertThat(response.username()).isEqualTo("alice2");
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void adminUpdateWithoutChangesKeepsTheSessions() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        userService.update(1L, 5L, new AdminUpdateUserRequest("alice", "ALICE@example.com", null, Role.USER, null));
+
+        assertThat(user.getSessionVersion()).isZero();
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void adminEmailChangeAsksForVerificationButKeepsTheSessions() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        user.setEmailVerified(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        userService.update(1L, 5L, new AdminUpdateUserRequest(null, "new@example.com", null, null, null));
+
+        assertThat(user.getEmail()).isEqualTo("new@example.com");
+        assertThat(user.isEmailVerified()).isFalse();
+        assertThat(user.getSessionVersion()).isZero();
+        verify(events).publishEvent(new EmailVerificationRequired(1L));
     }
 
     @Test

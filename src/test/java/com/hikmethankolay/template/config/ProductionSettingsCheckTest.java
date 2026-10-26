@@ -81,6 +81,56 @@ class ProductionSettingsCheckTest {
     }
 
     @Test
+    void missingOriginsAndMailPortAreNotProblems() {
+        AppProperties p = properties(FRONTEND, FRONTEND, null, false);
+        AppProperties noOrigins = new AppProperties(
+                p.jwt(),
+                p.cookie(),
+                new AppProperties.Cors(null),
+                p.login(),
+                p.rateLimit(),
+                p.account(),
+                p.mail(),
+                p.admin(),
+                p.mfa(),
+                p.socialLogin());
+
+        assertThat(ProductionSettingsCheck.problems(noOrigins, "s3cret", "localhost", null))
+                .isEmpty();
+    }
+
+    @Test
+    void mailpitOnIpv6LoopbackIsAProblem() {
+        assertThat(ProductionSettingsCheck.problems(properties(FRONTEND, FRONTEND, null, false), "s3cret", "::1", 1025))
+                .singleElement()
+                .asString()
+                .contains("MAIL_HOST");
+    }
+
+    @Test
+    void googleLoginAloneNeedsARealRedirectUri() {
+        AppProperties p = properties(FRONTEND, FRONTEND, null, false);
+        AppProperties.SocialLogin.Client none = new AppProperties.SocialLogin.Client(null, null);
+        AppProperties google = new AppProperties(
+                p.jwt(),
+                p.cookie(),
+                p.cors(),
+                p.login(),
+                p.rateLimit(),
+                p.account(),
+                p.mail(),
+                p.admin(),
+                p.mfa(),
+                new AppProperties.SocialLogin(
+                        "http://localhost:3000/cb", none, new AppProperties.SocialLogin.Client("id", "secret")));
+
+        assertThat(ProductionSettingsCheck.problems(google, "s3cret", SMTP_HOST, 587))
+                .singleElement()
+                .asString()
+                .contains("OAUTH2_REDIRECT_URI");
+    }
+
+    @Test
     void recognisesPlaceholderAddresses() {
         assertThat(List.of("no-reply@example.com", "a@EXAMPLE.org", "a@mail.example.net", " a@example.com "))
                 .allMatch(ProductionSettingsCheck::isPlaceholderAddress);
