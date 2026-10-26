@@ -42,15 +42,20 @@ in `.env`.
 ```bash
 curl -i -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
   -d '{"username":"alice","email":"alice@example.com","password":"lantern-orbit-maple-42"}'
+```
 
+The account is created when the link in the verification email is opened: open Mailpit at
+<http://localhost:8025>, click the link (or post its `token` to `/api/v1/auth/verify-email`), then log in:
+
+```bash
 TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"identifier":"alice","password":"lantern-orbit-maple-42"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
 
 curl -s localhost:8080/api/v1/users/me -H "Authorization: Bearer $TOKEN"
 ```
 
-Registering sends a verification email to Mailpit. In development, login works before you verify. In the
-[production profile](../production/) it doesn't.
+Until the link is opened the account does not exist, so login fails like for an unknown user. This is what keeps
+registration from revealing which addresses already have an account (see [Security](../security/#account-flows)).
 
 The login response also contains a `refreshToken`. When the access token expires after 15 minutes, exchange it for a
 new pair:

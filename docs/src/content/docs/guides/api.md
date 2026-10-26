@@ -81,14 +81,14 @@ push and type-checks it, but check the generator you choose against your own bui
 
 | Method | Path | Access | Success |
 |--------|------|--------|---------|
-| `POST` | `/api/v1/auth/register` | public | `202`, no body; sends a verification email, or tells the owner of an already registered address ([why](../security/#account-flows)) |
+| `POST` | `/api/v1/auth/register` | public | `202`, no body; emails a link that creates the account, or tells the owner of an already registered address ([why](../security/#account-flows)) |
 | `POST` | `/api/v1/auth/login` | public | `200` access + refresh token, cookies; `202` + `mfaToken` with 2FA |
 | `POST` | `/api/v1/auth/login/mfa` | MFA token | `200` access + refresh token, cookies |
 | `GET` | `/api/v1/auth/oauth2/providers` | public | `200` configured providers (GitHub, Google) |
 | `POST` | `/api/v1/auth/oauth2/{provider}` | public | `200` tokens, or `202` + `mfaToken` with 2FA |
 | `POST` | `/api/v1/auth/refresh` | refresh token | `200` new tokens; the refresh token is single-use |
 | `POST` | `/api/v1/auth/logout` | public | `204`; revokes the tokens, clears the cookies |
-| `POST` | `/api/v1/auth/verify-email` | public | `204` |
+| `POST` | `/api/v1/auth/verify-email` | public | `204`; creates the account of a sign-up, or confirms a changed address |
 | `POST` | `/api/v1/auth/verify-email/resend` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset/confirm` | public | `204` |

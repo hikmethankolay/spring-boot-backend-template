@@ -57,11 +57,17 @@ public class AccountController {
      */
     @PostMapping("/verify-email")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Confirm an email address")
-    @ApiResponse(responseCode = "204", description = "Email address verified")
+    @Operation(
+            summary = "Confirm an email address",
+            description = "Completes a sign-up, creating the account, or confirms the new address of an account.")
+    @ApiResponse(responseCode = "204", description = "Account created or email address verified")
     @ApiResponse(
             responseCode = "400",
             description = INVALID_TOKEN,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "The sign-up's username or email address was taken since; sign up again",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public void verifyEmail(@Valid @RequestBody TokenRequest request) {
         accountService.verifyEmail(request.token());
@@ -78,7 +84,7 @@ public class AccountController {
     @ApiResponse(
             responseCode = "202",
             description = "A new verification email is sent if the address belongs to an "
-                    + "unverified account; the answer is the same either way")
+                    + "unverified account or to a sign-up waiting for its link; the answer is the same either way")
     public void resendVerification(@Valid @RequestBody EmailRequest request) {
         accountService.resendVerification(request.email());
     }

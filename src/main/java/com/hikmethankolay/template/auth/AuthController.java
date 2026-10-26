@@ -98,9 +98,10 @@ public class AuthController {
     @Operation(
             operationId = "registerUser",
             summary = "Register a new user",
-            description = "Creates an account with the USER role and sends a verification email. If the email address "
-                    + "already has an account, nothing is created and its owner is emailed instead; the response is "
-                    + "the same, so it does not tell whether an address is registered.")
+            description = "Emails a link that creates the account (USER role) when it is opened with "
+                    + "POST /api/v1/auth/verify-email; until then the account does not exist. If the email address "
+                    + "already has an account, its owner is emailed instead. The response is the same either way, so "
+                    + "it does not tell whether an address is registered.")
     @ApiResponse(responseCode = "202", description = "Registration accepted; check the inbox")
     @ApiResponse(
             responseCode = "409",

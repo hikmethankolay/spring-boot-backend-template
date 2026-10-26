@@ -3,6 +3,7 @@ package com.hikmethankolay.template;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
 import com.hikmethankolay.template.user.UserRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
@@ -40,6 +41,9 @@ public abstract class IntegrationTest {
     @Autowired
     private UserRepository registeredUsers;
 
+    @Autowired
+    private CapturingMailSender signUpMail;
+
     protected static String uniqueUsername() {
         return "user_" + UUID.randomUUID().toString().substring(0, 8);
     }
@@ -48,18 +52,33 @@ public abstract class IntegrationTest {
         return template.formatted(args);
     }
 
-    /** Registers a user whose email is {@code <username>@example.com} and returns its id. */
+    /**
+     * Registers a user whose email is {@code <username>@example.com} and returns its id. Sign-ups create the account
+     * only when the emailed link is opened, so this opens it too.
+     */
     protected long register(String username) throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, PASSWORD)))
                 .andExpect(status().isAccepted());
-        // The response has no body, so it cannot tell new and existing addresses apart.
+        confirmEmail(username + "@example.com");
         return registeredUsers
                 .findByUsernameOrEmail(username, username)
                 .orElseThrow()
                 .getId();
+    }
+
+    /** Opens the newest "Confirm your email" link sent to an address. */
+    protected void confirmEmail(String address) throws Exception {
+        String token = CapturingMailSender.token(signUpMail
+                .latest(address, "Confirm your email")
+                .orElseThrow(() -> new AssertionError("No verification email for " + address)));
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"token":"%s"}""", token)))
+                .andExpect(status().isNoContent());
     }
 
     protected String login(String identifier, String password) throws Exception {

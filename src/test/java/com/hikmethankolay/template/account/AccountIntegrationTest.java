@@ -29,30 +29,59 @@ class AccountIntegrationTest extends IntegrationTest {
                 .orElseThrow(() -> new AssertionError("No '" + subjectPart + "' email for " + username));
     }
 
+    /** Signs up without opening the link, so the account does not exist yet. */
+    private void signUp(String username) throws Exception {
+        postJson("/api/v1/auth/register", json("""
+                {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, PASSWORD), 202);
+    }
+
     private void postJson(String path, String body, int expectedStatus) throws Exception {
         mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().is(expectedStatus));
     }
 
     @Test
-    void registrationSendsVerificationEmailAndTokenVerifiesAddress() throws Exception {
+    void signUpCreatesTheAccountOnlyWhenTheLinkIsOpened() throws Exception {
         String username = uniqueUsername();
-        String token = registerAndLogin(username);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
-                .andExpect(jsonPath("$.emailVerified").value(false));
+        signUp(username);
 
+        // Until the link is opened there is no account: login fails like for any unknown user.
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
+                .andExpect(status().isUnauthorized());
         SimpleMailMessage verification = latestMail(username, "Confirm your email");
         assertThat(verification.getText()).contains("http://localhost:3000/verify-email?token=");
         String verificationToken = CapturingMailSender.token(verification);
 
         postJson("/api/v1/auth/verify-email", json("""
                 {"token":"%s"}""", verificationToken), 204);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
-                .andExpect(jsonPath("$.emailVerified").value(true));
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(login(username, PASSWORD))))
+                .andExpect(jsonPath("$.emailVerified").value(true))
+                .andExpect(jsonPath("$.role").value("USER"));
 
         // Tokens are single-use.
         postJson("/api/v1/auth/verify-email", json("""
                 {"token":"%s"}""", verificationToken), 400);
+    }
+
+    @Test
+    void aUsernameTakenBeforeTheLinkIsOpenedIsAConflict() throws Exception {
+        String username = uniqueUsername();
+        signUp(username);
+        String link = CapturingMailSender.token(latestMail(username, "Confirm your email"));
+        // Someone else signs up with the same username, with another address, and confirms first.
+        postJson("/api/v1/auth/register", json("""
+                {"username":"%s","email":"other-%s@example.com","password":"%s"}""", username, username, PASSWORD), 202);
+        confirmEmail("other-" + username + "@example.com");
+
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"token":"%s"}""", link)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:problem:username-taken"));
     }
 
     @Test
@@ -68,7 +97,7 @@ class AccountIntegrationTest extends IntegrationTest {
     @Test
     void resendWithinTheCooldownSendsNothingAndKeepsTheLink() throws Exception {
         String username = uniqueUsername();
-        register(username);
+        signUp(username);
         SimpleMailMessage first = latestMail(username, "Confirm your email");
 
         postJson("/api/v1/auth/verify-email/resend", json("""
@@ -158,11 +187,6 @@ class AccountIntegrationTest extends IntegrationTest {
     void changingEmailRequiresVerificationAgain() throws Exception {
         String username = uniqueUsername();
         String token = registerAndLogin(username);
-        postJson(
-                "/api/v1/auth/verify-email",
-                json("""
-                {"token":"%s"}""", CapturingMailSender.token(latestMail(username, "Confirm your email"))),
-                204);
 
         String newAddress = "moved-" + username + "@example.com";
         mockMvc.perform(patch("/api/v1/users/me")
@@ -202,19 +226,26 @@ class AccountIntegrationTest extends IntegrationTest {
         postJson("/api/v1/auth/password-reset", json("""
                 {"email":"%s@example.com"}""", username), 202);
         String resetToken = CapturingMailSender.token(latestMail(username, "Reset your password"));
-        String verificationToken = CapturingMailSender.token(latestMail(username, "Confirm your email"));
+        changeEmail(token, "moved-" + username + "@example.com");
+        String verificationToken =
+                CapturingMailSender.token(mail.latest("moved-" + username + "@example.com", "Confirm your email")
+                        .orElseThrow());
 
-        mockMvc.perform(patch("/api/v1/users/me")
-                        .with(bearer(token))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("""
-                                {"email":"moved-%s@example.com","currentPassword":"%s"}""", username, PASSWORD)))
-                .andExpect(status().isOk());
+        changeEmail(token, "moved-again-" + username + "@example.com");
 
         postJson("/api/v1/auth/password-reset/confirm", json("""
                 {"token":"%s","newPassword":"Reset#4567-passphrase"}""", resetToken), 400);
         postJson("/api/v1/auth/verify-email", json("""
                 {"token":"%s"}""", verificationToken), 400);
+    }
+
+    private void changeEmail(String token, String address) throws Exception {
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"email":"%s","currentPassword":"%s"}""", address, PASSWORD)))
+                .andExpect(status().isOk());
     }
 
     @Test

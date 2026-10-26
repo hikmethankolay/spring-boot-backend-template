@@ -14,7 +14,6 @@ import com.hikmethankolay.template.user.dto.UserResponse;
 import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
@@ -108,28 +107,19 @@ public class UserService {
     }
 
     /**
-     * Self-service registration of a {@link Role#USER} that does not reveal whether the email address already has
-     * an account (OWASP: no account enumeration). For a registered address nothing is created and its owner is
-     * told by email ({@link RegistrationRepeated}); the caller sees the same outcome either way. The password is
-     * checked and hashed on both paths, so the response time does not tell them apart either.
+     * Creates a {@link Role#USER} whose address was just confirmed, from a self-service sign-up.
      *
-     * @param username    unique username; usernames are public, so a taken one is still reported
-     * @param email       email; stored trimmed and in lower case
-     * @param rawPassword plain password, stored hashed
-     * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
+     * @param username        the requested username
+     * @param normalizedEmail the confirmed, normalised email
+     * @param passwordHash    the password, encoded when the user signed up
+     * @return the created user
+     * @throws ApiException 409 if the username or email was taken since the sign-up
      */
     @Transactional
-    public void signUp(String username, String email, String rawPassword) {
-        String normalizedEmail = normalizeEmail(email);
+    public UserResponse registerConfirmed(String username, String normalizedEmail, String passwordHash) {
         ensureUsernameAvailable(username);
-        String passwordHash = encodeNewPassword(false, rawPassword);
-        Optional<User> existing = userRepository.findByEmail(normalizedEmail);
-        if (existing.isPresent()) {
-            audit.record(AuditEvent.REGISTRATION_REPEATED, existing.get().getId());
-            events.publishEvent(new RegistrationRepeated(existing.get().getId()));
-            return;
-        }
-        create(username, normalizedEmail, passwordHash, Role.USER, false);
+        ensureEmailAvailable(normalizedEmail);
+        return create(username, normalizedEmail, passwordHash, Role.USER, true);
     }
 
     /**
@@ -416,7 +406,7 @@ public class UserService {
      * @return the encoded password
      * @throws ApiException 400 if the password is too short or breached
      */
-    private String encodeNewPassword(boolean twoFactor, String rawPassword) {
+    public String encodeNewPassword(boolean twoFactor, String rawPassword) {
         if (!twoFactor && !meetsSingleFactorLength(rawPassword)) {
             throw ApiException.badRequest(
                     ProblemType.PASSWORD_TOO_SHORT,
@@ -484,12 +474,12 @@ public class UserService {
     }
 
     /**
-     * Fails if a username is taken.
+     * Fails if a username is taken. Usernames are public, so telling that one is taken reveals nothing.
      *
      * @param username username to check
      * @throws ApiException 409 if the username is taken
      */
-    private void ensureUsernameAvailable(String username) {
+    public void ensureUsernameAvailable(String username) {
         if (userRepository.existsByUsername(username)) {
             throw ApiException.conflict(ProblemType.USERNAME_TAKEN, "Username is already taken.");
         }

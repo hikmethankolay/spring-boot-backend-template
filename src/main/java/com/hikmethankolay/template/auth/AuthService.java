@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.auth;
 
+import com.hikmethankolay.template.account.AccountService;
 import com.hikmethankolay.template.audit.AuditEvent;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.auth.dto.LoginRequest;
@@ -20,7 +21,6 @@ import com.hikmethankolay.template.social.SocialProfileClient;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
-import com.hikmethankolay.template.user.UserService;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -54,7 +54,7 @@ public class AuthService {
 
     private final TokenService tokenService;
 
-    private final UserService userService;
+    private final AccountService accounts;
 
     private final UserRepository userRepository;
 
@@ -82,7 +82,7 @@ public class AuthService {
      * @param authenticationManager verifies credentials
      * @param loginAttempts         brute-force protection
      * @param tokenService          issues JWTs
-     * @param userService           creates users
+     * @param accounts              signs users up
      * @param userRepository        reloads users on refresh
      * @param refreshTokens         issues and rotates refresh tokens
      * @param jwtDecoder            validates the token presented at logout
@@ -98,7 +98,7 @@ public class AuthService {
             AuthenticationManager authenticationManager,
             LoginAttemptService loginAttempts,
             TokenService tokenService,
-            UserService userService,
+            AccountService accounts,
             UserRepository userRepository,
             RefreshTokenService refreshTokens,
             JwtDecoder jwtDecoder,
@@ -112,7 +112,7 @@ public class AuthService {
         this.authenticationManager = authenticationManager;
         this.loginAttempts = loginAttempts;
         this.tokenService = tokenService;
-        this.userService = userService;
+        this.accounts = accounts;
         this.userRepository = userRepository;
         this.refreshTokens = refreshTokens;
         this.jwtDecoder = jwtDecoder;
@@ -126,14 +126,14 @@ public class AuthService {
     }
 
     /**
-     * Registers a new user with the {@link Role#USER} role and sends a verification email, or, if the email
-     * address already has an account, emails its owner instead; the caller cannot tell which.
+     * Signs a user up: emails a link that creates the account with the {@link Role#USER} role when opened, or, if
+     * the address already has an account, emails its owner instead; the caller cannot tell which.
      *
      * @param request registration data
      * @throws ApiException 400 if the password is too short or breached, 409 if the username is taken
      */
     public void register(RegisterRequest request) {
-        userService.signUp(request.username(), request.email(), request.password());
+        accounts.signUp(request.username(), request.email(), request.password());
     }
 
     /**

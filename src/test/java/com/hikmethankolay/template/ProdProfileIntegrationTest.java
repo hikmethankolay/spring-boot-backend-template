@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
@@ -30,6 +31,9 @@ import org.springframework.test.context.TestPropertySource;
             "spring.mail.port=587"
         })
 class ProdProfileIntegrationTest extends IntegrationTest {
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Autowired
     private ApplicationContext context;
@@ -59,7 +63,8 @@ class ProdProfileIntegrationTest extends IntegrationTest {
     @Test
     void unverifiedUsersCannotLogIn() throws Exception {
         String username = uniqueUsername();
-        register(username);
+        // Sign-ups are verified when the account is created; an unverified user changed their address.
+        jdbc.update("UPDATE users SET email_verified = false WHERE id = ?", register(username));
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

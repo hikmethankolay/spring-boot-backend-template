@@ -39,13 +39,14 @@ class AuthIntegrationTest extends IntegrationTest {
                 .andExpect(status().isAccepted())
                 .andExpect(header().doesNotExist(HttpHeaders.LOCATION))
                 .andExpect(content().string(""));
+        confirmEmail(username + "@example.com");
 
         String token = login(username, PASSWORD);
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(username + "@example.com"))
                 .andExpect(jsonPath("$.role").value("USER"))
-                .andExpect(jsonPath("$.emailVerified").value(false));
+                .andExpect(jsonPath("$.emailVerified").value(true));
     }
 
     @Test
@@ -163,6 +164,7 @@ class AuthIntegrationTest extends IntegrationTest {
                         .content(json("""
                                 {"username":"%s","email":"%s@example.com","password":"%s"}""", username, username, password)))
                 .andExpect(status().isAccepted());
+        confirmEmail(username + "@example.com");
         login(username, password);
     }
 

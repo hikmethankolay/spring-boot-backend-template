@@ -30,4 +30,4 @@ if not defined PROFILE (set "SHOWN_PROFILE=load") else set "SHOWN_PROFILE=%PROFI
 if not defined VUS (set "SHOWN_VUS=20") else set "SHOWN_VUS=%VUS%"
 echo ==^> Load testing %BASE_URL% (profile %SHOWN_PROFILE%, %SHOWN_VUS% peak users)
 rem "-e NAME" passes the variable only when it is set, so the defaults stay in api.js.
-%CONTAINER% run --rm -v "%CD%\load-tests:/scripts:ro" -e BASE_URL -e PROFILE -e VUS -e DURATION -e THINK_TIME -e USERS -e FAILED_LOGINS -e ADMIN_USERNAME -e ADMIN_PASSWORD docker.io/grafana/k6:1.4.0 run /scripts/api.js
+%CONTAINER% run --rm -v "%CD%\load-tests:/scripts:ro" -e BASE_URL -e MAILPIT_URL -e PROFILE -e VUS -e DURATION -e THINK_TIME -e USERS -e FAILED_LOGINS -e ADMIN_USERNAME -e ADMIN_PASSWORD docker.io/grafana/k6:1.4.0 run /scripts/api.js

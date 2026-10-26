@@ -2,6 +2,8 @@ package com.hikmethankolay.template.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
@@ -44,6 +46,31 @@ class RegisterEnumerationIntegrationTest extends IntegrationTest {
                 .isEqualTo(1);
         SimpleMailMessage notice = mail.latest(address, NOTICE).orElseThrow();
         assertThat(CapturingMailSender.token(notice)).isNotBlank();
+    }
+
+    @Test
+    void neitherLoginNorTheUsernameRevealsARegisteredAddress() throws Exception {
+        String owner = uniqueUsername();
+        register(owner);
+        String probeNew = uniqueUsername();
+        String probeTaken = uniqueUsername();
+
+        signUp(probeNew, uniqueUsername() + "@example.com", PASSWORD);
+        signUp(probeTaken, owner + "@example.com", PASSWORD);
+
+        // No account exists for either probe until a link is opened: login and the username look the same.
+        for (String probe : new String[] {probeNew, probeTaken}) {
+            mockMvc.perform(post("/api/v1/auth/login")
+                            .with(fromIp("10.0.77.1"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json("""
+                                    {"identifier":"%s","password":"%s"}""", probe, PASSWORD)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.type").value("urn:problem:invalid-credentials"));
+            assertThat(signUp(probe, uniqueUsername() + "@example.com", PASSWORD)
+                            .getStatus())
+                    .isEqualTo(202);
+        }
     }
 
     @Test

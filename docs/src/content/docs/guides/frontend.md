@@ -51,9 +51,9 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 
 | Page | What it does |
 |------|--------------|
-| Sign up | `POST /api/v1/auth/register` with `username`, `email`, `password` (15–128 characters, no composition rules). The answer is `202` whether or not the address already has an account: show "Check your inbox" either way |
+| Sign up | `POST /api/v1/auth/register` with `username`, `email`, `password` (15–128 characters, no composition rules). The answer is `202` whether or not the address already has an account: show "Check your inbox" either way. The account exists only once the link is opened |
 | Log in | `POST /api/v1/auth/login` with `identifier` (username or email), `password` and optional `rememberMe`; see [Logging in](#logging-in) |
-| `/verify-email?token=…` | `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL; offer `POST /api/v1/auth/verify-email/resend` |
+| `/verify-email?token=…` | `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL, then send the user to log in (a new account exists from this moment); on `409` ask them to sign up again; offer `POST /api/v1/auth/verify-email/resend` |
 | Forgot password | `POST /api/v1/auth/password-reset` with `{"email": "…"}`; it answers `202` even for unknown addresses |
 | `/reset-password?token=…` | `POST /api/v1/auth/password-reset/confirm` with `{"token": "…", "newPassword": "…"}`, then send the user to log in |
 | `/oauth2/callback` | Only with GitHub or Google login: check `state`, then `POST /api/v1/auth/oauth2/{provider}` with `code` and `codeVerifier`; see [the steps](../security/#login-with-github-and-google) |

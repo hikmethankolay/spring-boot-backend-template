@@ -10,13 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
-import com.hikmethankolay.template.user.UserService;
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
@@ -31,7 +31,7 @@ class SocialLoginIntegrationTest extends IntegrationTest {
     private SocialProfileClient profiles;
 
     @Autowired
-    private UserService userService;
+    private JdbcTemplate jdbc;
 
     @Test
     void configuredProvidersAreListedWithTheirAuthorizationUrl() throws Exception {
@@ -77,9 +77,9 @@ class SocialLoginIntegrationTest extends IntegrationTest {
     void anAccountWithAVerifiedEmailIsLinkedButAnUnverifiedOneIsNot() throws Exception {
         String verified = uniqueUsername();
         long verifiedId = register(verified);
-        userService.markEmailVerified(verifiedId);
+        // Sign-ups are verified when the account is created; an unverified one changed its address.
         String unverified = uniqueUsername();
-        register(unverified);
+        jdbc.update("UPDATE users SET email_verified = false WHERE id = ?", register(unverified));
         givenProfile(
                 "code-3",
                 new SocialProfile("github", UUID.randomUUID().toString(), verified + "@example.com", true, "x"));

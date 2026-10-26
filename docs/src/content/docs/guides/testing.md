@@ -76,7 +76,9 @@ time. It runs weekly in CI (`.github/workflows/mutation.yml`) and fails below th
 | `admin` | 1 | The owner pages through the user list with random sizes and sort orders and opens accounts (needs `ADMIN_USERNAME` and `ADMIN_PASSWORD`, read from `.env`) |
 | `anonymous` | `VUS / 10` | Password reset requests, calls without a token and, with `FAILED_LOGINS=true`, wrong passwords |
 
-All requests come from one IP, so start the target with `RATE_LIMIT_ENABLED=false`. With `FAILED_LOGINS=true`, also
+Sign-ups create the account only when the emailed link is opened, so the test reads the links from Mailpit
+(`MAILPIT_URL`, default `http://localhost:8025`; `scripts/smoke.sh` does the same). All requests come from one IP,
+so start the target with `RATE_LIMIT_ENABLED=false`. With `FAILED_LOGINS=true`, also
 raise the login lockout, or the run locks the IP out:
 
 ```bash

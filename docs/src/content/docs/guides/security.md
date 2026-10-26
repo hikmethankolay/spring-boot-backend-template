@@ -160,16 +160,22 @@ password or logged in on a newer version cannot log in until they reset their pa
   the previous one.
 - The `202` endpoints answer the same way for unknown addresses, so they cannot be used to find accounts. They send at
   most one email per account per minute, so nobody can flood an inbox.
-- Registration (`POST /api/v1/auth/register`) answers `202` with no body whether or not the address already has an
-  account, and checks and hashes the password on both paths so the response time does not tell either. For a
-  registered address nothing is created; its owner gets an email with a password reset link (same one-per-minute
-  limit) and `user.registration_repeated` is audited. A taken username is still reported (`409`): usernames are
-  public.
+- Registration (`POST /api/v1/auth/register`) creates no account. It stores a pending sign-up (username, address,
+  Argon2id hash, link expiry) and emails a verification link; the account is created, already verified, when the
+  link is opened (`POST /api/v1/auth/verify-email`). If the username or address was taken in the meantime that
+  answers `409` and the user signs up again. Pending sign-ups expire with the link and are deleted hourly.
+- A sign-up with an address that already has an account emails its owner a password reset link instead and audits
+  `user.registration_repeated`. Both paths answer `202` with no body, check and hash the password, and send one
+  email (at most one per address per minute). Until a link is opened nothing is visible: no account, no login, no
+  reserved username, so registration cannot be used to find out which addresses are registered. A username taken
+  by an existing account is still reported (`409`): usernames are public.
 - Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword`, marks the new address unverified, sends a new
   verification email and revokes every reset and verification link sent to the old address.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding
   reset links. A login or refresh running at the same moment cannot keep a session alive.
-- With `REQUIRE_VERIFIED_EMAIL=true` (the prod default), unverified users get `403` at login.
+- With `REQUIRE_VERIFIED_EMAIL=true` (the prod default), users who changed their address and have not confirmed
+  the new one get `403` at login. Sign-ups are verified when the account is created, so this applies only after
+  an email change.
 - Emails go through an outbox with retries, see [Observability](../observability/#email-outbox).
 
 ## Two-factor authentication

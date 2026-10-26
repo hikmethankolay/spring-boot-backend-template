@@ -29,7 +29,7 @@ export BASE_URL="$base_url" ADMIN_USERNAME="${ADMIN_USERNAME:-}" ADMIN_PASSWORD=
 
 # "-e NAME" passes the variable only when it is set, so the defaults stay in api.js.
 env_options=()
-for name in BASE_URL PROFILE VUS DURATION THINK_TIME USERS FAILED_LOGINS ADMIN_USERNAME ADMIN_PASSWORD; do
+for name in BASE_URL MAILPIT_URL PROFILE VUS DURATION THINK_TIME USERS FAILED_LOGINS ADMIN_USERNAME ADMIN_PASSWORD; do
   env_options+=(-e "$name")
 done
 

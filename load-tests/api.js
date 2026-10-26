@@ -23,6 +23,8 @@ import { check, group, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+// Sign-ups create the account only when the emailed link is opened; the link is read from Mailpit.
+const MAILPIT_URL = __ENV.MAILPIT_URL || 'http://localhost:8025';
 const PROFILE = __ENV.PROFILE || 'load';
 const VUS = Number(__ENV.VUS || 20);
 const THINK_TIME = Number(__ENV.THINK_TIME ?? (PROFILE === 'throughput' ? 0 : 1));
@@ -144,7 +146,25 @@ function login(identifier, password, rememberMe = false) {
 function register(username) {
   const response = call('POST', '/api/v1/auth/register',
     { body: { username, email: `${username}@example.com`, password: PASSWORD }, kind: 'password' });
-  return expect(response, 202, 'register');
+  return expect(response, 202, 'register') && confirmEmail(`${username}@example.com`);
+}
+
+// Opens the newest verification link sent to an address, which creates the account. The outbox may send a
+// moment after the response, so Mailpit is polled briefly.
+function confirmEmail(address) {
+  const tags = { tags: { name: 'mailpit', kind: 'mail' } };
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const search = http.get(`${MAILPIT_URL}/api/v1/search?limit=1&query=${encodeURIComponent(`to:${address}`)}`, tags);
+    const id = search.status === 200 ? search.json('messages.0.ID') : null;
+    if (id) {
+      const text = http.get(`${MAILPIT_URL}/api/v1/message/${id}`, tags).json('Text') || '';
+      const link = /verify-email\?token=([A-Za-z0-9_-]+)/.exec(text);
+      return link !== null
+        && expect(call('POST', '/api/v1/auth/verify-email', { body: { token: link[1] }, kind: 'write' }), 204, 'verify email');
+    }
+    sleep(0.2);
+  }
+  return false;
 }
 
 // Runs one journey, recording whether every step passed and how long it took.

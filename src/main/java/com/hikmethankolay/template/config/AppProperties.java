@@ -149,7 +149,8 @@ public record AppProperties(
     /**
      * Email verification and password reset settings.
      *
-     * @param requireVerifiedEmail      whether users must verify their email before they can log in
+     * @param requireVerifiedEmail      whether an account whose address is unconfirmed (after an email change) is
+     *                                  refused at login; sign-ups always need their link, whatever this says
      * @param verificationTokenTtl      how long an email verification link is valid
      * @param passwordResetTokenTtl     how long a password reset link is valid
      * @param pwnedCheckEnabled         whether new passwords are also checked against Have I Been Pwned;
