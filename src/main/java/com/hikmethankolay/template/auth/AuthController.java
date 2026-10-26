@@ -93,10 +93,9 @@ public class AuthController {
     }
 
     /**
-     * Registers a new user.
+     * Starts a sign-up: emails a link to finish it, or a notice if the address already has an account.
      *
-     * @param request registration data
-     * @return {@code 201 Created} with the user and a {@code Location} header pointing to it
+     * @param request the address to sign up
      */
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.ACCEPTED)

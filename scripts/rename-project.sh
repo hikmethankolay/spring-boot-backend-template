@@ -96,7 +96,9 @@ done
 sed_inplace "s|@$old_owner|@$owner|g" .github/CODEOWNERS CODE_OF_CONDUCT.md
 sed_inplace "s|github\.com/$old_owner)|github.com/$owner)|g" CODE_OF_CONDUCT.md
 
-# The template's release history does not apply to the new project.
+# The template's release history and its gitleaks exceptions (fingerprints of its own commits) do not apply to the
+# new project.
+rm -f .gitleaksignore
 cat > CHANGELOG.md <<'EOF2'
 # Changelog
 
