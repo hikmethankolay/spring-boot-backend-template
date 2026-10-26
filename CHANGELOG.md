@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-10-26
+
 ### Changed
 
 - Releases are signed with cosign 3, in the Sigstore bundle format (the image signature is an OCI referrer, the SBOM
@@ -349,7 +351,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.2...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.3...HEAD
+[4.0.3]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.9...v4.0.0
