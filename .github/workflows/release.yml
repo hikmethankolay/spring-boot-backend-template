@@ -3,7 +3,8 @@ name: Release
 # Pushing a tag like v2.1.0 tests the code, publishes the Docker image to GitHub Container Registry
 # (ghcr.io/<owner>/<repo>:2.1.0 and :latest) for linux/amd64 and linux/arm64 with an SBOM and
 # build provenance, signs it with Sigstore cosign (keyless) and creates a GitHub release with the
-# signed SBOM and its SLSA provenance.
+# signed SBOM and its SLSA provenance. Then it pins the image digest in deploy/kubernetes on main.
+# scripts/release.sh makes the release commit and pushes the tag.
 # Actions are pinned to commit SHAs (the SLSA generator to a tag, see below); Dependabot keeps them up to date.
 on:
   push:
@@ -44,6 +45,8 @@ jobs:
     outputs:
       # Release assets the provenance job attests, as base64 "sha256  name" lines.
       hashes: ${{ steps.assets.outputs.hashes }}
+      # The pushed image index, which pin-digest records in deploy/kubernetes.
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -122,6 +125,40 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag \
             sbom.spdx.json sbom.spdx.json.sigstore.json
+
+  # Pins the published digest in deploy/kubernetes on main, so the manifests deploy exactly the signed image (Production
+  # guide, Releasing to Kubernetes). Skipped for pre-releases, and when main's manifests are at another version.
+  pin-digest:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: main
+
+      - name: Pin the digest on main
+        env:
+          DIGEST: ${{ needs.release.outputs.digest }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          escaped="${version//./\\.}"
+          if ! grep -Eq "^ *newTag: \"$escaped\"$" deploy/kubernetes/kustomization.yaml; then
+            echo "::notice::deploy/kubernetes on main is not at $version; digest not pinned."
+            exit 0
+          fi
+          sed -i -E "s/^( *digest: )sha256:[0-9a-f]{64}$/\1$DIGEST/" deploy/kubernetes/kustomization.yaml
+          sed -i -E "s/(image: [^:]+:$escaped@)sha256:[0-9a-f]{64}/\1$DIGEST/" deploy/kubernetes/migrate-job.yaml
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam "chore(deploy): pin the $version image digest"
+          git push origin main
 
   # SLSA level 3 provenance for the release assets, attached as sbom.spdx.json.intoto.jsonl.
   # The generator must be referenced by tag (not SHA) so slsa-verifier can check the builder.
