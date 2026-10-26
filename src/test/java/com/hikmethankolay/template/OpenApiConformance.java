@@ -5,12 +5,13 @@ import static org.assertj.core.api.Assertions.fail;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,7 +19,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -48,8 +48,8 @@ final class OpenApiConformance implements ResultMatcher {
 
     private final JsonNode spec;
     private final ObjectMapper json = new ObjectMapper();
-    private final JsonSchemaFactory schemas = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-    private final Map<String, JsonSchema> compiled = new ConcurrentHashMap<>();
+    private final SchemaRegistry schemas = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
+    private final Map<String, Schema> compiled = new ConcurrentHashMap<>();
 
     private final List<Map.Entry<String, Pattern>> paths = new ArrayList<>();
 
@@ -113,8 +113,8 @@ final class OpenApiConformance implements ResultMatcher {
             fail(where + ": content type " + actual + " not documented; documented: " + content.properties());
         }
         JsonNode schema = content.path(mediaType).path("schema");
-        Set<ValidationMessage> errors = compiled.computeIfAbsent(where + " " + mediaType, key -> compile(schema))
-                .validate(json.readTree(response.getContentAsByteArray()));
+        var errors = compiled.computeIfAbsent(where + " " + mediaType, key -> compile(schema))
+                .validate(new String(response.getContentAsByteArray(), StandardCharsets.UTF_8), InputFormat.JSON);
         if (!errors.isEmpty()) {
             fail(where + ": body does not match the documented schema: " + errors + "; body: "
                     + response.getContentAsString());
@@ -141,11 +141,11 @@ final class OpenApiConformance implements ResultMatcher {
     }
 
     /** Compiles a media type schema; its {@code #/components/...} references resolve against the document's components. */
-    private JsonSchema compile(JsonNode schema) {
+    private Schema compile(JsonNode schema) {
         ObjectNode root = schema.deepCopy();
         root.put("$schema", "https://json-schema.org/draft/2020-12/schema");
         root.set("components", spec.path("components"));
-        return schemas.getSchema(root);
+        return schemas.getSchema(root.toString());
     }
 
     /** Applies the check to every MockMvc request of the integration tests. */
