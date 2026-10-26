@@ -22,7 +22,7 @@ exist already (managed services or their own charts).
    ```
 
    The three `ADMIN_*` values create the owner account on the first start; without them nobody can manage users
-   or roles. The password must have upper and lower case letters, a digit and a symbol. Read it back with
+   or roles. The password needs at least 15 characters and must not be a common or breached password. Read it back with
    `kubectl -n backend get secret app-secrets -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d`, change it after the
    first login, then remove the three keys from the secret.
 

@@ -34,7 +34,7 @@ public @interface ValidPassword {
      *
      * @return the message
      */
-    String message() default "must be 8-128 characters";
+    String message() default "must be 15-128 characters (8 with two-factor authentication)";
 
     /**
      * Validation groups.
