@@ -28,9 +28,13 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.JwtTypeValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -268,7 +272,8 @@ public class SecurityConfig {
     }
 
     /**
-     * Verifies signature (against any configured key), expiry, issuer and revocation of incoming tokens.
+     * Verifies signature (against any configured key), expiry, issuer, audience, the {@code at+jwt} type and
+     * revocation of incoming tokens.
      *
      * @param keys        the configured keys
      * @param properties  application properties holding the issuer
@@ -282,8 +287,15 @@ public class SecurityConfig {
                 ? OAuth2TokenValidatorResult.failure(
                         new OAuth2Error("invalid_token", "The token has been revoked.", null))
                 : OAuth2TokenValidatorResult.success();
+        String audience = properties.jwt().audience();
+        // Listed one by one: JwtValidators.createDefault* adds a JwtTypeValidator that accepts only "JWT" or no typ,
+        // which would reject every access token (typ "at+jwt", RFC 9068).
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(properties.jwt().issuer()), notRevoked));
+                new JwtTimestampValidator(),
+                new JwtIssuerValidator(properties.jwt().issuer()),
+                new JwtTypeValidator(TokenService.ACCESS_TOKEN_TYPE, "application/" + TokenService.ACCESS_TOKEN_TYPE),
+                new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience)),
+                notRevoked));
         return decoder;
     }
 

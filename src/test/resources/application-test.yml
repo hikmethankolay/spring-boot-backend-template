@@ -7,6 +7,8 @@ app:
   rate-limit:
     # High enough for the whole suite (all requests come from 127.0.0.1); RateLimitIntegrationTest lowers it.
     requests-per-minute: 5000
+    # The route limits would throttle the suite; RateLimitIntegrationTest sets its own.
+    routes: []
   mail:
     # Tests call EmailOutbox.sendDue() themselves; a background retry would race with them.
     outbox-poll-interval: 1h

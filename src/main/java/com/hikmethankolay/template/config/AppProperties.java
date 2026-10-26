@@ -51,9 +51,10 @@ public record AppProperties(
      *
      * @param algorithm       {@code HS256} (shared secret) or {@code RS256} (private key; other services verify
      *                        tokens with the public keys at {@code /.well-known/jwks.json})
-     * @param secret          HS256 signing secrets, each at least 32 characters
+     * @param secret          HS256 signing secrets, each at least 43 random characters (256 bits of entropy)
      * @param privateKey      RS256 private keys in PEM format (PKCS#8 or PKCS#1), each at least 2048 bits
      * @param issuer          value of the {@code iss} claim; tokens from other issuers are rejected
+     * @param audience        value of the {@code aud} claim; tokens for other audiences are rejected
      * @param accessTokenTtl  lifetime of an access token (JWT); keep it short
      * @param refreshTokenTtl inactivity after which a session ends
      * @param rememberMeTtl   inactivity after which a session started with "remember me" ends
@@ -62,9 +63,17 @@ public record AppProperties(
      */
     public record Jwt(
             @NotNull Algorithm algorithm,
-            List<@Size(min = 32, message = "must be at least 32 characters (JWT_SECRET)") String> secret,
+            // 43 Base64 characters carry 258 bits: an HS256 key needs 256 bits of entropy, not only of length.
+            List<
+                            @Size(
+                                    min = 43,
+                                    message =
+                                            "must be at least 43 random characters, e.g. openssl rand -base64 48 (JWT_SECRET)")
+                            String>
+                    secret,
             List<String> privateKey,
             @NotBlank String issuer,
+            @NotBlank String audience,
             @NotNull Duration accessTokenTtl,
             @NotNull Duration refreshTokenTtl,
             @NotNull Duration rememberMeTtl,
@@ -143,8 +152,33 @@ public record AppProperties(
      *
      * @param enabled           whether requests are limited
      * @param requestsPerMinute requests allowed per IP in each one-minute window
+     * @param routes            stricter limits per IP for single paths, counted on top of the global one
      */
-    public record RateLimit(boolean enabled, @Positive int requestsPerMinute) {}
+    public record RateLimit(boolean enabled, @Positive int requestsPerMinute, List<@Valid Route> routes) {
+
+        /**
+         * Treats a missing route list as empty.
+         *
+         * @param enabled           whether requests are limited
+         * @param requestsPerMinute requests allowed per IP in each one-minute window
+         * @param routes            stricter limits per IP for single paths, may be {@code null}
+         */
+        public RateLimit {
+            routes = routes == null ? List.of() : List.copyOf(routes);
+        }
+
+        /**
+         * A limit for the paths matching a pattern.
+         *
+         * @param path     Spring path pattern, e.g. {@code /api/v1/auth/login/**} for the path and everything below
+         * @param requests requests allowed per IP in each window
+         * @param window   length of the window
+         */
+        public record Route(
+                @NotBlank String path,
+                @Positive int requests,
+                @NotNull Duration window) {}
+    }
 
     /**
      * Email verification and password reset settings.

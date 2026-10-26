@@ -1,6 +1,8 @@
 package com.hikmethankolay.template.security;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -14,8 +16,15 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.ResultActions;
 
-@TestPropertySource(properties = "app.rate-limit.requests-per-minute=3")
+@TestPropertySource(
+        properties = {
+            "app.rate-limit.requests-per-minute=3",
+            "app.rate-limit.routes[0].path=/api/v1/auth/password-reset/**",
+            "app.rate-limit.routes[0].requests=2",
+            "app.rate-limit.routes[0].window=1h"
+        })
 class RateLimitIntegrationTest extends IntegrationTest {
 
     @Autowired
@@ -81,6 +90,34 @@ class RateLimitIntegrationTest extends IntegrationTest {
         }
 
         mockMvc.perform(get("/api/v1/users/me").with(fromIp(network + "99"))).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void aRouteLimitIsCountedOnTopOfTheGlobalOne() throws Exception {
+        awayFromTheMinuteBoundary();
+        String ip = randomIp();
+        for (int i = 2; i > 0; i--) {
+            resetPassword(ip)
+                    .andExpect(status().isAccepted())
+                    .andExpect(header().string("RateLimit-Limit", "2"))
+                    .andExpect(header().string("RateLimit-Remaining", Integer.toString(i - 1)));
+        }
+
+        // Third request: within the global 3 per minute, over the route's 2 per hour.
+        resetPassword(ip)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, matchesPattern("[1-9]\\d*")));
+        // Other paths only have the global limit.
+        mockMvc.perform(get("/api/v1/users/me").with(fromIp(randomIp())))
+                .andExpect(header().string("RateLimit-Limit", "3"));
+    }
+
+    private ResultActions resetPassword(String ip) throws Exception {
+        return mockMvc.perform(post("/api/v1/auth/password-reset")
+                .with(fromIp(ip))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"nobody@example.com"}"""));
     }
 
     @Test

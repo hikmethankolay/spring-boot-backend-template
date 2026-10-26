@@ -10,7 +10,7 @@ Authentication is stateless, using JWTs and Spring Security's OAuth2 resource se
 - `POST /api/v1/auth/login` accepts a username or an email address and returns two tokens, in the body
   (`{"accessToken", "tokenType", "expiresIn", "refreshToken"}`) and as HttpOnly `SameSite=Strict` cookies.
 - The **access token** is a JWT signed with `JWT_SECRET` (HS256, the default) or `JWT_PRIVATE_KEY` (RS256, see
-  [Signing keys](#signing-keys)). It carries `sub`, `roles`, `username`, the session id `sid` and a unique `jti`, and expires after `JWT_ACCESS_TOKEN_TTL` (15 minutes). Send it as `Authorization: Bearer …` or as the
+  [Signing keys](#signing-keys)) with the header `typ: at+jwt` (RFC 9068). It carries `iss`, `aud` (`JWT_AUDIENCE`), `sub`, `roles`, `username`, the session id `sid` and a unique `jti`, and expires after `JWT_ACCESS_TOKEN_TTL` (15 minutes). A token without `typ: at+jwt`, or for another audience, is rejected (RFC 8725), so a JWT issued for something else (a sign-up link, another service) cannot be used as an access token. Services that verify these tokens with the published keys must accept `typ: at+jwt`. Send it as `Authorization: Bearer …` or as the
   `auth_token` cookie.
 - The **refresh token** is an opaque 256-bit random value; only its SHA-256 hash is stored (table `refresh_tokens`).
   Exchange it at `POST /api/v1/auth/refresh` (body `{"refreshToken": "…"}`, or the `refresh_token` cookie, which the
@@ -275,6 +275,18 @@ Every client IP gets `RATE_LIMIT_PER_MINUTE` requests per sliding minute across 
 the limit is possible around the turn of a minute. Responses carry
 `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`. Over the limit, the API answers `429` with
 `Retry-After`. Actuator is exempt.
+
+The endpoints attackers hammer have stricter limits per IP (`app.rate-limit.routes`), counted on top of the global
+one; the headers then describe whichever limit is closest to running out:
+
+| Path | Limit |
+|------|-------|
+| `/api/v1/auth/register/**` (start and finish a sign-up) | 5 per hour |
+| `/api/v1/auth/login/**` (password and second factor) | 30 per minute |
+| `/api/v1/auth/refresh` | 60 per minute |
+| `/api/v1/auth/password-reset/**` | 5 per hour |
+
+Sign-up emails are also limited to one per address per minute, whatever the client IP.
 
 :::caution[Behind a proxy]
 Set `FORWARD_HEADERS_STRATEGY=native` and let only the proxy reach the API port. Tomcat then takes the client IP from

@@ -140,6 +140,8 @@ app:
     secret: ${JWT_SECRET:}
     private-key: ${JWT_PRIVATE_KEY:}
     issuer: ${spring.application.name}
+    # The aud claim (RFC 8725 3.9): tokens meant for another service are rejected.
+    audience: ${JWT_AUDIENCE:${spring.application.name}}
     # Access tokens (JWTs) cannot be revoked cheaply, so keep them short; clients renew them with the refresh token.
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
     # A session ends after this much inactivity (no refresh); "remember me" sessions use the longer value.
@@ -162,6 +164,20 @@ app:
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     requests-per-minute: ${RATE_LIMIT_PER_MINUTE:120}
+    # Stricter limits per IP for the endpoints attackers hammer (OWASP API4), on top of the one above.
+    routes:
+      - path: /api/v1/auth/register/**
+        requests: 5
+        window: 1h
+      - path: /api/v1/auth/login/**
+        requests: 30
+        window: 1m
+      - path: /api/v1/auth/refresh
+        requests: 60
+        window: 1m
+      - path: /api/v1/auth/password-reset/**
+        requests: 5
+        window: 1h
   account:
     # true in the prod profile: unverified users cannot log in.
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:false}

@@ -23,7 +23,8 @@ defaults marked *prod: must change* below.
 | `REDIS_PASSWORD` / `REDIS_SSL_ENABLED` | *(none)* / `false` | Managed Redis with authentication and TLS; add `SPRING_DATA_REDIS_USERNAME` for an ACL user |
 | `CACHE_TTL` | `10m` | How long cached entries live |
 | `JWT_ALGORITHM` | `HS256` | `HS256` (shared secret) or `RS256` (private key, public keys at `/.well-known/jwks.json`) |
-| `JWT_SECRET` | *(required for HS256)* | HMAC-SHA256 signing secrets, each at least 32 characters; comma-separated, the first signs ([key rotation](../security/#key-rotation)) |
+| `JWT_SECRET` | *(required for HS256)* | HMAC-SHA256 signing secrets, each at least 43 random characters (256 bits of entropy, e.g. `openssl rand -base64 48`); comma-separated, the first signs ([key rotation](../security/#key-rotation)) |
+| `JWT_AUDIENCE` | `spring.application.name` | The `aud` claim of access tokens; tokens for another audience are rejected |
 | `JWT_PRIVATE_KEY` | *(required for RS256)* | RSA private keys in PEM format; comma-separated, the first signs |
 | `JWT_ACCESS_TOKEN_TTL` | `15m` | Access token (JWT) lifetime; keep it short |
 | `JWT_REFRESH_TOKEN_TTL` / `JWT_REMEMBER_ME_TTL` | `1d` / `30d` | Session lifetime without activity, normal / remember-me |

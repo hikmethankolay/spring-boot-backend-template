@@ -21,14 +21,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtTypeValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 class TokenServiceTest {
 
-    private static final String OTHER_SECRET = "another-secret-that-is-also-32-chars-long";
+    private static final String OTHER_SECRET = "another-secret-that-is-also-43-characters-long";
     private static final UUID SESSION = UUID.randomUUID();
 
     private final SecurityConfig securityConfig = new SecurityConfig();
@@ -48,8 +52,29 @@ class TokenServiceTest {
         assertThat(jwt.getClaimAsStringList(TokenService.ROLES_CLAIM)).isEqualTo(List.of("ADMIN"));
         assertThat(TokenService.sessionId(jwt)).isEqualTo(SESSION);
         assertThat(jwt.getClaimAsString("iss")).isEqualTo(TestProperties.ISSUER);
+        assertThat(jwt.getAudience()).containsExactly(TestProperties.AUDIENCE);
+        assertThat(jwt.getHeaders()).containsEntry("typ", TokenService.ACCESS_TOKEN_TYPE);
         assertThat(token.ttl()).isEqualTo(Duration.ofMinutes(15));
         assertThat(Duration.between(jwt.getIssuedAt(), jwt.getExpiresAt())).isEqualTo(Duration.ofMinutes(15));
+    }
+
+    /** Only access tokens for this audience pass: the typ header and the aud claim are both required (RFC 8725). */
+    @Test
+    void tokensWithoutTheAccessTypeOrForAnotherAudienceAreRejected() {
+        assertThat(decoder.decode(forged("at+jwt", List.of(TestProperties.AUDIENCE)))
+                        .getSubject())
+                .isEqualTo("1");
+        assertThat(decoder.decode(forged("application/at+jwt", List.of("other", TestProperties.AUDIENCE)))
+                        .getSubject())
+                .isEqualTo("1");
+
+        for (String token : List.of(
+                forged(null, List.of(TestProperties.AUDIENCE)),
+                forged("JWT", List.of(TestProperties.AUDIENCE)),
+                forged("at+jwt", null),
+                forged("at+jwt", List.of("another-service")))) {
+            assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtException.class);
+        }
     }
 
     @Test
@@ -148,6 +173,7 @@ class TokenServiceTest {
                 List.of(),
                 List.of(rsaPrivateKeyPem(2048)),
                 TestProperties.ISSUER,
+                TestProperties.AUDIENCE,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
                 Duration.ofDays(30),
@@ -160,7 +186,11 @@ class TokenServiceTest {
                 .singleElement()
                 .satisfies(key -> assertThat(key.isPrivate()).isFalse());
         RSAPublicKey publicKey = published.getKeys().getFirst().toRSAKey().toRSAPublicKey();
-        Jwt jwt = NimbusJwtDecoder.withPublicKey(publicKey).build().decode(token);
+        NimbusJwtDecoder otherService =
+                NimbusJwtDecoder.withPublicKey(publicKey).build();
+        // Spring's default validators accept only typ "JWT": a service verifying these tokens must allow "at+jwt".
+        otherService.setJwtValidator(new JwtTypeValidator(TokenService.ACCESS_TOKEN_TYPE));
+        Jwt jwt = otherService.decode(token);
         assertThat(TokenService.userId(jwt)).isEqualTo(9L);
         assertThat(jwt.getHeaders()).containsEntry("alg", "RS256");
     }
@@ -177,6 +207,7 @@ class TokenServiceTest {
                 List.of(),
                 List.of(rsaPrivateKeyPem(1024)),
                 TestProperties.ISSUER,
+                TestProperties.AUDIENCE,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
                 Duration.ofDays(30),
@@ -205,6 +236,7 @@ class TokenServiceTest {
                 List.of(),
                 List.of("not a key"),
                 TestProperties.ISSUER,
+                TestProperties.AUDIENCE,
                 Duration.ofMinutes(15),
                 Duration.ofDays(1),
                 Duration.ofDays(30),
@@ -214,6 +246,32 @@ class TokenServiceTest {
         assertThatThrownBy(() -> new JwtKeys(broken))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("JWT_PRIVATE_KEY");
+    }
+
+    /**
+     * Signs a token with the test keys and the given type and audience, for the validation tests.
+     *
+     * @param type     the typ header, or {@code null} for none
+     * @param audience the aud claim, or {@code null} for none
+     * @return the signed token
+     */
+    private String forged(String type, List<String> audience) {
+        JwsHeader.Builder header = JwsHeader.with(JwtKeys.algorithm(properties.jwt()));
+        if (type != null) {
+            header.type(type);
+        }
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
+                .issuer(TestProperties.ISSUER)
+                .subject("1")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(60));
+        if (audience != null) {
+            claims.audience(audience);
+        }
+        return securityConfig
+                .jwtEncoder(new JwtKeys(properties))
+                .encode(JwtEncoderParameters.from(header.build(), claims.build()))
+                .getTokenValue();
     }
 
     /**

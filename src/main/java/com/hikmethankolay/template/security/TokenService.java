@@ -31,6 +31,9 @@ public class TokenService {
     /** Claim holding the session (refresh token family) the token was issued for. */
     public static final String SESSION_CLAIM = "sid";
 
+    /** The {@code typ} header of access tokens (RFC 9068), so they cannot be mistaken for other JWTs. */
+    public static final String ACCESS_TOKEN_TYPE = "at+jwt";
+
     private final JwtEncoder jwtEncoder;
 
     private final TokenRevocationService revocations;
@@ -72,6 +75,7 @@ public class TokenService {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .id(UUID.randomUUID().toString())
                 .issuer(properties.issuer())
+                .audience(List.of(properties.audience()))
                 .subject(Long.toString(userId))
                 .issuedAt(issuedAt)
                 .expiresAt(now.plus(ttl))
@@ -79,7 +83,9 @@ public class TokenService {
                 .claim(ROLES_CLAIM, List.of(role.name()))
                 .claim(SESSION_CLAIM, sessionId.toString())
                 .build();
-        JwsHeader header = JwsHeader.with(JwtKeys.algorithm(properties)).build();
+        JwsHeader header = JwsHeader.with(JwtKeys.algorithm(properties))
+                .type(ACCESS_TOKEN_TYPE)
+                .build();
 
         String value =
                 jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
