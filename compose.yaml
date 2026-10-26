@@ -37,7 +37,7 @@ services:
 
   mailpit:
     # Catches every email sent in development. Web UI: http://localhost:8025
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:v1.32
     ports:
       - "127.0.0.1:${MAIL_PORT:-1025}:1025"
       - "127.0.0.1:8025:8025"
@@ -70,7 +70,7 @@ services:
 
   prometheus:
     profiles: ["monitoring"]
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.15.1
     volumes:
       - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
       - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro,z
@@ -82,7 +82,7 @@ services:
 
   grafana:
     profiles: ["monitoring"]
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:13.2.4
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
