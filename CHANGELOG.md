@@ -6,6 +6,71 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-26
+
+A security release. Every item marked **Breaking** needs a change in clients or deployments; the guides describe
+each one.
+
+### Added
+
+- Email-first sign-up: `POST /api/v1/auth/register` takes only `{"email"}` and always answers `202`. A new address
+  gets a link to finish the sign-up and a registered one gets a notice. `POST /api/v1/auth/register/complete` takes
+  the link's token with the username and password and creates the account, already verified. Nothing is stored
+  before the link is opened, so the response, its timing and the usernames do not show which addresses have
+  accounts. One email per address per minute; each link creates at most one account.
+- CSRF guard for cookie-authenticated requests: a state-changing request with an auth cookie and no Bearer header
+  needs an allowed `Origin` or `X-Requested-With: XMLHttpRequest`, otherwise `403 urn:problem:cross-site-request`.
+- Per-route rate limits on top of the global one (`app.rate-limit.routes`):
+  - register: 5 per hour;
+  - login: 30 per minute;
+  - refresh: 60 per minute;
+  - password reset: 5 per hour.
+- An absolute session lifetime: 7 days (`app.jwt.max-session-ttl`), or 90 with remember-me, however often the
+  session is refreshed.
+- Passwords are checked against a bundled list of common passwords. Have I Been Pwned can also be checked
+  (`PWNED_CHECK_ENABLED`).
+- Security events are also stored in an append-only `audit_events` table (`V12`):
+  - only the table owner may change or remove rows;
+  - `AUDIT_RETENTION` (default `365d`) purges old rows daily and always keeps the last 90 days.
+- CI scans for secrets with gitleaks, runs a ZAP baseline scan against the running app, and Dependabot updates the
+  `compose.yaml` images.
+- Kubernetes:
+  - an egress `NetworkPolicy`;
+  - a migration Job (`migrate-job.yaml`, `migrate` profile);
+  - a Sigstore `ClusterImagePolicy` that admits only images signed by the release workflow;
+  - the image is pinned by tag and digest.
+- A warning at startup when a development setup points at a remote database.
+
+### Changed
+
+- **Breaking:** the minimum password length is 15 characters, or 8 with two-factor authentication, with no
+  composition rules (NIST SP 800-63B-4).
+  - `ADMIN_PASSWORD` needs 15 characters.
+  - Two-factor authentication cannot be turned off while the password is shorter than 15 characters.
+- **Breaking:** passwords are hashed with Argon2id (19 MiB, t=2, p=1). BCrypt hashes still match and are rewritten
+  at the next login. After a rollback to 3.2.x, users with an Argon2id hash must reset their password.
+- **Breaking:** sign-up is two steps, see *Added*. Frontends need a `/sign-up?token=...` page.
+  `REQUIRE_VERIFIED_EMAIL` now only applies to changed addresses.
+- **Breaking:** access tokens are `typ: at+jwt` with an `aud` claim (`JWT_AUDIENCE`, RFC 9068).
+  - Tokens issued before 4.0 are rejected, so clients refresh once.
+  - Services that verify tokens through the JWKS must accept `at+jwt`.
+- **Breaking:** `JWT_SECRET` needs at least 43 characters.
+- **Breaking:** with `app.cookie.secure=true` the cookies are named `__Host-auth_token` and
+  `__Secure-refresh_token`, so every browser logs in once more.
+- **Breaking:** `POST /api/v1/auth/oauth2/{provider}` requires `codeVerifier` (PKCE).
+- **Breaking:** the image runs a jlink-trimmed JRE on distroless `java-base-debian13`: 196 MB instead of 335 MB. It
+  has no shell, so it has no `HEALTHCHECK`.
+- **Breaking:** Kubernetes 1.30 or later is required, for the `preStop` sleep action.
+  - Secrets are mounted as files at `/etc/app/secrets` instead of environment variables.
+  - Pods run with `FLYWAY_ENABLED=false`; run `migrate-job.yaml` with `app-migrator-secrets` before each rollout.
+  - The *Production* guide has the SQL for both database roles.
+- The MFA encryption key is derived with HKDF-SHA256. Values stored before 4.0 still decrypt.
+- Spring Boot 4.1.2 and springdoc 3.2.0. The Tomcat and Jackson version overrides are gone.
+- The coverage minimums are now:
+  - 95% of lines;
+  - 90% of branches;
+  - 90% of lines in `auth` and `security`.
+
 ## [3.2.9] - 2026-10-24
 
 ### Changed
@@ -242,7 +307,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.9...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.9...v4.0.0
 [3.2.9]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.8...v3.2.9
 [3.2.8]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.5...v3.2.8
 [3.2.5]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.1...v3.2.5

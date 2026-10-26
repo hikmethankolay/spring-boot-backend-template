@@ -201,7 +201,7 @@ client sends it with a code to `/login/mfa` within `MFA_CHALLENGE_TTL` (5 minute
 
 - Secrets are encrypted with AES-256-GCM under a key derived from `MFA_ENCRYPTION_KEY` with HKDF-SHA256 (RFC 5869),
   bound to the user id, so a database dump alone does not reveal them. Stored values carry a version prefix (`v1:`),
-  so a later key or scheme can coexist with this one; values from before 3.3 (no prefix, key = SHA-256 of the
+  so a later key or scheme can coexist with this one; values from before 4.0 (no prefix, key = SHA-256 of the
   setting) still decrypt. Keep the key out of database backups. Changing it breaks every enrolled authenticator; the
   affected users log in with a recovery code and enroll again.
 - A code is accepted within one 30-second step of the server clock, and only once: the step of the last accepted code
