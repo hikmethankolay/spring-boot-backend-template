@@ -16,6 +16,9 @@ resources:
   - pdb.yaml
   - networkpolicy.yaml
 images:
-  # A pinned release, so every apply deploys the same, signed image; bump it to deploy a new release.
+  # A pinned release, so every apply deploys the same, signed image. The release commit bumps newTag; once the release
+  # workflow has run, set digest to the one it prints (or the index digest on GHCR). With both, the pods run
+  # name:tag@digest, so a moved tag cannot change what runs. Keep migrate-job.yaml on the same image.
   - name: ghcr.io/hikmethankolay/spring-boot-backend-template
     newTag: "3.2.9"
+    digest: sha256:c1b7c22b821f2951173df401b0fad795b45991b6aca53f2146319a87bd101cbf

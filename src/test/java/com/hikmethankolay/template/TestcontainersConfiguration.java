@@ -17,10 +17,11 @@ import org.testcontainers.utility.DockerImageName;
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
-    private static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"));
+    // Package-private for MigrationJobIntegrationTest, which must not get them as beans: closing a context stops
+    // the containers it got as beans, for every test that comes after.
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"));
 
-    private static final GenericContainer<?> REDIS =
+    static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:8-alpine")).withExposedPorts(6379);
 
     @Bean

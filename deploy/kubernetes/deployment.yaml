@@ -45,11 +45,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: app-config
-            - secretRef:
-                # DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, SPRING_MAIL_USERNAME,
-                # SPRING_MAIL_PASSWORD, and optionally ADMIN_USERNAME/ADMIN_EMAIL/ADMIN_PASSWORD and the
-                # GITHUB_/GOOGLE_CLIENT_ID and _CLIENT_SECRET of social login.
-                name: app-secrets
           resources:
             requests:
               cpu: 250m
@@ -76,9 +71,10 @@ spec:
             failureThreshold: 3
           lifecycle:
             preStop:
-              # Keep serving while the endpoint is removed from the Service, then shut down gracefully.
-              exec:
-                command: ["sleep", "10"]
+              # Keep serving while the endpoint is removed from the Service, then shut down gracefully. The kubelet
+              # waits itself (Kubernetes 1.30+): the distroless image has no sleep command.
+              sleep:
+                seconds: 10
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -87,7 +83,19 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # One file per key, read by spring.config.import (configtree); not exposed as environment variables.
+            - name: secrets
+              mountPath: /etc/app/secrets
+              readOnly: true
       volumes:
+        # DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, SPRING_MAIL_USERNAME,
+        # SPRING_MAIL_PASSWORD, and optionally ADMIN_USERNAME/ADMIN_EMAIL/ADMIN_PASSWORD and the
+        # GITHUB_/GOOGLE_CLIENT_ID and _CLIENT_SECRET of social login.
+        - name: secrets
+          secret:
+            secretName: app-secrets
+            # Readable by the app's group (fsGroup) only.
+            defaultMode: 0440
         # Tomcat and the JVM need a writable /tmp; the rest of the filesystem is read-only.
         - name: tmp
           emptyDir:

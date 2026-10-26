@@ -1,0 +1,9 @@
+# The migration Job (deploy/kubernetes/migrate-job.yaml): runs the Flyway migrations with the schema owner's
+# credentials, then exits. No web server starts and every other bean is created only on demand, so nothing but
+# Flyway touches the database and the JVM ends when the migrations are done (exit code 0, or 1 if one fails).
+spring:
+  main:
+    web-application-type: none
+    lazy-initialization: true
+  flyway:
+    enabled: true

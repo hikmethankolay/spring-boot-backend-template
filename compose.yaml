@@ -64,12 +64,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
-      interval: 10s
-      timeout: 3s
-      start_period: 40s
-      retries: 5
+    # No healthcheck: the image is distroless (no shell or HTTP client). Readiness is at /actuator/health/readiness.
     security_opt:
       - no-new-privileges:true
 

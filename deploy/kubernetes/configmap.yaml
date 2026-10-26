@@ -5,6 +5,8 @@ metadata:
   name: app-config
 data:
   SPRING_PROFILES_ACTIVE: prod
+  # migrate-job.yaml migrates with the schema owner's role; the app's role may only read and write rows.
+  FLYWAY_ENABLED: "false"
   DB_URL: jdbc:postgresql://postgres:5432/app
   DB_POOL_SIZE: "10"
   REDIS_HOST: redis

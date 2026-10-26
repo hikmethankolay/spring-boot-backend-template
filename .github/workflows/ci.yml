@@ -132,6 +132,9 @@ jobs:
             echo "MFA_ENCRYPTION_KEY=$(openssl rand -base64 48 | tr -d '\n/+=')"
           } > .env
           docker compose --profile app up --build --detach --wait
+          # The distroless image has no healthcheck; wait until the app reports ready.
+          curl --silent --show-error --fail --retry 30 --retry-all-errors --retry-delay 2 \
+            http://localhost:8080/actuator/health/readiness
 
       # Passive scan of the running app; fails on any alert that .zap/rules.tsv does not ignore with a reason.
       - name: Scan with ZAP

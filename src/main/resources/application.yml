@@ -5,7 +5,11 @@ spring:
     name: spring-boot-template
   config:
     # Optional .env file in the working directory; DOTENV_PATH points elsewhere (tests disable it).
-    import: optional:file:${DOTENV_PATH:.env}[.properties]
+    # Optional secrets as files, one per variable (e.g. a Kubernetes Secret mounted at /etc/app/secrets): files keep
+    # them out of the environment, which child processes, crash dumps and /proc/<pid>/environ expose.
+    import:
+      - optional:file:${DOTENV_PATH:.env}[.properties]
+      - optional:configtree:/etc/app/secrets/
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/app}
     username: ${DB_USERNAME:app}
@@ -26,6 +30,10 @@ spring:
       # Schema is owned by Flyway (src/main/resources/db/migration); Hibernate only checks that entities match it.
       ddl-auto: validate
   flyway:
+    # On by default, so a local run migrates its own database. In production the migration Job (profile "migrate",
+    # the schema owner's credentials) migrates and the app runs with FLYWAY_ENABLED=false and a role that may only
+    # read and write rows (see the Production guide).
+    enabled: ${FLYWAY_ENABLED:true}
     # Databases created before Flyway was introduced (they already have the users table) are
     # baselined at version 1 instead of failing; fresh databases run every migration.
     baseline-on-migrate: true
@@ -48,9 +56,12 @@ spring:
         serialization-mode: via-dto
   mail:
     # Defaults point to Mailpit from compose.yaml (web UI: http://localhost:8025).
-    # Set SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD for a real SMTP server.
+    # Set SPRING_MAIL_USERNAME / SPRING_MAIL_PASSWORD for a real SMTP server; empty means no authentication.
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
+    # Placeholders, so the credentials also work as files in /etc/app/secrets (env vars bind without them).
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       "[mail.smtp.connectiontimeout]": 5000
       "[mail.smtp.timeout]": 5000

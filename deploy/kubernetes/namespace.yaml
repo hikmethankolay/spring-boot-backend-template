@@ -5,3 +5,5 @@ metadata:
   labels:
     # Reject pods that are not hardened (see the securityContext in deployment.yaml).
     pod-security.kubernetes.io/enforce: restricted
+    # Run only images the release workflow signed, once the Sigstore policy-controller is installed (see policy/).
+    policy.sigstore.dev/include: "true"

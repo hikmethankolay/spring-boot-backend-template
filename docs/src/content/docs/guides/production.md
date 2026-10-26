@@ -23,8 +23,11 @@ Each setting can still be overridden with its environment variable.
 
 ## Deploying
 
-The Docker image (multi-stage, layered jar, JRE on Alpine) runs as the non-root user `10001`, has a `HEALTHCHECK`,
-and exposes `8080` for the API and `8081` for Actuator. Pushing a `v*` tag runs the release workflow:
+The Docker image (multi-stage, layered jar) runs a Java runtime cut down with `jlink` to the modules the app uses, on
+a distroless base pinned by digest: no shell, no package manager, nothing an attacker could use after getting in. It
+runs as the non-root user `10001` and exposes `8080` for the API and `8081` for Actuator. It has no `HEALTHCHECK`
+(there is no shell or HTTP client in it); Kubernetes uses its probes, and anything else can poll
+`/actuator/health/readiness`. Pushing a `v*` tag runs the release workflow:
 
 1. It runs the tests.
 2. It publishes the image to `ghcr.io/<owner>/<repo>` for `linux/amd64` and `linux/arm64`, with an SBOM and build
@@ -88,12 +91,54 @@ Kustomize base:
   capabilities, `RuntimeDefault` seccomp).
 - **Service:** for the API port only.
 - **Scaling and disruptions:** a HorizontalPodAutoscaler on CPU and a PodDisruptionBudget.
-- **NetworkPolicy:** the API port is reachable only from the ingress controller's namespace (`ingress-nginx`; adjust it) and the management port only from the `monitoring` namespace.
+- **NetworkPolicy:** the API port is reachable only from the ingress controller's namespace (`ingress-nginx`; adjust it) and the management port only from the `monitoring` namespace. Outgoing traffic is limited to DNS, PostgreSQL, Redis, SMTP and HTTPS (social login), so a compromised pod cannot roam the cluster.
+- **Secrets as files:** `app-secrets` is mounted at `/etc/app/secrets`, one file per key, and read through
+  `spring.config.import` (`configtree`). Unlike environment variables, files are not inherited by child processes or
+  visible in `/proc/<pid>/environ`. Environment variables still work (Docker, compose), but are deprecated for
+  Kubernetes.
+- **Migrations as a Job:** `migrate-job.yaml` runs the Flyway migrations with the schema owner's role (profile
+  `migrate`: no web server, nothing else starts) and exits; the pods run with `FLYWAY_ENABLED=false` and a role that
+  may only read and write rows. Run the Job before every rollout.
+- **Pinned and signed image:** `kustomization.yaml` pins the release by tag and digest, so a moved tag cannot change
+  what runs. With the [Sigstore policy-controller](https://docs.sigstore.dev/policy-controller/overview/) installed,
+  `deploy/kubernetes/policy/` admits only images this repository's release workflow signed.
 
 ```bash
 kubectl -n backend create secret generic app-secrets --from-literal=JWT_SECRET=... # see deploy/kubernetes/README.md
+kubectl -n backend create secret generic app-migrator-secrets --from-literal=DB_USERNAME=app_owner --from-literal=DB_PASSWORD=...
+kubectl apply -f deploy/kubernetes/migrate-job.yaml
+kubectl -n backend wait --for=condition=complete job/migrate --timeout=10m
 kubectl apply -k deploy/kubernetes
 ```
+
+#### Database roles
+
+The migrations need a role that owns the schema; the app needs only to read and write rows. Two roles keep a
+compromised app from dropping tables or changing the schema:
+
+```sql
+-- Owns the schema; used only by the migration Job.
+CREATE ROLE app_owner LOGIN PASSWORD '...';
+CREATE SCHEMA IF NOT EXISTS public AUTHORIZATION app_owner;
+-- Used by the pods: rows only, on every table and sequence app_owner creates now or later.
+CREATE ROLE app LOGIN PASSWORD '...';
+GRANT CONNECT ON DATABASE app TO app;
+GRANT USAGE ON SCHEMA public TO app;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app;
+```
+
+For an existing database migrated by `app` itself, transfer the tables to `app_owner` first
+(`REASSIGN OWNED BY app TO app_owner;`, run as a superuser), then grant as above.
+
+#### Releasing to Kubernetes
+
+1. The release commit bumps `newTag` in `kustomization.yaml` (`KubernetesManifestTest` checks it against
+   `CHANGELOG.md`).
+2. After the release workflow has published and signed the image, set `digest` in `kustomization.yaml` and the image
+   of `migrate-job.yaml` to the digest it printed (`KubernetesManifestTest` keeps the two equal).
+3. Run the migration Job, then `kubectl apply -k deploy/kubernetes`.
 
 PostgreSQL, Redis and SMTP are expected to be managed services or deployed separately.
 
@@ -135,7 +180,10 @@ profiles use STARTTLS when the server offers it, so the local Mailpit, which has
 - [ ] Generate a separate random `MFA_ENCRYPTION_KEY`, store it in your secret manager (not with the database
       backups) and back it up: losing it breaks every user's two-factor authentication.
 - [ ] Back up PostgreSQL (point-in-time recovery) and test a restore.
-- [ ] Deploy only signed images (`cosign verify`, or an admission policy such as Kyverno or Sigstore policy-controller).
+- [ ] Deploy only signed images: pin the digest, and install the Sigstore policy-controller with
+      `deploy/kubernetes/policy/` (or check with `cosign verify` before each deployment).
+- [ ] Run migrations with the schema owner's role (`migrate-job.yaml`) and the app with a role that may only read and
+      write rows (see [Database roles](#database-roles)).
 
 ## Trade-offs to revisit
 
@@ -152,5 +200,5 @@ profiles use STARTTLS when the server offers it, so the local Mailpit, which has
   must serialise refreshes (see [Security](../security/#rotation-and-reuse-detection)).
 - **Single sign-on.** For SSO or many services, consider an external identity provider and keep only the
   resource-server part.
-- **Dependency overrides.** `pom.xml` pins a few patched dependency versions. Remove each override once a Spring Boot
-  upgrade manages an equal or newer version.
+- **Dependency overrides.** When a security fix lands before Spring Boot manages it, pin the patched version in
+  `pom.xml` (a `*.version` property) and remove the pin once a Spring Boot upgrade manages an equal or newer version.

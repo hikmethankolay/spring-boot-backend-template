@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,8 @@ import org.springframework.stereotype.Component;
  * application does not start either.</p>
  */
 @Component
+// The migration Job has only the schema owner's database credentials, none of the settings this needs.
+@Profile("!migrate")
 class AdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AdminBootstrap.class);

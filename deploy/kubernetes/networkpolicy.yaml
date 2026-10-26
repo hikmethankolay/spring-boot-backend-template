@@ -1,6 +1,8 @@
-# The API port is open only to the ingress controller's namespace, so no other pod can bypass it and
-# forge X-Forwarded-For; the management port only to the monitoring namespace. Adjust both selectors
-# to your ingress controller and Prometheus namespaces.
+# Ingress: the API port is open only to the ingress controller's namespace, so no other pod can bypass it and
+# forge X-Forwarded-For; the management port only to the monitoring namespace.
+# Egress: only what the app calls (CIS Kubernetes Benchmark 5.3.2), so a compromised pod cannot reach the rest of
+# the cluster or the internet freely. Adjust the namespace selectors to your ingress controller and Prometheus, and
+# narrow the database, Redis and SMTP rules to their pods or address ranges once you know where they run.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -9,7 +11,7 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: spring-boot-template
-  policyTypes: ["Ingress"]
+  policyTypes: ["Ingress", "Egress"]
   ingress:
     - from:
         - namespaceSelector:
@@ -23,3 +25,29 @@ spec:
               kubernetes.io/metadata.name: monitoring
       ports:
         - port: management
+  egress:
+    # DNS, to the cluster's DNS service only.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL and Redis.
+    - ports:
+        - port: 5432
+        - port: 6379
+    # SMTP (submission with STARTTLS, and implicit TLS).
+    - ports:
+        - port: 587
+        - port: 465
+    # HTTPS: GitHub and Google for social login. A NetworkPolicy cannot name hosts; restrict this further with an
+    # egress gateway or a CNI that supports FQDN policies if you need to.
+    - ports:
+        - port: 443

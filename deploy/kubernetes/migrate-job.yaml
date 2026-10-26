@@ -1,0 +1,71 @@
+# Runs the database migrations with the schema owner's role, then exits; the app runs with FLYWAY_ENABLED=false and a
+# role that may only read and write rows. Not part of kustomization.yaml: a Job's pod template cannot be changed in
+# place. Run it before every rollout (see README.md):
+#   kubectl -n backend delete job migrate --ignore-not-found
+#   kubectl apply -f deploy/kubernetes/migrate-job.yaml
+#   kubectl -n backend wait --for=condition=complete job/migrate --timeout=10m
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: backend
+  labels:
+    app.kubernetes.io/name: spring-boot-template
+    app.kubernetes.io/component: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        # Matched by networkpolicy.yaml, which lets it reach PostgreSQL and DNS.
+        app.kubernetes.io/name: spring-boot-template
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          # The same image as kustomization.yaml pins; KubernetesManifestTest keeps the two equal.
+          image: ghcr.io/hikmethankolay/spring-boot-backend-template:3.2.9@sha256:c1b7c22b821f2951173df401b0fad795b45991b6aca53f2146319a87bd101cbf
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            # Runs Flyway and nothing else (application-migrate.yml).
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod,migrate
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets
+              mountPath: /etc/app/secrets
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        # DB_USERNAME and DB_PASSWORD of the schema owner, nothing else.
+        - name: secrets
+          secret:
+            secretName: app-migrator-secrets
+            defaultMode: 0440

@@ -12,20 +12,50 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Keeps {@code deploy/kubernetes} deploying the image this repository releases: the image the Deployment runs must
- * be the one Kustomize pins, and the pinned tag must be the latest release in {@code CHANGELOG.md}, so a release
- * cannot ship while the manifests still deploy an older one.
+ * be the one Kustomize pins, by tag and digest, the migration Job must run the same image, and the pinned tag must be
+ * the latest release in {@code CHANGELOG.md}, so a release cannot ship while the manifests still deploy an older one.
+ * It also guards the hardening that is easy to lose in an edit: egress rules and secrets mounted as files.
  */
 class KubernetesManifestTest {
 
     private static final Path KUSTOMIZATION = Path.of("deploy", "kubernetes", "kustomization.yaml");
     private static final Path DEPLOYMENT = Path.of("deploy", "kubernetes", "deployment.yaml");
     private static final Path CHANGELOG = Path.of("CHANGELOG.md");
+    private static final Path MIGRATE_JOB = Path.of("deploy", "kubernetes", "migrate-job.yaml");
+    private static final Path NETWORK_POLICY = Path.of("deploy", "kubernetes", "networkpolicy.yaml");
 
     @Test
     void kustomizePinsTheImageTheDeploymentRuns() throws IOException {
         String deployed = find(DEPLOYMENT, "image: (\\S+)");
 
         assertThat(find(KUSTOMIZATION, "- name: (\\S+)")).isEqualTo(deployed);
+    }
+
+    @Test
+    void theImageIsPinnedByDigestAndTheMigrationJobRunsIt() throws IOException {
+        String digest = find(KUSTOMIZATION, "digest: (sha256:[0-9a-f]{64})");
+        String pinned = find(KUSTOMIZATION, "- name: (\\S+)") + ":" + find(KUSTOMIZATION, "newTag: \"?([^\"\\s]+)")
+                + "@" + digest;
+
+        assertThat(find(MIGRATE_JOB, "image: (\\S+)"))
+                .as("image in %s", MIGRATE_JOB)
+                .isEqualTo(pinned);
+    }
+
+    @Test
+    void theNetworkPolicyLimitsIngressAndEgress() throws IOException {
+        String policy = Files.readString(NETWORK_POLICY);
+
+        assertThat(policy).contains("policyTypes: [\"Ingress\", \"Egress\"]").contains("port: 53");
+    }
+
+    @Test
+    void secretsAreMountedAsFilesNotEnvironmentVariables() throws IOException {
+        for (Path manifest : new Path[] {DEPLOYMENT, MIGRATE_JOB}) {
+            String text = Files.readString(manifest);
+
+            assertThat(text).as("%s", manifest).doesNotContain("secretRef").contains("mountPath: /etc/app/secrets");
+        }
     }
 
     @Test
