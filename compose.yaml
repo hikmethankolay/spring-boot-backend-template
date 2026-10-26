@@ -37,7 +37,7 @@ services:
 
   mailpit:
     # Catches every email sent in development. Web UI: http://localhost:8025
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:v1.32
     ports:
       - "127.0.0.1:${MAIL_PORT:-1025}:1025"
       - "127.0.0.1:8025:8025"
