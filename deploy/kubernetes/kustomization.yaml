@@ -20,5 +20,5 @@ images:
   # workflow's pin-digest job then commits the digest of the published image. With both, the pods run
   # name:tag@digest, so a moved tag cannot change what runs. migrate-job.yaml is kept on the same image.
   - name: ghcr.io/hikmethankolay/spring-boot-backend-template
-    newTag: "4.0.1"
+    newTag: "4.0.2"
     digest: sha256:d50185fcca8b7187ec180e0d568e54c10e12eb7310788709da7a5789061236d2
