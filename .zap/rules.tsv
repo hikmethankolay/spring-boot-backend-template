@@ -1,0 +1,11 @@
+# Rules for the ZAP baseline scan in CI (the zap job in .github/workflows/ci.yml).
+# Each line: rule id (or * for all), TAB, IGNORE | WARN | FAIL | OUTOFSCOPE, TAB, a note or, for OUTOFSCOPE, a URL regex.
+# The job fails on any alert, so every IGNORE needs a reason.
+
+# Swagger UI and the OpenAPI document are developer documentation, off in production (SWAGGER_ENABLED=false).
+*	OUTOFSCOPE	.*/swagger-ui.*
+*	OUTOFSCOPE	.*/v3/api-docs.*
+
+# Informational: responses that may not be cached. Intended for an API whose responses carry credentials or
+# personal data; token responses also send Cache-Control: no-store.
+10049	IGNORE	(Non-Storable Content)

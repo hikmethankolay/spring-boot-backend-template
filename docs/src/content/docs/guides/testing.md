@@ -111,7 +111,13 @@ same machine.
 
 1. It runs the tests.
 2. It builds the Docker image and scans it with Trivy, failing on fixable critical or high vulnerabilities.
-3. It checks the documentation.
+3. It scans the pushed or pull request commits for secrets with gitleaks. Findings that were checked and are not
+   live secrets (test fixtures) are listed by fingerprint in `.gitleaksignore`; anything new fails the job.
+4. It starts the app with `docker compose --profile app` and runs a ZAP baseline scan against it, failing on any
+   alert that `.zap/rules.tsv` does not ignore with a reason. The scan is passive and reaches what is public without
+   a token (security headers, error responses); Swagger UI and the OpenAPI document are out of its scope.
+5. It checks the documentation.
 
-Every action is pinned to a commit SHA and both base images to a digest, so a moved tag cannot change the build.
-Dependabot opens weekly update PRs for Maven, GitHub Actions (SHA pins included), Docker digests and npm.
+Every action is pinned to a commit SHA and every base image, the ZAP image included, to a digest, so a moved tag
+cannot change the build. Dependabot opens weekly update PRs for Maven, GitHub Actions (SHA pins included), Docker
+digests, the `compose.yaml` images and npm.
