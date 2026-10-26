@@ -107,18 +107,25 @@ same machine.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests:
+`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and by hand. Its eight jobs run in parallel and
+each fails on its own:
 
-1. It runs the tests.
-2. It builds the Docker image and scans it with Trivy, failing on fixable critical or high vulnerabilities.
-3. It scans the pushed or pull request commits for secrets with gitleaks. The test fixtures that look like secrets
-   are allowlisted by exact value in `.gitleaks.toml` (so this also works in a repository created from the template);
-   `.gitleaksignore` lists two findings from this repository's own history (`rename-project.sh` deletes it). Anything
-   new fails the job.
-4. It starts the app with `docker compose --profile app` and runs a ZAP baseline scan against it, failing on any
-   alert that `.zap/rules.tsv` does not ignore with a reason. The scan is passive and reaches what is public without
-   a token (security headers, error responses); Swagger UI and the OpenAPI document are out of its scope.
-5. It checks the documentation.
+- **build:** `./mvnw verify`, the tests and every quality gate above, then uploads the coverage report.
+- **windows:** `scripts\test.bat --unit`, `scripts\docs.bat` and `scripts\build.bat --skip-tests`, so the `.bat`
+  scripts cannot drift from the `.sh` ones.
+- **image:** builds the Docker image and scans it with Trivy, failing on fixable critical or high vulnerabilities.
+- **secrets:** scans the pushed or pull request commits for secrets with gitleaks. The test fixtures that look like
+  secrets
+  are allowlisted by exact value in `.gitleaks.toml` (so this also works in a repository created from the template);
+  `.gitleaksignore` lists two findings from this repository's own history (`rename-project.sh` deletes it). Anything
+  new fails the job.
+- **zap:** starts the app with `docker compose --profile app` and runs a ZAP baseline scan against it, failing on any
+  alert that `.zap/rules.tsv` does not ignore with a reason. The scan is passive and reaches what is public without
+  a token (security headers, error responses); Swagger UI and the OpenAPI document are out of its scope.
+- **docs:** `scripts/docs.sh`, which fails on undocumented code, then uploads the Java reference.
+- **rename:** only in the template repository. Runs `rename-project.sh` the way a new project does, fails if a
+  template reference is left, and runs the unit tests.
+- **clients:** generates the TypeScript client with `scripts/client.sh` and type-checks it.
 
 Every action is pinned to a commit SHA and every base image, the ZAP image included, to a digest, so a moved tag
 cannot change the build. Dependabot opens weekly update PRs for Maven, GitHub Actions (SHA pins included), Docker

@@ -41,6 +41,8 @@ or newer (the `preStop` sleep action).
 3. Migrate, then apply. Do both for every release: the pods run with `FLYWAY_ENABLED=false`.
 
    ```bash
+   kubectl -n backend apply -f deploy/kubernetes/configmap.yaml   # the Job reads it; apply -k creates it too, but
+   after
    kubectl -n backend delete job migrate --ignore-not-found
    kubectl apply -f deploy/kubernetes/migrate-job.yaml
    kubectl -n backend wait --for=condition=complete job/migrate --timeout=10m

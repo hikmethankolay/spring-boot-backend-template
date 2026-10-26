@@ -30,7 +30,8 @@ secure login, user accounts, errors, caching, monitoring and deployment. All of 
 - **Production defaults out of the box.** One `prod` profile switches on JSON logs, secure cookies, required email
   verification and an internal metrics port. Migrations, Redis caching, an email outbox with retries, query timeouts,
   metrics with alert rules and a Grafana dashboard, tracing, account deletion and data export are already wired in.
-- **Tested against the real thing.** 210+ tests run against real PostgreSQL and Redis containers, alongside architecture
+- **Tested against the real thing.** 300+ tests, 140+ of them against real PostgreSQL and Redis containers, alongside
+  architecture
   rules, a load test and a vulnerability scan of the Docker image in CI.
 - **Ready to ship.** Releases publish signed multi-arch images with an SBOM; Kubernetes manifests pass the
   `restricted` Pod Security Standard.
@@ -59,6 +60,17 @@ PostgreSQL 18 and Redis 8 are the current major versions. Dependabot proposes up
 Policy: patch and minor updates land as soon as the tests pass. A new major version of a component is adopted once it
 is generally available and the tests pass, and is recorded in the
 [changelog](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/CHANGELOG.md).
+
+## How it fits together
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/public/diagrams/architecture-dark.svg" width="720" height="568">
+  <img src="docs/public/diagrams/architecture-light.svg" width="720" height="568" alt="Clients call the Spring Boot app over HTTPS through its security filters (trace id, rate limit, CSRF, JWT); REST controllers hand requests to the services, which use PostgreSQL and Redis and reach an SMTP server and GitHub or Google; Prometheus scrapes the app.">
+</picture>
+
+The [guides](https://hikmethankolay.github.io/spring-boot-backend-template/) have a diagram for every flow: request
+checks, login with two-factor authentication and refresh, sign-up, GitHub and Google login, ending sessions, the email
+outbox, the data model, Kubernetes and the release pipeline.
 
 ## Quick start
 

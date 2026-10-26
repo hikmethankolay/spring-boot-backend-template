@@ -28,7 +28,7 @@ public UserResponse getById(long id) { ... }
 
 @Transactional
 @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
-public UserResponse update(long id, AdminUpdateUserRequest request) { ... }
+public UserResponse update(long id, long requesterId, AdminUpdateUserRequest request) { ... }
 ```
 
 Inspect the cache with `scripts/db.sh redis-cli`, for example `KEYS spring-boot-template:*` and `TTL <key>`.

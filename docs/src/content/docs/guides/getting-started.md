@@ -20,7 +20,7 @@ cd spring-boot-backend-template
 
 scripts/setup.sh    # checks prerequisites, creates .env with generated secrets, compiles
 scripts/dev.sh      # starts PostgreSQL, Redis and Mailpit, then the app on http://localhost:8080
-scripts/smoke.sh    # in another terminal: register, login, /me, refresh, logout against the running app
+scripts/smoke.sh    # in another terminal: register, log in, use the notes API, refresh, log out, delete the account
 ```
 
 On Windows use the same names with `.bat`: `scripts\setup.bat`, `scripts\dev.bat`, `scripts\smoke.bat`.

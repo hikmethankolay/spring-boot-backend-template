@@ -3,6 +3,14 @@ title: Security
 description: Tokens and sessions, revocation, account flows, lockout, rate limiting, headers and the audit log.
 ---
 
+Every request passes the same checks, in this order. Each rejection is an RFC 9457 problem detail (see
+[Errors](../api/#errors)).
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/request-pipeline-light.svg" width="720" height="816" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT (401) and the required role (403); every rejection and exception becomes an RFC 9457 problem detail." />
+  <img class="light:sl-hidden" src="../../diagrams/request-pipeline-dark.svg" width="720" height="816" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT (401) and the required role (403); every rejection and exception becomes an RFC 9457 problem detail." />
+</figure>
+
 ## Tokens and sessions
 
 Authentication is stateless, using JWTs and Spring Security's OAuth2 resource server, plus a refresh token per session.
@@ -36,6 +44,18 @@ Authentication is stateless, using JWTs and Spring Security's OAuth2 resource se
   `DELETE`, so frontends on an allowed origin need nothing extra. Spring's CSRF tokens stay off: the API is stateless.
 
 A client keeps calling the API with the access token, and when it gets `401`, calls `/refresh` once and retries.
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/auth-sequence-light.svg" width="720" height="628" alt="The client posts its credentials to /auth/login; with two-factor authentication on, the API stores a challenge in Redis and answers 202 with an mfaToken, which the client sends with a code to /login/mfa; the API saves a refresh-token hash and returns an access JWT and a refresh token; when the access token expires, /auth/refresh marks the old refresh token used and returns a new pair." />
+  <img class="light:sl-hidden" src="../../diagrams/auth-sequence-dark.svg" width="720" height="628" alt="The client posts its credentials to /auth/login; with two-factor authentication on, the API stores a challenge in Redis and answers 202 with an mfaToken, which the client sends with a code to /login/mfa; the API saves a refresh-token hash and returns an access JWT and a refresh token; when the access token expires, /auth/refresh marks the old refresh token used and returns a new pair." />
+</figure>
+
+How long a session lasts without and with refreshing:
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/session-lifetime-light.svg" width="720" height="364" alt="Session timeline: a session that stops refreshing ends one day after its last refresh, while one that keeps refreshing is still cut off seven days after login; remember-me uses 30 and 90 days." />
+  <img class="light:sl-hidden" src="../../diagrams/session-lifetime-dark.svg" width="720" height="364" alt="Session timeline: a session that stops refreshing ends one day after its last refresh, while one that keeps refreshing is still cut off seven days after login; remember-me uses 30 and 90 days." />
+</figure>
 
 ### Listing and ending sessions
 
@@ -130,6 +150,11 @@ Access-token revocation lives in Redis: denylisted session ids and per-user cut-
 affected tokens would have expired, and the JWT decoder checks both in one round trip on every request, on every
 instance. After a password change the client must log in again.
 
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/session-invalidation-light.svg" width="720" height="624" alt="A password or role change raises the user's session version and deletes the refresh tokens in the same transaction; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh with an old token gets 401." />
+  <img class="light:sl-hidden" src="../../diagrams/session-invalidation-dark.svg" width="720" height="624" alt="A password or role change raises the user's session version and deletes the refresh tokens in the same transaction; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh with an old token gets 401." />
+</figure>
+
 ## Passwords
 
 New passwords follow NIST SP 800-63B-4:
@@ -174,8 +199,11 @@ password or logged in on a newer version cannot log in until they reset their pa
 - The link's page chooses the username and password and calls `POST /api/v1/auth/register/complete`, which
   creates the account with the address already verified (`201`). Whoever opens the link sets the credentials, so
   nobody can prepare an account on someone else's address. The token is a JWT of its own type (`sign-up+jwt`)
-  holding the address, signed with the JWT keys and valid for 24 hours; nothing is stored for it. A link used
-  twice answers `409 email-taken`, a taken username `409 username-taken` (usernames are public).
+  holding the address, signed with the JWT keys and valid for 24 hours. Nothing is stored in the database; Redis
+  remembers a used link until it expires, so a link used twice answers `400 invalid-token`. `409 email-taken` means
+  the
+  address got an account in the meantime (another sign-up link was used, or Redis was down when this one was). A taken
+  username answers `409 username-taken` (usernames are public).
 - Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword`, marks the new address unverified, sends a new
   verification email and revokes every reset and verification link sent to the old address.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding
@@ -184,6 +212,11 @@ password or logged in on a newer version cannot log in until they reset their pa
   the new one get `403` at login. Sign-ups are verified when the account is created, so this applies only after
   an email change.
 - Emails go through an outbox with retries, see [Observability](../observability/#email-outbox).
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/sign-up-light.svg" width="720" height="684" alt="POST /auth/register claims a Redis cooldown, looks up the address and emails either an already-registered notice or a sign-up link, answering 202 either way; the link's page posts to /register/complete, which checks the link is unused, inserts a verified user, marks the link used and answers 201." />
+  <img class="light:sl-hidden" src="../../diagrams/sign-up-dark.svg" width="720" height="684" alt="POST /auth/register claims a Redis cooldown, looks up the address and emails either an already-registered notice or a sign-up link, answering 202 either way; the link's page posts to /register/complete, which checks the link is unused, inserts a verified user, marks the link used and answers 201." />
+</figure>
 
 ## Two-factor authentication
 
@@ -198,6 +231,11 @@ Users can protect their account with an authenticator app (TOTP, RFC 6238: Googl
 
 Once it is on, a correct password (or GitHub/Google login) answers `202` with an `mfaToken` instead of tokens; the
 client sends it with a code to `/login/mfa` within `MFA_CHALLENGE_TTL` (5 minutes) and gets the usual token response.
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/totp-states-light.svg" width="720" height="496" alt="Two-factor states: POST /totp moves Off to Pending, where it can be repeated for a new secret; POST /confirm with password and code turns it on and returns 10 recovery codes; DELETE /totp with password and code turns it back off." />
+  <img class="light:sl-hidden" src="../../diagrams/totp-states-dark.svg" width="720" height="496" alt="Two-factor states: POST /totp moves Off to Pending, where it can be repeated for a new secret; POST /confirm with password and code turns it on and returns 10 recovery codes; DELETE /totp with password and code turns it back off." />
+</figure>
 
 - Secrets are encrypted with AES-256-GCM under a key derived from `MFA_ENCRYPTION_KEY` with HKDF-SHA256 (RFC 5869),
   bound to the user id, so a database dump alone does not reveal them. Stored values carry a version prefix (`v1:`),
@@ -228,6 +266,11 @@ frontend runs the redirect and hands the code to the API.
 4. The API exchanges the code (with the client secret, which never leaves the server), reads the profile and answers
    like `/login`: `200` with tokens and cookies, or `202` when the user has 2FA.
 
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/social-login-light.svg" width="720" height="612" alt="The frontend gets the providers' authorization URIs, keeps state and a PKCE code_verifier and redirects to GitHub or Google; back on its redirect page it checks state and posts the code and verifier to the API, which exchanges them with the client secret, links or creates the user and answers 200 with tokens or 202 with an mfaToken." />
+  <img class="light:sl-hidden" src="../../diagrams/social-login-dark.svg" width="720" height="612" alt="The frontend gets the providers' authorization URIs, keeps state and a PKCE code_verifier and redirects to GitHub or Google; back on its redirect page it checks state and posts the code and verifier to the API, which exchanges them with the client secret, links or creates the user and answers 200 with tokens or 202 with an mfaToken." />
+</figure>
+
 ```ts
 // Step 2, in the browser
 const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
@@ -247,11 +290,16 @@ Who logs in:
 - Otherwise a new `USER` is created with the email marked verified and a random password; it can set a password
   through the password reset, which it needs to delete the account, change its email or turn on 2FA.
 
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/social-account-resolution-light.svg" width="712" height="728" alt="A provider account linked before logs in as its user; otherwise an unverified provider email gets 403, an email whose local account is unverified gets 409, an email with a verified account is linked to it, and an unknown email creates a new user; then the login proceeds." />
+  <img class="light:sl-hidden" src="../../diagrams/social-account-resolution-dark.svg" width="712" height="728" alt="A provider account linked before logs in as its user; otherwise an unverified provider email gets 403, an email whose local account is unverified gets 409, an email with a verified account is linked to it, and an unknown email creates a new user; then the login proceeds." />
+</figure>
+
 ## Personal data (GDPR / KVKK)
 
 `DELETE /api/v1/users/me` implements the right to erasure: it needs the current password (a stolen token alone is not
-enough), deletes the user and everything that references it with `ON DELETE CASCADE`, and ends its sessions. The last
-administrator cannot delete their own account.
+enough), deletes the user and everything that references it with `ON DELETE CASCADE`, and ends its sessions. The owner
+cannot delete their own account (`409 owner-protected`).
 
 `GET /api/v1/users/me/export` implements the rights of access and portability. It returns the profile plus one section
 per `PersonalDataProvider` bean, as a `personal-data.json` attachment; the template contributes the active sessions
@@ -326,17 +374,20 @@ Security events are written to the `audit` logger and counted in the `security_a
 | `auth.mfa_failed`, `auth.recovery_code_used`, `auth.social_account_linked` | Second factor and social login |
 | `auth.logout`, `auth.session_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused`, `auth.session_expired_absolute` | Session changes |
 | `user.mfa_enabled`, `user.mfa_disabled` | Two-factor authentication turned on or off |
-| `user.registered`, `user.email_verified`, `user.password_changed` | Account changes |
+| `user.registered`, `user.registration_repeated`, `user.email_verified`, `user.password_changed` | Account changes |
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |
 | `user.account_deleted`, `user.data_exported` | Personal data requests |
 | `admin.user_updated`, `admin.role_changed`, `admin.user_deleted` | Administrator actions |
 
 Each entry has the affected `userId`, the authenticated `actorId`, the `clientIp`, and event-specific fields. Failed
-logins include the `identifier` that was tried. With the prod profile these are separate JSON fields, for example:
+and
+blocked logins include `identifierHash`, the first 12 hex characters of the SHA-256 of the lower-cased identifier,
+never the identifier itself (users sometimes type their password into it). With the prod profile these are separate
+JSON fields, for example:
 
 ```json
-{"log":{"level":"WARN","logger":"audit"},"message":"event=auth.login_failed clientIp=203.0.113.7 identifier=alice",
- "event":"auth.login_failed","clientIp":"203.0.113.7","identifier":"alice","traceId":"…"}
+{"log":{"level":"WARN","logger":"audit"},"message":"event=auth.login_failed clientIp=203.0.113.7 identifierHash=2bd806c97f0e",
+ "event":"auth.login_failed","clientIp":"203.0.113.7","identifierHash":"2bd806c97f0e","traceId":"…"}
 ```
 
 Entries are written after the transaction commits, so rolled-back actions never appear. Add an `AuditEvent` and call

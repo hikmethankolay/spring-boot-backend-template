@@ -19,6 +19,7 @@ defaults marked *prod: must change* below.
 | `DB_NAME` / `DB_PORT` | `app` / `5432` | Database name and host port of the local `db` container (compose only; the app uses `DB_URL`) |
 | `DB_POOL_SIZE` / `DB_CONNECTION_TIMEOUT_MS` | `10` / `5000` | Connections per instance; how long a request waits for one |
 | `DB_STATEMENT_TIMEOUT` / `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `30s` / `60s` | PostgreSQL cancels longer queries and idle transactions (`0` disables) |
+| `FLYWAY_ENABLED` | `true` | Run the migrations at startup; `false` when a separate migration Job (profile `migrate`) owns the schema, see [Production](../production/#kubernetes) |
 | `REDIS_HOST`, `REDIS_PORT` | `localhost`, `6379` | Redis: cache, lockout, rate limit, token revocation |
 | `REDIS_PASSWORD` / `REDIS_SSL_ENABLED` | *(none)* / `false` | Managed Redis with authentication and TLS; add `SPRING_DATA_REDIS_USERNAME` for an ACL user |
 | `CACHE_TTL` | `10m` | How long cached entries live |
@@ -61,6 +62,11 @@ and the production overrides are in
 
 The schema is managed by Flyway (`src/main/resources/db/migration`), and Hibernate only validates that the entities
 match it. Databases created before Flyway was introduced are baselined at version 1 instead of failing.
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/data-model-light.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens and social_identities point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
+  <img class="light:sl-hidden" src="../../diagrams/data-model-dark.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens and social_identities point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
+</figure>
 
 Migrations run with the same `statement_timeout` as the application. For a migration that needs longer (a large
 backfill or index), start that release once with `DB_STATEMENT_TIMEOUT=0`, or use `SET LOCAL statement_timeout` inside

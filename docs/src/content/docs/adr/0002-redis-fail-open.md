@@ -27,4 +27,5 @@ clients keep working, since access tokens are verified without Redis and refresh
   fail until Redis is back.
 - During the outage, rate limiting is off, and a revoked access token is accepted until it expires (at most
   `JWT_ACCESS_TOKEN_TTL`). Refresh tokens are in PostgreSQL and stay revocable.
-- The `RedisDown` runbook covers what to watch for while it lasts.
+- Redis has no alert of its own: the burst of warnings it causes fires `WarningLogSpike`, and
+  [its runbook](../../guides/runbooks/#warninglogspike) covers what to watch for while it lasts.

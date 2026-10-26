@@ -25,6 +25,9 @@ docs/public/api/openapi.json
 bin/
 out/
 
+# Python (docs/diagrams)
+__pycache__/
+
 # OS / logs
 .DS_Store
 Thumbs.db

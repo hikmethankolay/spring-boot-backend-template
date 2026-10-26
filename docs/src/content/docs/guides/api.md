@@ -24,7 +24,7 @@ The document describes the behaviour, not just the shapes:
 - public operations have an empty `security` list; protected ones accept the `bearerAuth` header **or** the
   `cookieAuth` cookie (`auth_token`); refresh and logout also document the `refresh_token` cookie;
 - responses declare `X-Trace-Id` and `RateLimit-*` (plus `Retry-After` on 429, `WWW-Authenticate` on 401, `Location`
-  on 201 and `Set-Cookie` on token responses), defined once under `components.headers`;
+  on 201 and `Set-Cookie` on token responses); the reusable ones are defined once under `components.headers`;
 - page responses mark every field as required, and password fields are `writeOnly` with `format: password`;
 - pagination is three query parameters, `page`, `size` (at most 100) and `sort`.
 
@@ -104,9 +104,10 @@ push and type-checks it, but check the generator you choose against your own bui
 | `DELETE` | `/api/v1/users/me/sessions/{id}` | authenticated | `204`; that device is logged out at once |
 | `GET` | `/api/v1/users?page=0&size=20&sort=createdAt,desc` | admin | `200` page |
 | `GET` | `/api/v1/users/{id}` | admin or that user | `200` |
-| `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; role changes and administrators: owner + password | `200` / `204` |
+| `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; administrators: owner; role changes and deleting an administrator: owner + password | `200` / `204` |
 | `GET` / `POST` | `/api/v1/notes` | authenticated (own notes only) | `200` page / `201` + `Location` |
 | `GET` / `PUT` / `DELETE` | `/api/v1/notes/{id}` | the note's owner | `200` / `200` / `204` |
+| `GET` | `/.well-known/jwks.json` | public | `200` JWK Set with the public signing key (empty with HS256) |
 
 The notes endpoints belong to the sample feature (`note/`); see [Your first feature](../first-feature/).
 
@@ -151,12 +152,13 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:invalid-credentials` | 401 | Wrong login, or a refresh token that is missing, invalid, expired or used |
 | `urn:problem:unauthenticated` | 401 | The access token is missing, invalid, expired or revoked |
 | `urn:problem:forbidden` | 403 | The caller lacks the required role |
+| `urn:problem:cross-site-request` | 403 | A state-changing request authenticated by cookie came without an allowed `Origin` or `X-Requested-With: XMLHttpRequest` |
 | `urn:problem:owner-required` | 403 | Only the owner can change roles and manage administrators |
 | `urn:problem:email-not-verified` | 403 | Login before the email address is verified (when required) |
 | `urn:problem:user-not-found` | 404 | No user has this id |
 | `urn:problem:note-not-found` | 404 | The caller has no note with this id (other users' notes look missing too) |
 | `urn:problem:session-not-found` | 404 | The caller has no session with this id (other users' sessions look missing too) |
-| `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account (registration never answers `email-taken`) |
+| `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account (`POST /register` never answers `email-taken`) |
 | `urn:problem:password-too-short` | 400 | The new password has fewer than 15 characters (8 with two-factor authentication) |
 | `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |
 | `urn:problem:owner-protected` | 409 | The owner cannot be deleted or demoted, and `OWNER` cannot be assigned |
@@ -184,7 +186,7 @@ hash, is rejected with `400`, because sorting by a hidden column reveals informa
 | `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset` | Rate limit state (seconds until reset) |
 | `Retry-After` | On `429`: seconds to wait |
 | `Location` | On `201`: URL of the created resource |
-| `Cache-Control: no-store` | On every response, including token responses |
+| `Cache-Control: no-store` | On every response: exactly `no-store` on token responses, Spring Security's `no-cache, no-store, max-age=0, must-revalidate` elsewhere |
 | `Content-Security-Policy`, `Referrer-Policy`, `Permissions-Policy` | Browser hardening, see [Security](../security/#security-headers) |
 
 ## Token response

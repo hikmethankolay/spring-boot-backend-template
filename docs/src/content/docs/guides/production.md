@@ -109,10 +109,16 @@ Kustomize base:
 ```bash
 kubectl -n backend create secret generic app-secrets --from-literal=JWT_SECRET=... # see deploy/kubernetes/README.md
 kubectl -n backend create secret generic app-migrator-secrets --from-literal=DB_USERNAME=app_owner --from-literal=DB_PASSWORD=...
+kubectl -n backend apply -f deploy/kubernetes/configmap.yaml   # the Job reads it; needed before the first apply -k
 kubectl apply -f deploy/kubernetes/migrate-job.yaml
 kubectl -n backend wait --for=condition=complete job/migrate --timeout=10m
 kubectl apply -k deploy/kubernetes
 ```
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/kubernetes-light.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner; egress is limited to Redis, SMTP/HTTPS and PostgreSQL." />
+  <img class="light:sl-hidden" src="../../diagrams/kubernetes-dark.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner; egress is limited to Redis, SMTP/HTTPS and PostgreSQL." />
+</figure>
 
 #### Database roles
 
@@ -145,6 +151,11 @@ For an existing database migrated by `app` itself, transfer the tables to `app_o
    commits the image digest to `kustomization.yaml` and `migrate-job.yaml` on `main`
    (`chore(deploy): pin the <version> image digest`). Pull it; until then the manifests still pin the previous digest.
 3. Run the migration Job, then `kubectl apply -k deploy/kubernetes`.
+
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/release-pipeline-light.svg" width="720" height="832" alt="scripts/release.sh checks and stamps the release, then commits, tags and pushes atomically; the tag runs test, then release (multi-arch image, SBOM, cosign signing, GitHub release), then pin-digest and SLSA provenance in parallel, and pages.yml; an operator then runs the migrate Job and kubectl apply -k." />
+  <img class="light:sl-hidden" src="../../diagrams/release-pipeline-dark.svg" width="720" height="832" alt="scripts/release.sh checks and stamps the release, then commits, tags and pushes atomically; the tag runs test, then release (multi-arch image, SBOM, cosign signing, GitHub release), then pin-digest and SLSA provenance in parallel, and pages.yml; an operator then runs the migrate Job and kubectl apply -k." />
+</figure>
 
 `pin-digest` pushes with the workflow's token. If `main` is protected, allow GitHub Actions to push to it, or set the
 digest by hand from the release workflow's log.

@@ -64,7 +64,7 @@ configure_testcontainers() {
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     return
   fi
-  command -v podman >/dev/null 2>&1 || { warn "No container runtime found; integration tests will be skipped."; return; }
+  command -v podman >/dev/null 2>&1 || { warn "No container runtime found; integration tests will fail (use --unit to run only unit tests)."; return; }
 
   local socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
   # The socket file can outlive the service, so check the unit rather than the file.
@@ -76,6 +76,6 @@ configure_testcontainers() {
     export DOCKER_HOST="unix://$socket"
     export TESTCONTAINERS_RYUK_DISABLED="${TESTCONTAINERS_RYUK_DISABLED:-true}"
   else
-    warn "Podman socket not available; integration tests will be skipped."
+    warn "Podman socket not available; integration tests will fail (use --unit to run only unit tests)."
   fi
 }

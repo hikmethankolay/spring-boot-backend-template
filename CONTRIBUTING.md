@@ -27,6 +27,8 @@ explain the details.
 - Configuration changes are reflected in `.env.example` and the Configuration guide (`docs/`).
 - API changes are reflected in the committed `api/openapi.json`: regenerate it with
   `scripts/test.sh -Dit.test=OpenApiSpecExportIntegrationTest -Dopenapi.update=true` and review the diff.
+- Diagrams are drawn in `docs/diagrams/*.py`: change them there and run `python3 docs/diagrams/diagrams.py`,
+  which checks their layout and rewrites the light and dark SVGs in `docs/public/diagrams/`.
 - Database changes are new Flyway migrations (`V<n>__description.sql`); never edit a released one.
 
 ## Commits and pull requests

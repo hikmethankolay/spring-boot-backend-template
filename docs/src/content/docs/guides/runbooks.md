@@ -92,7 +92,7 @@ exceptions return `500` with a problem detail; the log has the stack trace.
 More than 10 warnings per minute, usually because **Redis is unreachable**: the logs say `Could not check login
 failures`, `Rate limit check failed` or `Could not check token revocation`.
 
-1. Check Redis: `scripts/db.sh redis-cli ping` locally, or the managed service's status page.
+1. Check Redis: `scripts/db.sh redis-cli`, then `PING`, locally, or the managed service's status page.
 2. **Impact while Redis is down** ([ADR 2](../../adr/0002-redis-fail-open/)): new logins fail with `503`, so no
    password can be guessed meanwhile. Signed-in clients keep working and refresh their tokens (refresh tokens are in
    PostgreSQL), but rate limiting is off, revoked access tokens stay valid until they expire (15 minutes), and the
@@ -119,9 +119,9 @@ the backlog by itself once SMTP recovers.
 
 ### ScheduledTaskFailing
 
-A `@Scheduled` method (email dispatcher, expired-token cleanup) threw an exception. The `code_function` label names
-it. Search the logs for the exception; a failing cleanup only lets old rows pile up, a failing dispatcher also raises
-`EmailBacklog`.
+A `@Scheduled` method (email dispatcher, expired account-token and refresh-token cleanup, audit retention purge)
+threw an exception. The `code_function` label names it. Search the logs for the exception; a failing cleanup only
+lets old rows pile up, a failing dispatcher also raises `EmailBacklog`.
 
 ## Deploys
 

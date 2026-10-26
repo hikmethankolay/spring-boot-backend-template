@@ -18,7 +18,7 @@ description: Turn the template into your own project.
    guides, and the documentation site's address. If `origin` is missing or still the template, it stops before
    changing anything; pass your repository with `--repo owner/name`. It refuses to run twice.
 3. Add your tables as new Flyway migrations in `src/main/resources/db/migration`, numbered after the last one
-   (`V10__create_orders.sql`, ...). Never edit a migration that has already been applied.
+   (`V13__create_orders.sql`, ...). Never edit a migration that has already been applied.
 4. Add each feature as its own package next to `user/`, with its own controller, service, repository and `dto/`.
    The sample `note/` package shows all of it; see [Your first feature](../first-feature/), which also says how to
    delete it.
@@ -51,8 +51,13 @@ description: Turn the template into your own project.
 login with GitHub and Google (`social/`) are also called from `auth/`, so they take a few more steps. Either can be
 removed on its own. Both change the API, so clients and `scripts/client.sh` output must follow.
 
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/package-dependencies-light.svg" width="720" height="544" alt="auth depends on account, mfa, social and the user and security core; account, mfa, social and note depend on that core; account also uses mail; every package uses audit, common and config; only auth imports mfa and social." />
+  <img class="light:sl-hidden" src="../../diagrams/package-dependencies-dark.svg" width="720" height="544" alt="auth depends on account, mfa, social and the user and security core; account, mfa, social and note depend on that core; account also uses mail; every package uses audit, common and config; only auth imports mfa and social." />
+</figure>
+
 Leave `V7__two_factor_and_social_login.sql` as it is; it has run in every existing database. Drop the tables in a new
-migration instead (`V10`, or `V11` for the second feature you remove). Back up first: for two-factor authentication,
+migration instead (`V13`, or `V14` for the second feature you remove). Back up first: for two-factor authentication,
 this turns it off for every enrolled user for good.
 
 ### Social login
@@ -63,7 +68,8 @@ this turns it off for every enrolled user for good.
 3. `AuthController`: delete `loginProviders` and `loginWithProvider`.
 4. `AppProperties`: delete the `socialLogin` component and the `SocialLogin` record. In `ProductionSettingsCheck`,
    delete the `OAUTH2_REDIRECT_URI` check, and drop the `SocialLogin` argument in `TestProperties`,
-   `ProductionSettingsCheckTest`, `AdminBootstrapTest` and `SecretCipherTest`.
+   `ProductionSettingsCheckTest`, `AdminBootstrapTest`, `SecretCipherTest`, `CookieCsrfFilterTest` and
+   `BreachedPasswordValidatorTest`; delete the `SocialLogin` tests in `AppPropertiesTest`.
 5. Delete `PROVIDER_NOT_CONFIGURED`, `SOCIAL_EMAIL_UNVERIFIED` and `SOCIAL_ACCOUNT_CONFLICT` from `ProblemType`,
    `SOCIAL_ACCOUNT_LINKED` from `AuditEvent`, and `/api/v1/auth/oauth2/*` from `SecurityConfig.PUBLIC_PATHS`.
 6. Delete `app.social-login` from `application.yml` and `application-test.yml`, the GitHub/Google block from
@@ -88,7 +94,8 @@ Accounts created through GitHub or Google stay; their users set a password throu
    `tokenResponse(...)`, and lose their `202` responses.
 4. `User`: delete the `totp*` fields and methods. `UserResponse`: delete `mfaEnabled`.
 5. `AppProperties`: delete the `mfa` component and the `Mfa` record, and drop the argument in `TestProperties`,
-   `ProductionSettingsCheckTest` and `AdminBootstrapTest`.
+   `ProductionSettingsCheckTest`, `AdminBootstrapTest`, `SecretCipherTest`, `CookieCsrfFilterTest` and
+   `BreachedPasswordValidatorTest`; delete the `Mfa` tests in `AppPropertiesTest`.
 6. Delete `INVALID_MFA_CODE`, `MFA_CHALLENGE_EXPIRED`, `TOTP_ALREADY_ENABLED` and `TOTP_NOT_ENABLED` from
    `ProblemType`, the four `MFA_*`/`RECOVERY_CODE_USED` events from `AuditEvent`, `/api/v1/auth/login/mfa` from
    `SecurityConfig.PUBLIC_PATHS`, and `MfaChallengeService` from `spotbugs-exclude.xml`.

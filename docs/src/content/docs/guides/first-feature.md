@@ -35,7 +35,7 @@ delete their own notes at `/api/v1/notes`. Copy it as the starting point of your
 ## Turning it into your feature
 
 1. Copy `note/` to your package (say `order/`) and rename the classes.
-2. Add a migration with the next free number (`V10__orders.sql`); never edit an applied one.
+2. Add a migration with the next free number (`V13__orders.sql`); never edit an applied one.
 3. Add your problem types to `ProblemType` and to the table in [API](../api/#errors).
 4. Copy `NoteIntegrationTest` and adapt it.
 5. Regenerate the OpenAPI document and check the diff:

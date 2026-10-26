@@ -16,6 +16,11 @@ process stops between commit and send.
 Emails are written to the `email_outbox` table in the same transaction as the change. A scheduled dispatcher sends
 them with retries and backoff, and gives up after a fixed number of attempts.
 
+<figure>
+  <img class="dark:sl-hidden" src="../../diagrams/email-outbox-light.svg" width="720" height="588" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or dropped." />
+  <img class="light:sl-hidden" src="../../diagrams/email-outbox-dark.svg" width="720" height="588" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or dropped." />
+</figure>
+
 ## Consequences
 
 - An email is sent only if its change committed, and survives restarts and SMTP outages.

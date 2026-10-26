@@ -58,6 +58,16 @@ built from <code>{import.meta.env.PUBLIC_SITE_COMMIT ?? 'local'}</code> on {impo
   </Card>
 </CardGrid>
 
+## How it fits together
+
+<figure>
+  <img class="dark:sl-hidden" src="diagrams/architecture-light.svg" width="720" height="568" alt="Clients call the Spring Boot app over HTTPS through its security filters (trace id, rate limit, CSRF, JWT); REST controllers hand requests to the services, which use PostgreSQL and Redis and reach an SMTP server and GitHub or Google; Prometheus scrapes the app." />
+  <img class="light:sl-hidden" src="diagrams/architecture-dark.svg" width="720" height="568" alt="Clients call the Spring Boot app over HTTPS through its security filters (trace id, rate limit, CSRF, JWT); REST controllers hand requests to the services, which use PostgreSQL and Redis and reach an SMTP server and GitHub or Google; Prometheus scrapes the app." />
+</figure>
+
+The [Security guide](guides/security/) shows each flow: the request checks, login and refresh, sign-up, GitHub and
+Google login and ending sessions.
+
 ## Reference
 
 <CardGrid>

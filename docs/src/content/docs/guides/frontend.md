@@ -14,7 +14,8 @@ This page lists what the frontend has to do; [Security](../security/) explains w
 | `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email` and `/reset-password` pages |
 | `OAUTH2_REDIRECT_URI` | `http://localhost:3000/oauth2/callback` | Your callback page, registered at GitHub and Google |
 
-With `SPRING_PROFILES_ACTIVE=prod` the app refuses to start while any of these still points to localhost.
+With `SPRING_PROFILES_ACTIVE=prod` the app refuses to start while any of these still points to localhost
+(`OAUTH2_REDIRECT_URI` only when GitHub or Google is configured).
 
 ## Cookies or Bearer tokens
 
@@ -24,8 +25,10 @@ is only sent to `/api/v1/auth`). Pick one:
 - **Cookies**, for a browser app on the same site as the API (`app.example.com` and `api.example.com`, or
   `localhost:3000` and `localhost:8080`). Call the API with `credentials: "include"` and ignore the tokens in the body:
   JavaScript never sees the cookies, so an XSS bug cannot steal them. The cookies are `SameSite=Strict`, so the
-  browser does not send them from another site. Put the frontend's origin in `CORS_ALLOWED_ORIGINS` (or send
-  `X-Requested-With: XMLHttpRequest`): state-changing requests authenticated by cookie from anywhere else are
+  browser does not send them from another site. Put the frontend's origin in `CORS_ALLOWED_ORIGINS` (a same-origin
+  frontend can
+  send `X-Requested-With: XMLHttpRequest` instead): state-changing requests authenticated by cookie from anywhere else
+  are
   refused (`403 cross-site-request`). In production the cookies are named `__Host-auth_token` and
   `__Secure-refresh_token`; with `credentials: "include"` that needs no change in the frontend.
 - **Bearer tokens**, for mobile and desktop apps, or a browser app on a different site. Send
@@ -55,7 +58,7 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | Page | What it does |
 |------|--------------|
 | Sign up | `POST /api/v1/auth/register` with `email` only. The answer is `202` whether or not the address already has an account: show "Check your inbox" either way |
-| `/sign-up?token=…` | Ask for `username` and `password` (15–128 characters, no composition rules), then `POST /api/v1/auth/register/complete` with them and the `token` from the URL; `201` means the account exists, so send the user to log in. On `409 email-taken` the account was already created: offer login or password reset |
+| `/sign-up?token=…` | Ask for `username` and `password` (15–128 characters, no composition rules), then `POST /api/v1/auth/register/complete` with them and the `token` from the URL; `201` means the account exists, so send the user to log in. On `400 invalid-token` (or `409 email-taken`) the link was already used: offer login or password reset |
 | Log in | `POST /api/v1/auth/login` with `identifier` (username or email), `password` and optional `rememberMe`; see [Logging in](#logging-in) |
 | `/verify-email?token=…` | After an email change: `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL; offer `POST /api/v1/auth/verify-email/resend` |
 | Forgot password | `POST /api/v1/auth/password-reset` with `{"email": "…"}`; it answers `202` even for unknown addresses |
@@ -134,7 +137,7 @@ add an `errors` list with one entry per field. Branch on `type`, never on `title
 | `urn:problem:email-not-verified` | A hint to check the inbox, with the resend button |
 | `urn:problem:invalid-mfa-code` / `mfa-challenge-expired` | Ask for the code again / restart the login |
 | `urn:problem:login-locked` / `rate-limited` | Wait `Retry-After` seconds |
-| `urn:problem:username-taken` / `email-taken` | Mark the field (registration never answers `email-taken`) |
+| `urn:problem:username-taken` / `email-taken` | Mark the field (`POST /register` never answers `email-taken`; `/register/complete` does when the address already has an account) |
 | `urn:problem:password-too-short` / `password-breached` | Ask for a longer or a different password |
 
 Every type is listed in [API overview](../api/#errors). Put the `X-Trace-Id` response header into error reports: it

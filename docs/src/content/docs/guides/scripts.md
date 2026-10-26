@@ -17,7 +17,7 @@ Every script exists as `scripts/<name>.sh` and `scripts\<name>.bat`.
 | `smoke` | End-to-end check against a running instance: `scripts/smoke.sh [base-url]`. |
 | `load-test` | k6 load test against a running instance. See [Testing](../testing/#load-test). |
 | `docs` | Javadoc HTML in `target/reports/apidocs`. Fails on any Javadoc warning, including undocumented code. |
-| `site` | Builds this documentation website into `target/pages`. |
+| `site` | Builds this documentation website into `target/pages`, running the tests and Javadoc first; `--skip-build` reuses their existing output. |
 | `client` | An API client from `api/openapi.json`, generated with OpenAPI Generator in a container: TypeScript (`typescript-fetch`) by default, another language with `--generator <name>`. `scripts/client.sh [--generator <name>] [output-dir]` (default `target/client/<name>`). See [API overview](../api/#typescript-client). |
 | `rename-project` | Renames Maven coordinates, app name and Java package, and points the repository links to your GitHub repository (`origin`, or `--repo owner/name`). See [Using the template](../new-project/). |
 | `release` | `scripts/release.sh <version>` on an up-to-date `main`: moves the `[Unreleased]` notes of `CHANGELOG.md` under the version, sets the image tag in `deploy/kubernetes` and the version in the guides' examples, commits, tags, and pushes after asking. The release workflow then publishes the image and pins its digest. See [Production](../production/#releasing-to-kubernetes). |

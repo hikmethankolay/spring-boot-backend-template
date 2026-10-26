@@ -30,7 +30,7 @@ holds alerting rules for the things that need a human:
 | Security | more than 30 failed logins per minute, a reused refresh token, a role change |
 | Logs | any `ERROR` line, more than 10 warnings per minute (usually Redis unreachable) |
 | Email | emails given up after all retries, more than 100 emails waiting |
-| Background | a `@Scheduled` job (email dispatcher, cleanup) throwing |
+| Background | a `@Scheduled` job (email dispatcher, token cleanup, audit retention) throwing |
 | Resources | requests waiting for database connections, heap above 90% |
 
 Each alert has a [runbook](../runbooks/).
@@ -47,8 +47,9 @@ docker compose --profile monitoring down    # with Podman: podman compose --prof
 ```
 
 Prometheus runs on http://localhost:9090 and Grafana on http://localhost:3001; the dashboard is at
-`/d/spring-boot-template`. Prometheus scrapes `host.docker.internal:8080`, which reaches the app whether it runs
-from source or in the `app` container. `scripts/docker.sh down` does not stop these two containers; use the
+`/d/spring-boot-template`. Prometheus scrapes `host.docker.internal:8080`, the app started with `scripts/dev.sh`; for
+`scripts/docker.sh up`, change the target in `ops/prometheus/prometheus.yml` to `app:8080`. `scripts/docker.sh down`
+does not stop these two containers; use the
 `down` command above, or `podman compose --profile app --profile monitoring down` to stop everything at once.
 
 Grafana opens the dashboard without a login (anonymous viewer; the admin login is `admin` / `admin`). The rules are
