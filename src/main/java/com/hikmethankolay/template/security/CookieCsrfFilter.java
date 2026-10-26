@@ -59,15 +59,19 @@ public class CookieCsrfFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Skips safe methods and requests that are not authenticated by cookie.
+     * Skips safe methods and requests that are not authenticated by cookie. Only a Bearer header counts: any other
+     * {@code Authorization} (e.g. the Basic credentials a browser adds by itself behind a password-protected proxy)
+     * leaves the token to be read from the cookie, so the request must still be checked.
      *
      * @param request the current request
      * @return {@code true} if the request cannot be a forged state change
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        boolean bearer = authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7);
         return SAFE_METHODS.contains(request.getMethod())
-                || request.getHeader(HttpHeaders.AUTHORIZATION) != null
+                || bearer
                 || cookieNames.stream().noneMatch(name -> WebUtils.getCookie(request, name) != null);
     }
 

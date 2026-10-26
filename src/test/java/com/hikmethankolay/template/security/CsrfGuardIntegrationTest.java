@@ -29,6 +29,22 @@ class CsrfGuardIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void anAuthorizationHeaderOtherThanBearerDoesNotSkipTheGuard() throws Exception {
+        String token = registerAndLogin(uniqueUsername());
+
+        // A browser adds Basic credentials by itself behind a password-protected proxy; the cookie still authenticates.
+        mockMvc.perform(createNote()
+                        .cookie(new Cookie("auth_token", token))
+                        .header(HttpHeaders.AUTHORIZATION, "Basic c3RhZ2luZzpzZWNyZXQ="))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value("urn:problem:cross-site-request"));
+        mockMvc.perform(createNote()
+                        .cookie(new Cookie("auth_token", token))
+                        .header(HttpHeaders.AUTHORIZATION, "bearer " + token))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void aCookieRequestFromAnAllowedOriginOrWithTheHeaderPasses() throws Exception {
         String token = registerAndLogin(uniqueUsername());
 
