@@ -13,6 +13,19 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - The release workflow commits the published image's digest to `deploy/kubernetes` on `main`, so the manifests no
   longer need it set by hand.
 
+### Changed
+
+- GitHub Actions: setup-java 6, setup-node 7, upload-artifact 7, and the Docker actions setup-qemu 4, setup-buildx
+  4, metadata 6 and build-push 7 (all on Node 24). cosign-installer 4, still installing cosign 2: cosign 3 signs in a
+  new bundle format by default, which the Sigstore policy-controller and cosign 2 verifiers may not read.
+- Maven 3.10.0 with Maven Wrapper 3.3.4; astro 7.4.2 for the documentation site.
+- `compose.yaml`: Mailpit v1.32, Prometheus v3.15.1 and Grafana 13.2.4.
+
+### Fixed
+
+- `SECURITY.md` listed 3.2.x as the supported version, and the README gave Kubernetes 1.25 as the oldest that works
+  (4.0.0 needs 1.30).
+
 ## [4.0.1] - 2026-10-26
 
 ### Fixed
