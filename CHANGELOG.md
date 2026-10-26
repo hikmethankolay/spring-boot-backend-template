@@ -6,6 +6,19 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-10-26
+
+### Fixed
+
+- The documentation site of 4.0.0 was not published: a leftover `@return` in the Javadoc of the register endpoint
+  failed the Javadoc build.
+- `scripts/rename-project.sh` deletes `.gitleaksignore`, whose entries apply only to this repository's history, so
+  the template's references to itself no longer remain in a renamed project.
+
+### Changed
+
+- json-schema-validator 3.0.8 (used by the tests), Error Prone 2.51.0 and JaCoCo 0.8.15.
+
 ## [4.0.0] - 2026-10-26
 
 A security release. Every item marked **Breaking** needs a change in clients or deployments; the guides describe
@@ -307,7 +320,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.9...v4.0.0
 [3.2.9]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.8...v3.2.9
 [3.2.8]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v3.2.5...v3.2.8
