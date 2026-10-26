@@ -129,6 +129,8 @@ New passwords follow NIST SP 800-63B-4:
 
 - **Length, no composition rules.** 15 to 128 characters, counted as Unicode code points; 8 are enough for a user
   with two-factor authentication. A shorter one is refused with `urn:problem:password-too-short`.
+  Two-factor authentication cannot be turned off while the password is shorter than 15 characters (also
+  `password-too-short`): change the password first, so no account is left with a short password and one factor.
 - **Blocklist.** Every new password (registration, change, reset, admin update) is checked, ignoring case, against
   the bundled `breached-passwords.txt`: the 46,000 entries of 8 or more characters from the NCSC top 100,000 list.
   A match is refused with `urn:problem:password-breached`. With `PWNED_CHECK_ENABLED=true` the password is also

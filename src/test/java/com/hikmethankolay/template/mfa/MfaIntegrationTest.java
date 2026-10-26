@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -109,7 +110,7 @@ class MfaIntegrationTest extends IntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type").value("urn:problem:totp-already-enabled"));
 
-        mockMvc.perform(disable(token, "Wrong#123", Totp.code(secret, step + 1), "10.0.9.5"))
+        mockMvc.perform(disable(token, "wrong-password-here", Totp.code(secret, step + 1), "10.0.9.5"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:wrong-password"));
         mockMvc.perform(disable(token, PASSWORD, Totp.code(secret, step + 1), "10.0.9.5"))
@@ -118,6 +119,47 @@ class MfaIntegrationTest extends IntegrationTest {
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
                 .andExpect(jsonPath("$.mfaEnabled").value(false));
         login(username, PASSWORD);
+    }
+
+    @Test
+    void aShortPasswordAllowedByTwoFactorKeepsTwoFactorOn() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        confirm(token, Totp.code(secret, step));
+        // With a second factor, 8 characters are enough.
+        String shortPassword = "tq8-vbmz";
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"currentPassword":"%s","newPassword":"%s"}""", PASSWORD, shortPassword)))
+                .andExpect(status().isNoContent());
+        String mfaToken = JsonPath.read(
+                mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(json("""
+                                        {"identifier":"%s","password":"%s"}""", username, shortPassword)))
+                        .andExpect(status().isAccepted())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString(),
+                "$.mfaToken");
+        String fresh = JsonPath.read(
+                mockMvc.perform(mfaLogin(mfaToken, Totp.code(secret, step + 1), "10.0.9.7"))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString(),
+                "$.accessToken");
+
+        // Without the second factor the password would be too short, so it stays on.
+        mockMvc.perform(disable(fresh, shortPassword, Totp.code(secret, step + 1), "10.0.9.7"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:password-too-short"));
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(fresh)))
+                .andExpect(jsonPath("$.mfaEnabled").value(true));
     }
 
     @Test

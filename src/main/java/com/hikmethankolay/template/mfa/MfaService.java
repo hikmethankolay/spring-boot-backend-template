@@ -12,6 +12,7 @@ import com.hikmethankolay.template.mfa.dto.TotpEnrollmentResponse;
 import com.hikmethankolay.template.security.LoginAttemptService;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
+import com.hikmethankolay.template.user.UserService;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -153,8 +154,9 @@ public class MfaService {
      * @param currentPassword the caller's password
      * @param code            an authenticator code or an unused recovery code
      * @param clientIp        address of the client, used for the lockout
-     * @throws ApiException 409 if it is off, 400 if the password or the code is wrong, 429 if the IP or account
-     *                      is blocked, 503 if the failed-login counters cannot be checked
+     * @throws ApiException 409 if it is off, 400 if the password or the code is wrong or the password is too short
+     *                      to keep without a second factor, 429 if the IP or account is blocked, 503 if the
+     *                      failed-login counters cannot be checked
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#userId")
@@ -162,6 +164,14 @@ public class MfaService {
         User user = findUser(userId);
         if (!user.isTotpEnabled()) {
             throw ApiException.conflict(ProblemType.TOTP_NOT_ENABLED, "Two-factor authentication is off.");
+        }
+        // 8 characters are allowed only with a second factor; without one the password needs 15. Checked before
+        // anything is verified or counted, so no code (or recovery code) is used up by a refused request.
+        if (!UserService.meetsSingleFactorLength(currentPassword)) {
+            throw ApiException.badRequest(
+                    ProblemType.PASSWORD_TOO_SHORT,
+                    "Change your password to one with at least " + UserService.MIN_PASSWORD_LENGTH
+                            + " characters before turning off two-factor authentication.");
         }
         // The same keys as AuthService, so these failures and failed logins share one limit.
         String accountKey = "account:" + userId;

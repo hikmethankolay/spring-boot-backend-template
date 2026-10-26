@@ -398,6 +398,17 @@ public class UserService {
     }
 
     /**
+     * Tells whether a password is long enough for an account without two-factor authentication.
+     *
+     * @param password the plain password
+     * @return {@code true} if it has at least {@link #MIN_PASSWORD_LENGTH} characters, counted as code points so a
+     *     character outside the BMP counts once (NIST SP 800-63B-4)
+     */
+    public static boolean meetsSingleFactorLength(String password) {
+        return password.codePointCount(0, password.length()) >= MIN_PASSWORD_LENGTH;
+    }
+
+    /**
      * Checks a new password against the length rule and the breached list, then hashes it.
      *
      * @param twoFactor   whether the user has two-factor authentication, which allows 8 characters
@@ -406,8 +417,7 @@ public class UserService {
      * @throws ApiException 400 if the password is too short or breached
      */
     private String encodeNewPassword(boolean twoFactor, String rawPassword) {
-        // Code points, so a character outside the BMP counts once (NIST SP 800-63B-4).
-        if (!twoFactor && rawPassword.codePointCount(0, rawPassword.length()) < MIN_PASSWORD_LENGTH) {
+        if (!twoFactor && !meetsSingleFactorLength(rawPassword)) {
             throw ApiException.badRequest(
                     ProblemType.PASSWORD_TOO_SHORT,
                     "The password needs at least " + MIN_PASSWORD_LENGTH
