@@ -6,6 +6,13 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Changed
+
+- Releases are signed with cosign 3, in the Sigstore bundle format (the image signature is an OCI referrer, the SBOM
+  bundle uses the new format). Verify them with cosign 3, or cosign 2.6 with `--new-bundle-format`.
+- `deploy/kubernetes/policy/` accepts both formats, so rollbacks to earlier releases are still admitted. It needs the
+  Sigstore policy-controller v0.15.0 or later.
+
 ## [4.0.2] - 2026-10-26
 
 ### Added

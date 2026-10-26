@@ -1,8 +1,10 @@
 # Admission policy for the Sigstore policy-controller (https://docs.sigstore.dev/policy-controller/overview/): in
 # namespaces labelled policy.sigstore.dev/include=true (namespace.yaml), pods may run this image only if it was signed
 # keylessly by this repository's release workflow on a v* tag (SLSA v1.0 verification). Install the policy-controller
-# first, then: kubectl apply -f deploy/kubernetes/policy/
+# (v0.15.0 or later, for the bundle format) first, then: kubectl apply -f deploy/kubernetes/policy/
 # Not part of kustomization.yaml, so clusters without the controller can still apply the rest.
+# An image is admitted when one authority matches: releases from 4.0.3 on are signed by cosign 3 in the Sigstore
+# bundle format, earlier ones in the legacy format, which stays accepted so rollbacks keep working.
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -11,7 +13,15 @@ spec:
   images:
     - glob: ghcr.io/hikmethankolay/spring-boot-backend-template**
   authorities:
-    - keyless:
+    - name: bundle
+      signatureFormat: bundle
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: ^https://github\.com/hikmethankolay/spring-boot-backend-template/\.github/workflows/release\.yml@refs/tags/v.*$
+    - name: legacy
+      keyless:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com

@@ -49,7 +49,9 @@ docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=prod \
 
 ### Verify the image
 
-Check that an image was built by this repository's release workflow before deploying it:
+Check that an image was built by this repository's release workflow before deploying it. Releases from 4.0.3 on
+are signed by cosign 3 in the Sigstore bundle format, so verify them with cosign 3 (cosign 2.6 needs
+`--new-bundle-format`); earlier releases verify with either version:
 
 ```bash
 cosign verify ghcr.io/hikmethankolay/spring-boot-backend-template:4.0.2 \
@@ -101,7 +103,8 @@ Kustomize base:
   may only read and write rows. Run the Job before every rollout.
 - **Pinned and signed image:** `kustomization.yaml` pins the release by tag and digest, so a moved tag cannot change
   what runs. With the [Sigstore policy-controller](https://docs.sigstore.dev/policy-controller/overview/) installed,
-  `deploy/kubernetes/policy/` admits only images this repository's release workflow signed.
+  `deploy/kubernetes/policy/` admits only images this repository's release workflow signed. It needs policy-controller
+  v0.15.0 or later, which reads the bundle format of releases from 4.0.3 on.
 
 ```bash
 kubectl -n backend create secret generic app-secrets --from-literal=JWT_SECRET=... # see deploy/kubernetes/README.md
