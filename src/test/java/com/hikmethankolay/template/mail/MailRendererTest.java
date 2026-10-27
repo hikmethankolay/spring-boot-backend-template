@@ -80,7 +80,7 @@ class MailRendererTest {
     }
 
     @Test
-    void optionalEmailGetsTheUnsubscribeFooter() {
+    void optionalEmailGetsTheUnsubscribeFooter() throws IOException {
         RenderedMail mail = renderer.render(
                 "broadcast/announcement",
                 "News",
@@ -98,6 +98,7 @@ class MailRendererTest {
                 .contains(
                         "Unsubscribe from Product updates: https://app.example.com/unsubscribe?token=zz9",
                         "Manage email preferences: https://app.example.com/settings/emails");
+        assertMatchesSnapshot("broadcast-announcement", mail.html());
     }
 
     @Test
