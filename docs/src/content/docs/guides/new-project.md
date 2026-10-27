@@ -138,7 +138,7 @@ commits named in the release notes:
 ```bash
 git remote add template https://github.com/hikmethankolay/spring-boot-backend-template.git
 git fetch template --tags
-git log --oneline v4.0.3..template/main        # what changed since the version you started from
+git log --oneline v4.1.0..template/main        # what changed since the version you started from
 git cherry-pick -x <commit>                      # -x records where the change came from
 ```
 

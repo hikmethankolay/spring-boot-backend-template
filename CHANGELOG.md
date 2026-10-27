@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-10-27
+
 ### Added
 
 - HTML emails: `MailRenderer` renders every email from a Thymeleaf template pair in `src/main/resources/mail/` (a
@@ -383,7 +385,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.3...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.0...v4.0.1

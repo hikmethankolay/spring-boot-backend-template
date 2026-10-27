@@ -35,7 +35,7 @@ spec:
       containers:
         - name: migrate
           # The same image as kustomization.yaml pins; KubernetesManifestTest keeps the two equal.
-          image: ghcr.io/hikmethankolay/spring-boot-backend-template:4.0.3@sha256:8d8b210cab92d26acb4f4ca0c2c8a16bab5298cf8348350fe879c68b0925d717
+          image: ghcr.io/hikmethankolay/spring-boot-backend-template:4.1.0@sha256:8d8b210cab92d26acb4f4ca0c2c8a16bab5298cf8348350fe879c68b0925d717
           envFrom:
             - configMapRef:
                 name: app-config
