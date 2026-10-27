@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# End-to-end smoke test against a running app: health, register, login, /me, the notes example, refresh,
-# logout, then account deletion, so repeated runs leave no users behind.
+# End-to-end smoke test against a running app: health, register, login, /me, email preferences, the notes example,
+# refresh, logout, then account deletion, so repeated runs leave no users behind.
 # Usage: scripts/smoke.sh [base-url]   (default http://localhost:8080)
 # Sign-up is email-first: the link that finishes it is read from Mailpit (MAILPIT_URL, default
 # http://localhost:8025).
@@ -57,6 +57,8 @@ token="$(json_field accessToken)"
 refresh_token="$(json_field refreshToken)"
 [[ -n "$token" && -n "$refresh_token" ]] || die "No tokens in login response."
 request GET  /api/v1/users/me 200 "" "$token"
+request GET  /api/v1/users/me/email-preferences 200 "" "$token"
+request PUT  /api/v1/users/me/email-preferences 200 '{"product-updates":false}' "$token"
 request POST /api/v1/notes 201 '{"title":"Smoke test","body":"Created by scripts/smoke.sh"}' "$token"
 note_id="$(json_number id)"
 [[ -n "$note_id" ]] || die "No id in the created note."

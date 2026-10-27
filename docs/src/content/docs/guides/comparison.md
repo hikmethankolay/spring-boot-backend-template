@@ -12,7 +12,7 @@ keep.
 | Frontend | None; [typed client and a guide](../frontend/) for yours, [clients in other languages](../api/#clients-in-other-languages) for mobile apps | None | Angular, React or Vue, generated | Optional server-side pages (Thymeleaf) |
 | Login and accounts | JWT with refresh rotation, email verification, password reset, HTML email templates, email preferences with one-click unsubscribe, security alert emails, owner broadcasts, two-factor login, GitHub and Google login, session list, lockout, rate limiting | Add them yourself | Generated, several options | Spring Security in the paid plans |
 | Production setup | `prod` profile with a startup check, metrics, alert rules, dashboard, tracing, signed images, Kubernetes manifests, runbooks | Add it yourself | Generated, several options | Varies by plan |
-| Tests | 300+ tests, 140+ of them against real PostgreSQL and Redis, architecture rules, mutation testing | One context test | Generated | Integration tests in the paid plans |
+| Tests | 380+ tests, 170 of them against real PostgreSQL and Redis, architecture rules, mutation testing | One context test | Generated | Integration tests in the paid plans |
 | Tooling to run it | JDK 25 and Docker, or only Docker, or a Codespace | A JDK | Node.js and a JDK | A browser, then a JDK |
 | Updates later | [Cherry-pick from the template](../new-project/#getting-fixes-from-the-template-later) | Upgrade Spring Boot yourself | Regenerate and merge | Regenerate |
 

@@ -6,6 +6,16 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Fixed
+
+- The Javadoc check, and with it the CI Documentation job and the 4.1.0 documentation site build, failed on an
+  undocumented constructor parameter of `SocialAccountService`.
+
+### Changed
+
+- `scripts/smoke.sh` and `scripts\smoke.bat` also read and change the email preferences.
+- README: a full features table, the 4.1 features and a new recording of the first run.
+
 ## [4.1.0] - 2026-10-27
 
 ### Added

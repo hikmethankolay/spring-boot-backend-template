@@ -1,6 +1,6 @@
 @echo off
-rem End-to-end smoke test against a running app: health, register, login, /me, the notes example, refresh,
-rem logout, then account deletion, so repeated runs leave no users behind.
+rem End-to-end smoke test against a running app: health, register, login, /me, email preferences, the notes
+rem example, refresh, logout, then account deletion, so repeated runs leave no users behind.
 rem Usage: scripts\smoke.bat [base-url]   (default http://localhost:8080)
 rem Sign-up is email-first: the link that finishes it is read from Mailpit (MAILPIT_URL, default
 rem http://localhost:8025).
@@ -27,6 +27,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Check POST '/api/v1/auth/register/complete' 201 (@{ token = $tok; username = $user; password = $pw } | ConvertTo-Json) | Out-Null;" ^
   "$login = Check POST '/api/v1/auth/login' 200 (@{ identifier = $user; password = $pw } | ConvertTo-Json) | ConvertFrom-Json;" ^
   "Check GET '/api/v1/users/me' 200 $null $login.accessToken | Out-Null;" ^
+  "Check GET '/api/v1/users/me/email-preferences' 200 $null $login.accessToken | Out-Null;" ^
+  "Check PUT '/api/v1/users/me/email-preferences' 200 (@{ 'product-updates' = $false } | ConvertTo-Json) $login.accessToken | Out-Null;" ^
   "$note = Check POST '/api/v1/notes' 201 (@{ title = 'Smoke test'; body = 'Created by scripts/smoke.bat' } | ConvertTo-Json) $login.accessToken | ConvertFrom-Json;" ^
   "Check GET '/api/v1/notes' 200 $null $login.accessToken | Out-Null;" ^
   "Check PUT ('/api/v1/notes/' + $note.id) 200 (@{ title = 'Smoke test'; body = 'Edited' } | ConvertTo-Json) $login.accessToken | Out-Null;" ^

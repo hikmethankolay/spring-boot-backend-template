@@ -48,10 +48,11 @@ public class SocialAccountService {
     /**
      * Creates the service.
      *
-     * @param identities  linked provider accounts
-     * @param users       looks users up by email
-     * @param userService creates users
-     * @param audit       records security events
+     * @param identities     linked provider accounts
+     * @param users          looks users up by email
+     * @param userService    creates users
+     * @param audit          records security events
+     * @param securityMailer tells a user when a provider account is linked to theirs
      */
     public SocialAccountService(
             SocialIdentityRepository identities,

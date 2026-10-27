@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="590" viewBox="0 0 760 590" role="img" aria-labelledby="title desc">
-  <!-- Real output of setup, dev and smoke (recorded 2026-10, admin password masked). Lines appear one by one;
-       with reduced motion everything is shown at once. Edit the text by hand when the scripts' output changes. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="644" viewBox="0 0 760 644" role="img" aria-labelledby="title desc">
+  <!-- Real output of setup, dev and smoke (recorded 2026-10-27 on v4.1.0, admin password masked). Lines appear one by
+       one; with reduced motion everything is shown at once. Edit the text by hand when the scripts' output changes. -->
   <title id="title">First run: setup, dev and smoke</title>
-  <desc id="desc">scripts/setup.sh generates the secrets and compiles, scripts/dev.sh starts PostgreSQL, Redis and Mailpit and the app in about five seconds, and scripts/smoke.sh registers a user, logs in, creates, edits and deletes a note, refreshes and revokes the session and deletes the account: every step returns the expected status.</desc>
+  <desc id="desc">scripts/setup.sh generates the secrets and compiles, scripts/dev.sh starts PostgreSQL, Redis and Mailpit and the app in about four seconds, and scripts/smoke.sh signs a user up through the emailed link, logs in, reads and changes the email preferences, creates, edits and deletes a note, refreshes and revokes the session and deletes the account: every step returns the expected status.</desc>
   <style>
     text { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; fill: #d0d7de; white-space: pre; }
     .p { fill: #7ee787; } .i { fill: #79c0ff; } .ok { fill: #7ee787; } .no { fill: #e3b341; } .dim { fill: #8b949e; }
@@ -10,7 +10,7 @@
     @keyframes show { to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .l { animation: none; opacity: 1; } }
   </style>
-  <rect width="760" height="590" rx="8" fill="#0d1117"/>
+  <rect width="760" height="644" rx="8" fill="#0d1117"/>
   <rect width="760" height="30" rx="8" fill="#161b22"/>
   <rect y="22" width="760" height="8" fill="#161b22"/>
   <circle cx="18" cy="15" r="5.5" fill="#ff5f56"/><circle cx="36" cy="15" r="5.5" fill="#ffbd2e"/><circle cx="54" cy="15" r="5.5" fill="#27c93f"/>
@@ -21,29 +21,32 @@
     <text class="l" style="animation-delay:.9s" y="36"><tspan class="i">==&gt;</tspan> Generated JWT_SECRET, MFA_ENCRYPTION_KEY and an initial admin password: •••</text>
     <text class="l" style="animation-delay:1.4s" y="54"><tspan class="i">==&gt;</tspan> Done. Next: scripts/dev.sh to start the database and the app.</text>
     <text class="l" style="animation-delay:2s" y="80"><tspan class="p">$</tspan> scripts/dev.sh</text>
-    <text class="l dim" style="animation-delay:2.4s" y="98"> Container spring-boot-template-db-1       Started</text>
-    <text class="l dim" style="animation-delay:2.5s" y="116"> Container spring-boot-template-redis-1    Started</text>
-    <text class="l dim" style="animation-delay:2.6s" y="134"> Container spring-boot-template-mailpit-1  Started</text>
-    <text class="l" style="animation-delay:3.2s" y="152">Started Application in 5.447 seconds</text>
+    <text class="l dim" style="animation-delay:2.4s" y="98"> Container spring-boot-template-db-1       Healthy</text>
+    <text class="l dim" style="animation-delay:2.5s" y="116"> Container spring-boot-template-redis-1    Healthy</text>
+    <text class="l dim" style="animation-delay:2.6s" y="134"> Container spring-boot-template-mailpit-1  Healthy</text>
+    <text class="l" style="animation-delay:3.2s" y="152">Started Application in 3.997 seconds</text>
     <text class="l" style="animation-delay:3.8s" y="178"><tspan class="p">$</tspan> scripts/smoke.sh</text>
     <text class="l" style="animation-delay:4.1s" y="196"><tspan class="i">==&gt;</tspan> GET /actuator/health -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:4.25s" y="214"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/register -&gt; <tspan class="ok">201</tspan></text>
-    <text class="l" style="animation-delay:4.4s" y="232"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:4.55s" y="250"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:4.7s" y="268"><tspan class="i">==&gt;</tspan> POST /api/v1/notes -&gt; <tspan class="ok">201</tspan></text>
-    <text class="l" style="animation-delay:4.85s" y="286"><tspan class="i">==&gt;</tspan> GET /api/v1/notes -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:5s" y="304"><tspan class="i">==&gt;</tspan> PUT /api/v1/notes/1 -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:5.15s" y="322"><tspan class="i">==&gt;</tspan> DELETE /api/v1/notes/1 -&gt; <tspan class="ok">204</tspan></text>
-    <text class="l" style="animation-delay:5.3s" y="340"><tspan class="i">==&gt;</tspan> GET /api/v1/notes/1 -&gt; <tspan class="no">404</tspan></text>
-    <text class="l" style="animation-delay:5.45s" y="358"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/refresh -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:5.6s" y="376"><tspan class="i">==&gt;</tspan> GET /api/v1/users -&gt; <tspan class="no">403</tspan></text>
-    <text class="l" style="animation-delay:5.75s" y="394"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="no">401</tspan></text>
-    <text class="l" style="animation-delay:5.9s" y="412"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/logout -&gt; <tspan class="ok">204</tspan></text>
-    <text class="l" style="animation-delay:6.05s" y="430"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="no">401</tspan></text>
-    <text class="l" style="animation-delay:6.2s" y="448"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/refresh -&gt; <tspan class="no">401</tspan></text>
-    <text class="l" style="animation-delay:6.35s" y="466"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="ok">200</tspan></text>
-    <text class="l" style="animation-delay:6.5s" y="484"><tspan class="i">==&gt;</tspan> DELETE /api/v1/users/me -&gt; <tspan class="ok">204</tspan></text>
-    <text class="l" style="animation-delay:6.65s" y="502"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="no">401</tspan></text>
-    <text class="l ok" style="animation-delay:7s" y="520">==&gt; Smoke test passed against http://localhost:8080</text>
+    <text class="l" style="animation-delay:4.25s" y="214"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/register -&gt; <tspan class="ok">202</tspan></text>
+    <text class="l" style="animation-delay:4.4s" y="232"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/register/complete -&gt; <tspan class="ok">201</tspan></text>
+    <text class="l" style="animation-delay:4.55s" y="250"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:4.7s" y="268"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:4.85s" y="286"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me/email-preferences -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:5s" y="304"><tspan class="i">==&gt;</tspan> PUT /api/v1/users/me/email-preferences -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:5.15s" y="322"><tspan class="i">==&gt;</tspan> POST /api/v1/notes -&gt; <tspan class="ok">201</tspan></text>
+    <text class="l" style="animation-delay:5.3s" y="340"><tspan class="i">==&gt;</tspan> GET /api/v1/notes -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:5.45s" y="358"><tspan class="i">==&gt;</tspan> PUT /api/v1/notes/1 -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:5.6s" y="376"><tspan class="i">==&gt;</tspan> DELETE /api/v1/notes/1 -&gt; <tspan class="ok">204</tspan></text>
+    <text class="l" style="animation-delay:5.75s" y="394"><tspan class="i">==&gt;</tspan> GET /api/v1/notes/1 -&gt; <tspan class="no">404</tspan></text>
+    <text class="l" style="animation-delay:5.9s" y="412"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/refresh -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:6.05s" y="430"><tspan class="i">==&gt;</tspan> GET /api/v1/users -&gt; <tspan class="no">403</tspan></text>
+    <text class="l" style="animation-delay:6.2s" y="448"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="no">401</tspan></text>
+    <text class="l" style="animation-delay:6.35s" y="466"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/logout -&gt; <tspan class="ok">204</tspan></text>
+    <text class="l" style="animation-delay:6.5s" y="484"><tspan class="i">==&gt;</tspan> GET /api/v1/users/me -&gt; <tspan class="no">401</tspan></text>
+    <text class="l" style="animation-delay:6.65s" y="502"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/refresh -&gt; <tspan class="no">401</tspan></text>
+    <text class="l" style="animation-delay:6.8s" y="520"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="ok">200</tspan></text>
+    <text class="l" style="animation-delay:6.95s" y="538"><tspan class="i">==&gt;</tspan> DELETE /api/v1/users/me -&gt; <tspan class="ok">204</tspan></text>
+    <text class="l" style="animation-delay:7.1s" y="556"><tspan class="i">==&gt;</tspan> POST /api/v1/auth/login -&gt; <tspan class="no">401</tspan></text>
+    <text class="l ok" style="animation-delay:7.45s" y="574">==&gt; Smoke test passed against http://localhost:8080</text>
   </g>
 </svg>
