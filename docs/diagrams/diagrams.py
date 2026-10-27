@@ -103,7 +103,7 @@ def email_outbox():
     s = Sequence(d, [(96, "AccountService", "@Transactional", "box"), (280, "EmailOutbox", "mail package", "box"),
                      (464, "PostgreSQL", "email_outbox", "box"), (636, "SMTP server", "Mailpit in dev", "box-ext")],
                  box_w=164, bottom=508)
-    s.msg(0, 1, 108, "enqueue(email)")
+    s.msg(0, 1, 108, "enqueue(rendered email)")
     s.msg(1, 2, 144, "INSERT email_outbox")
     s.msg(0, 2, 180, "COMMIT change + email", kind="accent", at=372)
     s.msg(1, 2, 216, "lock row, SKIP LOCKED")

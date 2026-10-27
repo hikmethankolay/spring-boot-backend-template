@@ -45,7 +45,8 @@ curl -i -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: applicatio
 ```
 
 Sign-up is email-first. Open Mailpit at <http://localhost:8025>, copy the `token` from the link in the
-"Finish creating your account" email, choose the username and password, then log in:
+"Finish creating your account" email, choose the username and password, then log in. Emails are HTML with a text
+fallback: Mailpit's HTML, Text and Raw tabs show each part.
 
 ```bash
 curl -i -X POST localhost:8080/api/v1/auth/register/complete -H 'Content-Type: application/json' \

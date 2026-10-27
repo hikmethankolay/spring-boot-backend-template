@@ -30,6 +30,9 @@ public class OutboxEmail {
     @Column(nullable = false, columnDefinition = "text")
     private String body;
 
+    @Column(name = "html_body", columnDefinition = "text")
+    private String htmlBody;
+
     @Column(nullable = false)
     private int attempts;
 
@@ -53,9 +56,22 @@ public class OutboxEmail {
      * @param body      plain-text body
      */
     public OutboxEmail(String recipient, String subject, String body) {
+        this(recipient, subject, body, null);
+    }
+
+    /**
+     * Queues a new email with an optional HTML alternative for immediate sending.
+     *
+     * @param recipient recipient address
+     * @param subject   subject line
+     * @param body      plain-text body
+     * @param htmlBody  HTML alternative of the body, or {@code null} for a plain-text email
+     */
+    public OutboxEmail(String recipient, String subject, String body, String htmlBody) {
         this.recipient = recipient;
         this.subject = subject;
         this.body = body;
+        this.htmlBody = htmlBody;
         this.createdAt = Instant.now();
         this.nextAttemptAt = createdAt;
     }
@@ -94,6 +110,15 @@ public class OutboxEmail {
      */
     public String getBody() {
         return body;
+    }
+
+    /**
+     * Returns the HTML body.
+     *
+     * @return the HTML alternative of the body, or {@code null} for a plain-text email
+     */
+    public String getHtmlBody() {
+        return htmlBody;
     }
 
     /**

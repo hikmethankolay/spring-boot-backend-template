@@ -26,3 +26,4 @@ them with retries and backoff, and gives up after a fixed number of attempts.
 - An email is sent only if its change committed, and survives restarts and SMTP outages.
 - Delivery is asynchronous (seconds, not milliseconds), and needs monitoring: `mail_outbox_pending` and
   `mail_outbox_dropped_total` have alerts.
+- Emails are rendered from templates before they are queued; see [ADR 7](../0007-email-templates/).

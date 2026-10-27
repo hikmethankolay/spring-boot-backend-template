@@ -212,6 +212,8 @@ password or logged in on a newer version cannot log in until they reset their pa
   the new one get `403` at login. Sign-ups are verified when the account is created, so this applies only after
   an email change.
 - Emails go through an outbox with retries, see [Observability](../observability/#email-outbox).
+- Email templates print values with `th:text` and `th:href`, which escape them; `th:utext` and `[(...)]` are
+  banned in HTML templates and a test enforces it. See [Email templates](../email-templates/).
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/sign-up-light.svg" width="720" height="684" alt="POST /auth/register claims a Redis cooldown, looks up the address and emails either an already-registered notice or a sign-up link, answering 202 either way; the link's page posts to /register/complete, which checks the link is unused, inserts a verified user, marks the link used and answers 201." />

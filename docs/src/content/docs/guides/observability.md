@@ -98,6 +98,10 @@ Rows are deleted once sent or dropped, so links with tokens do not stay in the d
 the same time: rows are locked with `FOR UPDATE SKIP LOCKED`, so no email goes out twice. Use `EmailOutbox.enqueue`
 for your own emails.
 
+An email rendered from a template carries a text body and an HTML body (`html_body`) and is sent as
+`multipart/alternative`; one queued with only a text body is sent as plain text. See
+[Email templates](../email-templates/).
+
 ## Health
 
 `/actuator/health`, with Kubernetes-style `liveness` and `readiness` groups. Redis and mail are excluded on purpose,

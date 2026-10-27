@@ -4,6 +4,9 @@ import com.hikmethankolay.template.config.AppProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -11,8 +14,10 @@ import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
-import org.springframework.mail.MailSender;
+import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -36,6 +41,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       {@code app.mail.max-attempts} is reached; then the email is dropped and an error is logged.</li>
  * </ul>
  *
+ * <p>An email with an HTML body is sent as {@code multipart/alternative} with its text body as the fallback; one
+ * without is sent as plain text.</p>
+ *
  * <p>Sent and dropped emails are deleted, so links with tokens are not kept in the database longer
  * than needed. Metrics: {@code mail.outbox.sent}, {@code mail.outbox.failures},
  * {@code mail.outbox.dropped} and the gauge {@code mail.outbox.pending}.</p>
@@ -58,7 +66,7 @@ public class EmailOutbox {
 
     private final OutboxEmailRepository outbox;
 
-    private final MailSender mailSender;
+    private final JavaMailSender mailSender;
 
     private final TransactionTemplate newTransaction;
 
@@ -81,7 +89,7 @@ public class EmailOutbox {
      */
     public EmailOutbox(
             OutboxEmailRepository outbox,
-            MailSender mailSender,
+            JavaMailSender mailSender,
             PlatformTransactionManager transactionManager,
             AppProperties properties,
             MeterRegistry meterRegistry) {
@@ -113,7 +121,20 @@ public class EmailOutbox {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void enqueue(String to, String subject, String text) {
-        long id = outbox.save(new OutboxEmail(to, subject, text)).getId();
+        enqueue(to, new RenderedMail(subject, text, null));
+    }
+
+    /**
+     * Queues a rendered email in the current transaction and sends it once the transaction commits, unless another
+     * immediate send is in progress; then the next {@link #sendDue()} run sends it.
+     *
+     * @param to   recipient address
+     * @param mail the email, usually from {@link MailRenderer}
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void enqueue(String to, RenderedMail mail) {
+        long id = outbox.save(new OutboxEmail(to, mail.subject(), mail.text(), mail.html()))
+                .getId();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -163,13 +184,12 @@ public class EmailOutbox {
      * @param now   the current time
      */
     private void send(OutboxEmail email, Instant now) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(properties.from());
-        message.setTo(email.getRecipient());
-        message.setSubject(email.getSubject());
-        message.setText(email.getBody());
         try {
-            mailSender.send(message);
+            if (email.getHtmlBody() == null) {
+                mailSender.send(plainMessage(email));
+            } else {
+                mailSender.send(htmlMessage(email));
+            }
             outbox.delete(email);
             sent.increment();
         } catch (MailException ex) {
@@ -193,6 +213,43 @@ public class EmailOutbox {
                         email.getNextAttemptAt(),
                         ex.getMessage());
             }
+        }
+    }
+
+    /**
+     * Builds a plain-text message.
+     *
+     * @param email the queued email
+     * @return the message
+     */
+    private SimpleMailMessage plainMessage(OutboxEmail email) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(properties.from());
+        message.setTo(email.getRecipient());
+        message.setSubject(email.getSubject());
+        message.setText(email.getBody());
+        return message;
+    }
+
+    /**
+     * Builds a message whose text and HTML bodies are {@code multipart/alternative} parts.
+     *
+     * @param email the queued email, with an HTML body
+     * @return the message
+     * @throws MailPreparationException if the message cannot be built, e.g. an invalid address; it counts as a
+     *                                  failed attempt
+     */
+    private MimeMessage htmlMessage(OutboxEmail email) {
+        MimeMessage message = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+            helper.setFrom(properties.from());
+            helper.setTo(email.getRecipient());
+            helper.setSubject(email.getSubject());
+            helper.setText(email.getBody(), email.getHtmlBody());
+            return message;
+        } catch (MessagingException ex) {
+            throw new MailPreparationException("Could not build email " + email.getId(), ex);
         }
     }
 

@@ -1,0 +1,10 @@
+Open this link to choose a username and password and create your
+account:
+
+[(${link})]
+
+The link expires in [(${ttl})]. If you did not ask for an account, ignore
+this email.
+
+--
+[(${appName})]

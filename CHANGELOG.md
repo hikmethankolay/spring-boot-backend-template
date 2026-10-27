@@ -6,6 +6,17 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- HTML emails: `MailRenderer` renders every email from a Thymeleaf template pair in `src/main/resources/mail/` (a
+  shared layout and a plain-text twin), and the outbox sends both as `multipart/alternative`. Migration `V13` adds
+  `email_outbox.html_body`. New Email templates guide and ADR 7.
+
+### Changed
+
+- `EmailOutbox` sends through a `JavaMailSender` (Spring Boot's mail auto-configuration provides one).
+  `enqueue(to, subject, text)` still sends plain text.
+
 ## [4.0.3] - 2026-10-26
 
 ### Changed

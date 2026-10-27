@@ -30,6 +30,9 @@ explain the details.
 - Diagrams are drawn in `docs/diagrams/*.py`: change them there and run `python3 docs/diagrams/diagrams.py`,
   which checks their layout and rewrites the light and dark SVGs in `docs/public/diagrams/`.
 - Database changes are new Flyway migrations (`V<n>__description.sql`); never edit a released one.
+- Emails are templates in `src/main/resources/mail/` (an `.html` and a `.txt`), not strings in Java. When a template
+  changes on purpose, copy `target/mail-preview/<name>.html` over its snapshot in
+  `src/test/resources/mail-snapshots/` (see the Email templates guide).
 
 ## Commits and pull requests
 

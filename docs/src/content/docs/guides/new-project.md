@@ -33,7 +33,9 @@ description: Turn the template into your own project.
 8. Protect endpoints with `@PreAuthorize`. Everything outside the public paths in `SecurityConfig` needs a valid token.
 9. If the feature stores data about a user, reference `users(id)` with `ON DELETE CASCADE` and implement
    `PersonalDataProvider`, so account deletion and the data export (`GET /api/v1/users/me/export`) stay complete.
-10. Record sensitive actions with `AuditLog.record(AuditEvent.…, userId, ...)` and send emails with `EmailOutbox.enqueue`.
+10. Record sensitive actions with `AuditLog.record(AuditEvent.…, userId, ...)`. Send emails by adding a template to
+    `src/main/resources/mail/` and queuing `MailRenderer.render(...)` with `EmailOutbox.enqueue`
+    ([Email templates](../email-templates/)).
 11. Delete the features you don't need (for example `account/`), along with their tests. Two-factor authentication
     and social login are wired into the login flow; see [Removing them](#removing-two-factor-authentication-or-social-login).
 12. Rewrite the README for your project, set the copyright holder in `LICENSE`, and enable *Private vulnerability
@@ -167,7 +169,7 @@ src/main/java/com/hikmethankolay/template/
 ├── note/        sample feature: notes owned by a user (copy it, then delete it)
 ├── security/    filter chains, headers, JWT, token revocation, login lockout, rate limiting
 ├── audit/       AuditLog and AuditEvent: the security audit trail
-├── mail/        EmailOutbox: transactional outbox with retries
+├── mail/        EmailOutbox (transactional outbox with retries), MailRenderer (templates in resources/mail/)
 ├── common/      ApiException, RFC 9457 error handler, X-Trace-Id filter, SecureTokens
 └── config/      AppProperties (typed app.* config), Redis cache, OpenAPI
 src/main/resources/

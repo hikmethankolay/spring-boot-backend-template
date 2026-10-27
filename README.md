@@ -28,7 +28,7 @@ secure login, user accounts, errors, caching, monitoring and deployment. All of 
   export and tests in a few small files, and `scripts/client.sh` generates a typed client for your frontend, or for
   your mobile app in its own language.
 - **Production defaults out of the box.** One `prod` profile switches on JSON logs, secure cookies, required email
-  verification and an internal metrics port. Migrations, Redis caching, an email outbox with retries, query timeouts,
+  verification and an internal metrics port. Migrations, Redis caching, an HTML email outbox, query timeouts,
   metrics with alert rules and a Grafana dashboard, tracing, account deletion and data export are already wired in.
 - **Tested against the real thing.** 300+ tests, 140+ of them against real PostgreSQL and Redis containers, alongside
   architecture

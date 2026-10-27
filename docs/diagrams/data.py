@@ -54,8 +54,8 @@ def data_model():
         ("email_verified", ""), ("session_version", ""), ("totp_secret", "AES-GCM"), ("totp_enabled", ""),
         ("totp_last_step", "")], kind="box-focal")
     table(d, 34, 496, 310, "email_outbox", [
-        ("id", "PK"), ("recipient, subject, body", ""), ("attempts", ""), ("next_attempt_at", "INDEX"),
-        ("last_error", "")])
+        ("id", "PK"), ("recipient, subject", ""), ("body, html_body", "HTML OPTIONAL"),
+        ("attempts, next_attempt_at", "INDEX"), ("last_error", "")])
     table(d, 376, 496, 310, "audit_events", [
         ("id", "PK"), ("occurred_at, action", ""), ("user_id", "NO FK"), ("actor_id, client_ip", ""),
         ("details", "JSONB")], note="APPEND-ONLY")

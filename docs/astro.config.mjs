@@ -34,6 +34,7 @@ export default defineConfig({
             'guides/security',
             'guides/caching',
             'guides/observability',
+            'guides/email-templates',
             'guides/runbooks',
             'guides/production',
             'guides/testing',

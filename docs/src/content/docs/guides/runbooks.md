@@ -110,6 +110,9 @@ Emails were abandoned after every retry. Users did not get verification or passw
    the provider's TLS port (see [Mail encryption](../production/#mail-encryption)).
 2. Users can request the email again (`/api/v1/auth/verify-email/resend`, `/api/v1/auth/password-reset`).
 
+If an email is never queued at all, look for a `TemplateInputException` in the log: it names the template that is
+missing or broken under `src/main/resources/mail/`. Fix the template, deploy, and let users request the email again.
+
 ### EmailBacklog
 
 More than 100 emails waiting for 15 minutes: SMTP is down or slow. Same checks as `EmailsDropped`; the outbox sends

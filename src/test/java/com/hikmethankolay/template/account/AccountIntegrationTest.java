@@ -51,6 +51,10 @@ class AccountIntegrationTest extends IntegrationTest {
         SimpleMailMessage link =
                 mail.latest(address, "Finish creating your account").orElseThrow();
         assertThat(link.getText()).contains("http://localhost:3000/sign-up?token=");
+        assertThat(mail.html(link))
+                .hasValueSatisfying(html -> assertThat(html)
+                        .contains("href=\"http://localhost:3000/sign-up?token=" + CapturingMailSender.token(link)
+                                + "\""));
         String body = json("""
                 {"token":"%s","username":"%s","password":"%s"}""", CapturingMailSender.token(link), username, PASSWORD);
 

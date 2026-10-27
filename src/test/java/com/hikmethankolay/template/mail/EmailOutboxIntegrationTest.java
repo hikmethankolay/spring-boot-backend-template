@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
+import jakarta.mail.Multipart;
+import jakarta.mail.internet.MimeMessage;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.CountDownLatch;
@@ -11,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class EmailOutboxIntegrationTest extends IntegrationTest {
@@ -47,6 +50,32 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
 
         assertThat(mail.latest("outbox-ok@example.com", "Outbox test")).isPresent();
         assertThat(queued("outbox-ok@example.com")).isFalse();
+    }
+
+    @Test
+    void renderedEmailIsSentAsTextAndHtmlAlternatives() throws Exception {
+        transaction.executeWithoutResult(status ->
+                outbox.enqueue("outbox-html@example.com", new RenderedMail("Outbox test", "Hello", "<p>Hello</p>")));
+
+        SimpleMailMessage sent =
+                mail.latest("outbox-html@example.com", "Outbox test").orElseThrow();
+        assertThat(sent.getText()).isEqualTo("Hello");
+        assertThat(mail.html(sent)).contains("<p>Hello</p>");
+        MimeMessage mime = mail.mime(sent).orElseThrow();
+        assertThat(((Multipart) mime.getContent()).getBodyPart(0).getContent())
+                .isInstanceOfSatisfying(
+                        Multipart.class,
+                        related -> assertThat(related.getContentType()).startsWith("multipart/related"));
+        assertThat(mime.getFrom()).extracting(Object::toString).containsExactly("no-reply@example.com");
+    }
+
+    @Test
+    void textOnlyEmailIsSentAsPlainText() {
+        enqueue("outbox-text@example.com");
+
+        assertThat(mail.mime(
+                        mail.latest("outbox-text@example.com", "Outbox test").orElseThrow()))
+                .isEmpty();
     }
 
     @Test

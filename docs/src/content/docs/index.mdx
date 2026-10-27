@@ -38,8 +38,8 @@ built from <code>{import.meta.env.PUBLIC_SITE_COMMIT ?? 'local'}</code> on {impo
     Google through a PKCE redirect that keeps the API stateless. Each provider turns on when its credentials are set.
   </Card>
   <Card title="Account flows" icon="email">
-    Email verification and password reset with single-use, hashed tokens, delivered through an outbox with
-    retries. Account deletion and data export for GDPR/KVKK.
+    Email verification and password reset with single-use, hashed tokens, in templated HTML emails with a text
+    fallback, delivered through an outbox with retries. Account deletion and data export for GDPR/KVKK.
   </Card>
   <Card title="Abuse protection" icon="warning">
     Login lockout per IP and account, a per-IP API rate limit shared through Redis, CSP and other security

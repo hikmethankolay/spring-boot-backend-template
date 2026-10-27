@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout.html :: layout(~{::content})}">
+<body>
+<th:block th:fragment="content">
+    <p>Choose a username and password to create your account.</p>
+    <th:block th:replace="~{button.html :: button(${link}, 'Create account')}"></th:block>
+    <p>The link expires in <span th:text="${ttl}">24 hours</span>. If you did not ask for an account, ignore this
+        email.</p>
+</th:block>
+</body>
+</html>

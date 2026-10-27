@@ -19,7 +19,9 @@ Tests named `*IntegrationTest` run in `./mvnw verify` through Failsafe. Run one 
 Integration tests extend `IntegrationTest`, which starts the full application against one throwaway
 `postgres:18-alpine` and one `redis:8-alpine` container (Testcontainers), shared by all test classes. Outgoing mail goes through
 the email outbox and is captured in memory (`TestMailConfiguration`), so tests can follow the verification and reset
-links from the emails. `CapturingMailSender.failNext(n)` simulates an SMTP outage, and `EmailOutbox.sendDue(time)`
+links from the emails. `CapturingMailSender.latest(to, subject)` returns the text part of HTML emails too, and
+`html(message)` and `mime(message)` return the HTML part and the MIME message for headers.
+`CapturingMailSender.failNext(n)` simulates an SMTP outage, and `EmailOutbox.sendDue(time)`
 runs a retry pass at a chosen time. The test profile sets the background retry to once an hour
 (`application-test.yml`), so it does not interfere with a test.
 Without a container runtime the integration tests fail instead of being skipped, so a passing build always means every

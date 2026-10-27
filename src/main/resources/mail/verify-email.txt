@@ -1,0 +1,9 @@
+Confirm that this email address belongs to you by opening this link:
+
+[(${link})]
+
+The link expires in [(${ttl})]. If you did not ask for this, ignore this
+email.
+
+--
+[(${appName})]
