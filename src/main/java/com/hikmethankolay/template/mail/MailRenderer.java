@@ -14,7 +14,8 @@ import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 /**
  * Renders emails from the Thymeleaf templates in {@code src/main/resources/mail/}. Each email has an HTML template
  * ({@code <name>.html}, wrapped in {@code layout.html}) and a plain-text twin ({@code <name>.txt}) that use the same
- * variables. Both also get {@code subject} and {@code appName} ({@code spring.application.name}).
+ * variables. Both also get {@code subject} and {@code appName} ({@code app.mail.app-name}, by default
+ * {@code spring.application.name}).
  *
  * <p>An email in an optional {@link MailCategory} also gets {@code categoryName}, {@code unsubscribeUrl} and
  * {@code preferencesUrl}, which the layout shows as an unsubscribe footer; the text body gets the same footer. A
@@ -40,8 +41,7 @@ public class MailRenderer {
      * @param linkBaseUrl the frontend's URL, for the unsubscribe and preferences links
      */
     public MailRenderer(
-            @Value("${spring.application.name}") String appName,
-            @Value("${app.mail.link-base-url}") String linkBaseUrl) {
+            @Value("${app.mail.app-name}") String appName, @Value("${app.mail.link-base-url}") String linkBaseUrl) {
         this.appName = appName;
         this.linkBaseUrl = linkBaseUrl;
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();

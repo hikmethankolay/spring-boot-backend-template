@@ -15,7 +15,10 @@ Besides the standard JVM, HTTP (with latency histograms), HikariCP and cache met
 | Metric | Meaning |
 |--------|---------|
 | `security_audit_events_total{event}` | Security events, see [Audit log](../security/#audit-log) |
-| `mail_outbox_pending` | Emails waiting to be sent |
+| `mail_outbox_pending` | Emails waiting to be sent, broadcasts not included |
+| `mail_outbox_broadcast_pending` | Broadcast emails waiting; they drain at up to 50 per `MAIL_OUTBOX_POLL_INTERVAL` per instance |
+| `mail_security_alerts_total{alert}` | Security alert emails queued, by alert (`new-login`, `password-changed`, …) |
+| `mail_broadcast_recipients_total` | Broadcast emails queued |
 | `mail_outbox_sent_total`, `mail_outbox_failures_total`, `mail_outbox_dropped_total` | Email delivery |
 | `mail_outbox_suppressed_total{category}` | Optional emails not sent because the recipient turned their category off |
 | `mail_unsubscribe_total{category,source}` | Opt-outs, by `source`: `one-click` (mail client), `link` (unsubscribe page) or `user` (preferences page) |
@@ -103,6 +106,10 @@ for your own emails.
 An email rendered from a template carries a text body and an HTML body (`html_body`) and is sent as
 `multipart/alternative`; one queued with only a text body is sent as plain text. See
 [Email templates](../email-templates/).
+
+Broadcast emails are not sent right after the commit: each scheduled run sends them after every other email that
+is due, so a large broadcast never delays a password reset. `mail_outbox_pending`, and the `EmailBacklog` alert on
+it, leave them out.
 
 ## Health
 

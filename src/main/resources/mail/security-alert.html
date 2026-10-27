@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout.html :: layout(~{::content})}">
+<body>
+<th:block th:fragment="content">
+    <p th:text="${message}">The password of your account was changed.</p>
+    <p><th:block th:each="detail : ${details}"><strong th:text="${detail.key}">Device</strong>:
+        <span th:text="${detail.value}">Chrome on Windows</span><br></th:block></p>
+    <p>If this was you, no action is needed.</p>
+    <p>If it was not, reset your password with "Forgot password" on the login page, then end the sessions you do not
+        recognize:</p>
+    <th:block th:replace="~{button.html :: button(${sessionsUrl}, 'Review your sessions')}"></th:block>
+</th:block>
+</body>
+</html>

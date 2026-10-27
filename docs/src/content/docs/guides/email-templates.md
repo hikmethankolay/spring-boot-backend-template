@@ -15,8 +15,10 @@ text part. [ADR 7](../../adr/0007-email-templates/) explains the choice.
 | `already-registered` | You already have an account | Someone starts a sign-up with a registered address | — |
 | `verify-email` | Confirm your email address | An address changes and must be confirmed | `link`, `ttl` |
 | `password-reset` | Reset your password | Someone asks for a password reset | `link`, `ttl` |
+| `security-alert` | Depends on the alert | See [Security alerts](#security-alerts) | `message`, `details`, `sessionsUrl` |
+| `broadcast/announcement` | Chosen by the owner | The owner sends a [broadcast](#broadcasts) | `title`, `paragraphs` |
 
-Every template also gets `subject` and `appName` (`spring.application.name`).
+Every template also gets `subject` and `appName` (`MAIL_APP_NAME`, by default `spring.application.name`).
 
 ## Adding an email
 
@@ -61,6 +63,31 @@ outbox.enqueue(userId, to, MailCategory.PRODUCT_UPDATES, "broadcast/announcement
 
 To add an optional category, add a constant with `optional = true` and a description users understand: the
 preferences endpoint, the unsubscribe links and the data export pick it up.
+
+## Security alerts
+
+`SecurityMailer` tells users about changes they may not have made
+([ADR 9](../../adr/0009-security-alerts-and-broadcast/)). All alerts share the `security-alert` template, which lists the details and ends with what to do if it was not them.
+
+| Alert | Sent when | To |
+| --- | --- | --- |
+| New sign-in to your account | A login from a device not seen within `MAIL_NEW_LOGIN_LOOKBACK` (not the first device) | The user |
+| Your password was changed | A password change, a reset, or an administrator setting one | The user |
+| The email address of your account was changed | The user or an administrator changes it | The **old** address, without the new one |
+| Two-factor authentication was turned on / off | `confirm` / `disable` of two-factor authentication | The user |
+| A GitHub (Google) account was linked | A provider account is linked to an existing account | The user |
+
+To add one, add a method to `SecurityMailer` and call it from the service, after the audit record, inside the
+transaction of the change. Never put tokens, codes or new values in an alert. The test profile turns alerts off;
+`SecurityAlertIntegrationTest` turns them on.
+
+## Broadcasts
+
+The owner can email an announcement to users by role (`POST /api/v1/admin/mail/broadcasts`, after
+`/preview`). Broadcasts use the `broadcast/announcement` template only, in an optional category, so every one
+carries an unsubscribe link and skips users who turned the category off. The body is plain text: blank lines
+separate paragraphs, and any markup is shown as typed. The request returns `202` with the expected recipients;
+the recipients are queued in the background and the outbox sends them after every other email waiting.
 
 ## Layout and CSS rules
 

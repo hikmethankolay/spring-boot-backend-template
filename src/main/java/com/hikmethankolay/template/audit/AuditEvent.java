@@ -84,7 +84,10 @@ public enum AuditEvent {
     SOCIAL_ACCOUNT_LINKED("auth.social_account_linked", Level.INFO),
 
     /** An optional email category was turned on or off (details: category, enabled, source). */
-    EMAIL_PREFERENCES_CHANGED("user.email_preferences_changed", Level.INFO);
+    EMAIL_PREFERENCES_CHANGED("user.email_preferences_changed", Level.INFO),
+
+    /** The owner emailed an announcement to many users (details: broadcastId, category, queued, suppressed). */
+    BROADCAST_SENT("mail.broadcast_sent", Level.INFO);
 
     private final String action;
 

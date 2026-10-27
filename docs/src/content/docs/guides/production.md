@@ -196,6 +196,10 @@ applies at once, even to emails still waiting in the outbox. Set `MAIL_UNSUBSCRI
 HTTPS URL (providers call it server to server), and set up SPF, DKIM and DMARC for the `MAIL_FROM` domain at your
 provider. Account and security emails are transactional and carry no unsubscribe link.
 
+Owner broadcasts drain at up to 50 emails per `MAIL_OUTBOX_POLL_INTERVAL` (10 s) per instance, about 5 a second,
+after every other email waiting. Check that this stays under your provider's sending rate, and as volume grows,
+send from a separate subdomain so the reputation of broadcasts cannot hurt password resets.
+
 ## Checklist
 
 - [ ] Set real values for `CORS_ALLOWED_ORIGINS`, `MAIL_LINK_BASE_URL` and `MAIL_UNSUBSCRIBE_BASE_URL`.

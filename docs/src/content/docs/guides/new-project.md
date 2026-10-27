@@ -35,7 +35,8 @@ description: Turn the template into your own project.
    `PersonalDataProvider`, so account deletion and the data export (`GET /api/v1/users/me/export`) stay complete.
 10. Record sensitive actions with `AuditLog.record(AuditEvent.…, userId, ...)`. Send emails by adding a template to
     `src/main/resources/mail/` and queuing `MailRenderer.render(...)` with `EmailOutbox.enqueue`
-    ([Email templates](../email-templates/)).
+    ([Email templates](../email-templates/)). A new security-relevant action also tells its user with a
+    `SecurityMailer` alert, queued in the same transaction.
 11. Delete the features you don't need (for example `account/`), along with their tests. Two-factor authentication
     and social login are wired into the login flow; see [Removing them](#removing-two-factor-authentication-or-social-login).
 12. Rewrite the README for your project, set the copyright holder in `LICENSE`, and enable *Private vulnerability

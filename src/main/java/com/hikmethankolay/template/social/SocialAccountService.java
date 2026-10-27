@@ -5,6 +5,7 @@ import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
+import com.hikmethankolay.template.mail.SecurityMailer;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.UserRepository;
 import com.hikmethankolay.template.user.UserService;
@@ -42,6 +43,8 @@ public class SocialAccountService {
 
     private final AuditLog audit;
 
+    private final SecurityMailer securityMailer;
+
     /**
      * Creates the service.
      *
@@ -51,11 +54,16 @@ public class SocialAccountService {
      * @param audit       records security events
      */
     public SocialAccountService(
-            SocialIdentityRepository identities, UserRepository users, UserService userService, AuditLog audit) {
+            SocialIdentityRepository identities,
+            UserRepository users,
+            UserService userService,
+            AuditLog audit,
+            SecurityMailer securityMailer) {
         this.identities = identities;
         this.users = users;
         this.userService = userService;
         this.audit = audit;
+        this.securityMailer = securityMailer;
     }
 
     /**
@@ -79,20 +87,23 @@ public class SocialAccountService {
                     "The provider account has no verified email address.");
         }
         String email = profile.email().toLowerCase(Locale.ROOT);
-        long userId = users.findByEmail(email)
-                .map(existing -> {
-                    if (!existing.isEmailVerified()) {
-                        throw ApiException.conflict(
-                                ProblemType.SOCIAL_ACCOUNT_CONFLICT,
-                                "An account with this email exists; log in with its password and verify the email.");
-                    }
-                    return existing.getId();
-                })
-                .orElseGet(() -> userService
-                        .register(freeUsername(profile, email), email, SecureTokens.generate(), Role.USER, true)
-                        .id());
+        Optional<Long> existingId = users.findByEmail(email).map(existing -> {
+            if (!existing.isEmailVerified()) {
+                throw ApiException.conflict(
+                        ProblemType.SOCIAL_ACCOUNT_CONFLICT,
+                        "An account with this email exists; log in with its password and verify the email.");
+            }
+            return existing.getId();
+        });
+        long userId = existingId.orElseGet(() -> userService
+                .register(freeUsername(profile, email), email, SecureTokens.generate(), Role.USER, true)
+                .id());
         identities.save(new SocialIdentity(userId, profile.provider(), profile.subject()));
         audit.record(AuditEvent.SOCIAL_ACCOUNT_LINKED, userId, "provider", profile.provider());
+        if (existingId.isPresent()) {
+            // A new way into an existing account; an account created just now needs no warning.
+            securityMailer.socialAccountLinked(email, profile.provider());
+        }
         return userId;
     }
 

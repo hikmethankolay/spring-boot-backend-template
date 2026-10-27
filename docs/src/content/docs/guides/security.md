@@ -219,6 +219,19 @@ password or logged in on a newer version cannot log in until they reset their pa
   turn off an optional category; `GET` changes nothing (mail scanners open links). The endpoints are public paths
   and pass the CSRF filter because mail clients send them without cookies, which is the only case that filter
   checks. Tokens are never logged.
+- Security alerts ([ADR 9](../../adr/0009-security-alerts-and-broadcast/)) tell a user about a sign-in from a new
+  device and about changes to the password, email address (sent to the old address, without the new one), two-factor
+  authentication and linked accounts. They are queued in the transaction of the change, cannot be turned off by
+  users, and never contain tokens, codes or new values (`MAIL_SECURITY_ALERTS_ENABLED`,
+  `MAIL_NEW_LOGIN_ALERT_ENABLED`).
+- A device is recognized by a device cookie set at login (random, stored as its SHA-256, HttpOnly, sent only to
+  `/api/v1/auth`), as in OWASP's device cookies; no client fingerprint is collected. A client without it is
+  recognized by browser family, operating system and public network (/24 or /64) seen within
+  `MAIL_NEW_LOGIN_LOOKBACK`. The network check is skipped for private addresses, which may be a proxy's: behind a
+  proxy, set `FORWARD_HEADERS_STRATEGY` so the alert shows the client's address.
+- Broadcasts are for the owner only, need their password, go out in an optional category with a fixed template and
+  a plain-text body, and are limited to one at a time; there is no endpoint that emails an address of the caller's
+  choosing. The endpoints are rate limited to 30 requests an hour per IP.
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/sign-up-light.svg" width="720" height="684" alt="POST /auth/register claims a Redis cooldown, looks up the address and emails either an already-registered notice or a sign-up link, answering 202 either way; the link's page posts to /register/complete, which checks the link is unused, inserts a verified user, marks the link used and answers 201." />

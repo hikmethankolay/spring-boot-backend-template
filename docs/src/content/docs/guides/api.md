@@ -111,6 +111,9 @@ push and type-checks it, but check the generator you choose against your own bui
 | `GET` | `/api/v1/mail/unsubscribe?token=…` | unsubscribe link | `200` `{category, categoryName, enabled}`; changes nothing |
 | `POST` | `/api/v1/mail/unsubscribe?token=…` | unsubscribe link | `204`; turns the link's category off. RFC 8058 one-click target: works without cookies or headers |
 | `POST` | `/api/v1/mail/unsubscribe/all?token=…` | unsubscribe link | `204`; turns every optional category off |
+| `POST` | `/api/v1/admin/mail/broadcasts/preview` | owner | `200` expected recipients and the rendered text; sends nothing |
+| `POST` | `/api/v1/admin/mail/broadcasts` | owner + password | `202` broadcast id and expected recipients; queued in the background |
+| `GET` | `/api/v1/admin/mail/broadcasts` | owner | `200` the latest 100 broadcasts, with final counts once `finishedAt` is set |
 | `GET` | `/.well-known/jwks.json` | public | `200` JWK Set with the public signing key (empty with HS256) |
 
 The notes endpoints belong to the sample feature (`note/`); see [Your first feature](../first-feature/).
@@ -147,6 +150,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:wrong-password` | 400 | The caller's current password, required to confirm a change, is missing or wrong |
 | `urn:problem:invalid-token` | 400 | An email verification or password reset token is unknown, used or expired |
 | `urn:problem:unsubscribe-token-invalid` | 400 | An unsubscribe link's token is malformed or was not issued by this server |
+| `urn:problem:broadcast-in-progress` | 409 | Another broadcast is still being queued or started less than a minute ago |
 | `urn:problem:own-account` | 400 | An administrator tried to delete themselves through `/users/{id}` |
 | `urn:problem:invalid-mfa-code` | 400 / 401 | The authenticator or recovery code is wrong, expired or used (401 at login) |
 | `urn:problem:mfa-challenge-expired` | 401 | The `mfaToken` is unknown, used or expired; log in again |

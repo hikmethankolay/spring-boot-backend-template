@@ -3,6 +3,12 @@
 spring:
   application:
     name: spring-boot-template
+  task:
+    execution:
+      # Background work (queuing a broadcast) gets this long to finish when the app stops.
+      shutdown:
+        await-termination: true
+        await-termination-period: 25s
   config:
     # Optional .env file in the working directory; DOTENV_PATH points elsewhere (tests disable it).
     # Optional secrets as files, one per variable (e.g. a Kubernetes Secret mounted at /etc/app/secrets): files keep
@@ -192,6 +198,10 @@ app:
       - path: /api/v1/mail/unsubscribe/**
         requests: 60
         window: 1m
+      # Sending a broadcast checks the owner's password; this keeps a stolen token from guessing it.
+      - path: /api/v1/admin/mail/broadcasts/**
+        requests: 30
+        window: 1h
   audit:
     # How long the audit_events table keeps events (at least 90 days, which the database enforces).
     retention: ${AUDIT_RETENTION:365d}
@@ -209,6 +219,17 @@ app:
     link-base-url: ${MAIL_LINK_BASE_URL:http://localhost:3000}
     # Public URL of this API: the List-Unsubscribe header of optional emails points to its /api/v1/mail/unsubscribe.
     unsubscribe-base-url: ${MAIL_UNSUBSCRIBE_BASE_URL:http://localhost:8080}
+    # Name shown at the top and bottom of every email.
+    app-name: ${MAIL_APP_NAME:${spring.application.name}}
+    # Owner broadcasts queue this many recipients per transaction.
+    broadcast-batch-size: ${MAIL_BROADCAST_BATCH_SIZE:500}
+    security-alerts:
+      # Emails about sign-ins from new devices and changes to the password, email address, two-factor
+      # authentication and linked accounts. Transactional: users cannot turn them off.
+      enabled: ${MAIL_SECURITY_ALERTS_ENABLED:true}
+      new-login-enabled: ${MAIL_NEW_LOGIN_ALERT_ENABLED:true}
+      # A device unused this long is forgotten; a login from it is then reported as new.
+      new-login-lookback: ${MAIL_NEW_LOGIN_LOOKBACK:90d}
     # Emails go through an outbox table and are retried with exponential backoff while SMTP fails
     # (30s, 1m, 2m, ... capped at 1h); after max-attempts they are dropped and an error is logged.
     max-attempts: ${MAIL_MAX_ATTEMPTS:10}

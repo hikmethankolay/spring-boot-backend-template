@@ -78,6 +78,8 @@ public class AuthService {
 
     private final SocialAccountService socialAccounts;
 
+    private final KnownDevices knownDevices;
+
     /**
      * Creates the service.
      *
@@ -95,6 +97,7 @@ public class AuthService {
      * @param socialProviders       the configured login providers
      * @param socialProfiles        exchanges provider codes for profiles
      * @param socialAccounts        maps provider accounts to users
+     * @param knownDevices          recognizes the device of each login and reports new ones
      */
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -110,7 +113,8 @@ public class AuthService {
             MfaChallengeService challenges,
             SocialLoginProviders socialProviders,
             SocialProfileClient socialProfiles,
-            SocialAccountService socialAccounts) {
+            SocialAccountService socialAccounts,
+            KnownDevices knownDevices) {
         this.authenticationManager = authenticationManager;
         this.loginAttempts = loginAttempts;
         this.tokenService = tokenService;
@@ -125,6 +129,7 @@ public class AuthService {
         this.socialProviders = socialProviders;
         this.socialProfiles = socialProfiles;
         this.socialAccounts = socialAccounts;
+        this.knownDevices = knownDevices;
     }
 
     /**
@@ -328,7 +333,10 @@ public class AuthService {
         // Issued first: it fails if the password or role changed since it was checked.
         RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokens.issue(userId, sessionVersion, rememberMe);
         audit.record(AuditEvent.LOGIN_SUCCEEDED, userId, "rememberMe", rememberMe, "method", method);
-        return new AuthTokens(tokenService.issue(userId, username, role, refreshToken.sessionId()), refreshToken);
+        return new AuthTokens(
+                tokenService.issue(userId, username, role, refreshToken.sessionId()),
+                refreshToken,
+                knownDevices.recordLogin(userId));
     }
 
     private static ApiException mfaChallengeExpired() {
@@ -358,7 +366,8 @@ public class AuthService {
                                 user.getUsername(),
                                 user.getRole(),
                                 rotation.successor().sessionId()),
-                        rotation.successor()))
+                        rotation.successor(),
+                        null))
                 .orElseThrow(() -> new BadCredentialsException(RefreshTokenService.INVALID_REFRESH_TOKEN));
     }
 

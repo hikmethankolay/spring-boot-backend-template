@@ -7,6 +7,7 @@ import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
+import com.hikmethankolay.template.mail.SecurityMailer;
 import com.hikmethankolay.template.mfa.dto.RecoveryCodesResponse;
 import com.hikmethankolay.template.mfa.dto.TotpEnrollmentResponse;
 import com.hikmethankolay.template.security.LoginAttemptService;
@@ -55,6 +56,8 @@ public class MfaService {
 
     private final LoginAttemptService loginAttempts;
 
+    private final SecurityMailer securityMailer;
+
     private final String issuer;
 
     /**
@@ -66,6 +69,7 @@ public class MfaService {
      * @param passwordEncoder checks the password when turning two-factor authentication off
      * @param audit           records security events
      * @param loginAttempts   locks out repeated wrong passwords and codes
+     * @param securityMailer  tells users when two-factor authentication is turned on or off
      * @param issuer          application name shown in authenticator apps
      */
     public MfaService(
@@ -75,6 +79,7 @@ public class MfaService {
             PasswordEncoder passwordEncoder,
             AuditLog audit,
             LoginAttemptService loginAttempts,
+            SecurityMailer securityMailer,
             @Value("${spring.application.name}") String issuer) {
         this.users = users;
         this.recoveryCodes = recoveryCodes;
@@ -82,6 +87,7 @@ public class MfaService {
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
         this.loginAttempts = loginAttempts;
+        this.securityMailer = securityMailer;
         this.issuer = issuer;
     }
 
@@ -141,6 +147,7 @@ public class MfaService {
             recoveryCodes.save(new RecoveryCode(userId, SecureTokens.hash(normalize(recoveryCode))));
         }
         audit.record(AuditEvent.MFA_ENABLED, userId);
+        securityMailer.twoFactorEnabled(user.getEmail());
         return new RecoveryCodesResponse(codes);
     }
 
@@ -193,6 +200,7 @@ public class MfaService {
         user.disableTotp();
         recoveryCodes.deleteAllByUserId(userId);
         audit.record(AuditEvent.MFA_DISABLED, userId);
+        securityMailer.twoFactorDisabled(user.getEmail());
     }
 
     /**

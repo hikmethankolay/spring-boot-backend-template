@@ -116,7 +116,8 @@ missing or broken under `src/main/resources/mail/`. Fix the template, deploy, an
 ### EmailBacklog
 
 More than 100 emails waiting for 15 minutes: SMTP is down or slow. Same checks as `EmailsDropped`; the outbox sends
-the backlog by itself once SMTP recovers.
+the backlog by itself once SMTP recovers. A broadcast does not trigger it: its emails are counted in
+`mail_outbox_broadcast_pending` instead, and wait behind every other email.
 
 ## Background jobs
 

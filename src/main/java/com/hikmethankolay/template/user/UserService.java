@@ -6,6 +6,7 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SortAllowList;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
+import com.hikmethankolay.template.mail.SecurityMailer;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
@@ -64,6 +65,8 @@ public class UserService {
 
     private final AuditLog audit;
 
+    private final SecurityMailer securityMailer;
+
     /**
      * Creates the service.
      *
@@ -72,18 +75,21 @@ public class UserService {
      * @param breachedPasswords rejects common and breached passwords
      * @param events            publishes user events
      * @param audit             records security events
+     * @param securityMailer    tells users about password and email changes
      */
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             BreachedPasswordValidator breachedPasswords,
             ApplicationEventPublisher events,
-            AuditLog audit) {
+            AuditLog audit,
+            SecurityMailer securityMailer) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.breachedPasswords = breachedPasswords;
         this.events = events;
         this.audit = audit;
+        this.securityMailer = securityMailer;
     }
 
     /**
@@ -170,6 +176,7 @@ public class UserService {
     public void setPassword(long id, String rawPassword) {
         User user = findUser(id);
         user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), rawPassword));
+        securityMailer.passwordChanged(user.getEmail());
         endSessions(user);
     }
 
@@ -206,6 +213,18 @@ public class UserService {
     }
 
     /**
+     * Checks a user's current password, for an action that must be confirmed with it.
+     *
+     * @param id       user id
+     * @param password the password the user entered, may be {@code null}
+     * @throws ApiException 400 if the password is missing or wrong, 404 if the user does not exist
+     */
+    @Transactional(readOnly = true)
+    public void confirmPassword(long id, String password) {
+        confirmPassword(findUser(id), password);
+    }
+
+    /**
      * Updates the username and/or email of a user; {@code null} fields are left unchanged. The
      * email is where password resets go, so changing it needs the current password, like a
      * password change does.
@@ -223,7 +242,11 @@ public class UserService {
         if (request.email() != null && !normalizeEmail(request.email()).equals(user.getEmail())) {
             confirmPassword(user, request.currentPassword());
         }
+        String oldEmail = user.getEmail();
         applyIdentityChanges(user, request.username(), request.email());
+        if (!user.getEmail().equals(oldEmail)) {
+            securityMailer.emailChanged(oldEmail);
+        }
         return UserResponse.from(userRepository.saveAndFlush(user));
     }
 
@@ -245,6 +268,7 @@ public class UserService {
         }
         user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.newPassword()));
         audit.record(AuditEvent.PASSWORD_CHANGED, id);
+        securityMailer.passwordChanged(user.getEmail());
         endSessions(user);
     }
 
@@ -294,6 +318,12 @@ public class UserService {
                     identityChanged,
                     "passwordChanged",
                     request.password() != null);
+        }
+        if (!user.getEmail().equals(oldEmail)) {
+            securityMailer.emailChanged(oldEmail);
+        }
+        if (request.password() != null) {
+            securityMailer.passwordChanged(user.getEmail());
         }
         if (roleChanged) {
             audit.record(AuditEvent.ROLE_CHANGED, id, "from", user.getRole(), "to", request.role());

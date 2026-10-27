@@ -52,6 +52,11 @@ public enum ProblemType {
     /** An email verification or password reset token is unknown, used or expired. */
     INVALID_TOKEN("invalid-token", "The email verification or password reset token is unknown, used or expired"),
 
+    /** The owner sent a broadcast while another was being queued, or less than a minute after the previous one. */
+    BROADCAST_IN_PROGRESS(
+            "broadcast-in-progress",
+            "Another broadcast is still being queued or started less than a minute ago; wait and retry"),
+
     /** An unsubscribe link's token is malformed or was not issued by this server. */
     UNSUBSCRIBE_TOKEN_INVALID(
             "unsubscribe-token-invalid", "The unsubscribe link's token is malformed or was not issued by this server"),

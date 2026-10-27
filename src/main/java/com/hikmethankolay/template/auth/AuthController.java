@@ -75,6 +75,9 @@ public class AuthController {
     private static final String LOGIN_UNAVAILABLE =
             "Login is temporarily unavailable because the failed-login counters or MFA tokens cannot be checked";
 
+    /** Lifetime of the device cookie; devices unused for the shorter new-login lookback are forgotten anyway. */
+    private static final Duration DEVICE_COOKIE_AGE = Duration.ofDays(365);
+
     private final AppProperties.Cookie cookieProperties;
 
     private final BearerTokenResolver bearerTokenResolver;
@@ -403,8 +406,15 @@ public class AuthController {
     private ResponseEntity<TokenResponse> tokenResponse(AuthTokens tokens) {
         boolean persistent = tokens.refreshToken().rememberMe();
         Duration session = Duration.ofSeconds(-1);
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+        if (tokens.deviceToken() != null) {
+            // Outlives logout: it names the browser, not the session, and is sent only to /api/v1/auth.
+            response.header(
+                    HttpHeaders.SET_COOKIE,
+                    cookie(cookieProperties.deviceCookieName(), tokens.deviceToken(), "/api/v1/auth", DEVICE_COOKIE_AGE)
+                            .toString());
+        }
+        return response.cacheControl(CacheControl.noStore())
                 .header(
                         HttpHeaders.SET_COOKIE,
                         accessCookie(

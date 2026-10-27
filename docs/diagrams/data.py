@@ -28,10 +28,11 @@ def table(d, x, y, w, name, rows, kind="box", note=None):
 
 
 def data_model():
-    d = Diagram("data-model", 720, 760, "Database tables",
-                "Seven tables belong to a user through user_id and are deleted with it; the email outbox and the "
-                "append-only audit log have no foreign key to users.")
-    d.zone(14, 462, 692, 248, "NO FOREIGN KEY TO users")
+    d = Diagram("data-model", 720, 900, "Database tables",
+                "Eight tables belong to a user through user_id and are deleted with it; broadcasts keep their sender "
+                "as a nullable reference; the email outbox and the append-only audit log have no foreign key to "
+                "users.")
+    d.zone(14, 592, 692, 268, "NO FOREIGN KEY TO users")
     account = table(d, 14, 40, 190, "account_tokens", [
         ("id", "PK"), ("user_id", "FK"), ("type", "VERIFY · RESET"), ("token_hash", "UQ"), ("expires_at", "")])
     recovery = table(d, 14, 190, 190, "recovery_codes", [
@@ -52,21 +53,29 @@ def data_model():
     d.wire((516, refresh(1)), (468, refresh(1)))
     d.wire((516, social(1)), (492, social(1)), (492, 180), (468, 180))
     d.wire((516, preferences(0)), (504, preferences(0)), (504, 220), (468, 220))
+    # known_devices hangs straight below users.
+    d.wire((360, 300), (360, 238))
     table(d, 252, 40, 216, "users", [
         ("id", "PK"), ("username, email", "UQ"), ("password_hash", ""), ("role", "USER·ADMIN·OWNER"),
         ("email_verified", ""), ("session_version", ""), ("totp_secret", "AES-GCM"), ("totp_enabled", ""),
         ("totp_last_step", "")], kind="box-focal")
-    table(d, 34, 496, 310, "email_outbox", [
+    table(d, 252, 300, 216, "known_devices", [
+        ("user_id", "FK"), ("token_hash", "SHA-256 · UQ"), ("device, network", "FALLBACK"),
+        ("last_seen_at", "LOOKBACK")])
+    table(d, 252, 440, 216, "mail_broadcasts", [
+        ("id", "PK"), ("category, subject, body", ""), ("queued, suppressed", ""), ("created_by", "SET NULL")])
+    table(d, 34, 626, 310, "email_outbox", [
         ("id", "PK"), ("recipient, subject", ""), ("body, html_body", "HTML OPTIONAL"),
-        ("attempts, next_attempt_at", "INDEX"), ("last_error, unsubscribe_token", "")])
-    table(d, 376, 496, 310, "audit_events", [
+        ("attempts, next_attempt_at", "INDEX"), ("last_error, unsubscribe_token", ""),
+        ("broadcast_id", "BROADCASTS LAST")])
+    table(d, 376, 626, 310, "audit_events", [
         ("id", "PK"), ("occurred_at, action", ""), ("user_id", "NO FK"), ("actor_id, client_ip", ""),
         ("details", "JSONB")], note="APPEND-ONLY")
     for i, line in enumerate(["audit_events refuses UPDATE, DELETE and TRUNCATE through a trigger;",
                               "only purge_audit_events() removes rows older than 90 days.",
                               "With no foreign key, the trail outlives a deleted user."]):
-        d.text(360, 652 + 20 * i, line, anchor="middle")
-    d.legend(744, [("wire", "user_id → users.id, ON DELETE CASCADE"), ("box-focal", "parent of seven tables")])
+        d.text(360, 792 + 20 * i, line, anchor="middle")
+    d.legend(884, [("wire", "user_id → users.id, ON DELETE CASCADE"), ("box-focal", "parent of eight tables")])
     d.save()
 
 

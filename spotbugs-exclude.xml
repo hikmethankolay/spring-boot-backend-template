@@ -19,11 +19,15 @@
     <Match>
         <Bug pattern="SPRING_ENDPOINT"/>
     </Match>
-    <!-- The auth cookies hold the tokens on purpose: HttpOnly, SameSite=Strict and Secure in production. -->
+    <!--
+      The auth cookies hold the tokens on purpose: HttpOnly, SameSite=Strict and Secure in production. The device
+      cookie (KnownDevices) holds a random id that is stored only as its SHA-256 and only recognizes a browser.
+    -->
     <Match>
         <Bug pattern="COOKIE_USAGE"/>
         <Or>
             <Class name="com.hikmethankolay.template.auth.AuthController"/>
+            <Class name="com.hikmethankolay.template.auth.KnownDevices"/>
             <Class name="com.hikmethankolay.template.security.CookieBearerTokenResolver"/>
         </Or>
     </Match>
@@ -73,6 +77,15 @@
         <Bug pattern="SERVLET_HEADER_USER_AGENT"/>
         <Class name="com.hikmethankolay.template.auth.RefreshTokenService"/>
     </Match>
+    <!--
+      KnownDevices names the device in the new-login email by its User-Agent and groups cookieless clients by it. A
+      forged one can at most make a login look new, or familiar to someone who also shares the account's /24 network
+      and already has its password; the device cookie, not the header, is what recognizes a browser.
+    -->
+    <Match>
+        <Bug pattern="SERVLET_HEADER_USER_AGENT"/>
+        <Class name="com.hikmethankolay.template.auth.KnownDevices"/>
+    </Match>
     <!-- HttpSecurity.build() declares "throws Exception", so the filter chain beans must too. -->
     <Match>
         <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
@@ -91,6 +104,7 @@
             <Class name="com.hikmethankolay.template.social.SocialProfileClient"/>
             <Class name="com.hikmethankolay.template.common.GlobalExceptionHandler"/>
             <Class name="com.hikmethankolay.template.mail.EmailOutbox"/>
+            <Class name="com.hikmethankolay.template.mail.BroadcastService"/>
             <Class name="com.hikmethankolay.template.security.LoginAttemptService"/>
             <Class name="com.hikmethankolay.template.security.RateLimitFilter"/>
             <Class name="com.hikmethankolay.template.security.TokenRevocationService"/>

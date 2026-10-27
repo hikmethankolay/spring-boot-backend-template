@@ -68,6 +68,12 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others |
 | `/unsubscribe?token=…` | No login. `GET /api/v1/mail/unsubscribe?token=…` returns `{"category": "product-updates", "categoryName": "Product updates", "enabled": true}`; ask to confirm, then `POST /api/v1/mail/unsubscribe?token=…` (no body), or `POST …/unsubscribe/all?token=…` for every optional email. Never change anything on load: mail scanners open links. Serve the page with `Referrer-Policy: no-referrer`, since the token does not expire |
 | `/settings/emails` | `GET /api/v1/users/me/email-preferences` lists `[{"category", "name", "description", "enabled"}]`; save with `PUT` and `{"product-updates": false}`. Account and security emails are not listed and cannot be turned off |
+| `/settings/sessions` | Security alert emails link here: the Sessions page above, where a user ends the sessions they do not recognize |
+| Broadcasts (owner only) | `POST /api/v1/admin/mail/broadcasts/preview` with `{"category": "product-updates", "subject", "title", "body", "roles": ["USER"], "verifiedOnly": true}` shows `recipients` and the rendered `text`; send the same body plus `currentPassword` to `POST /api/v1/admin/mail/broadcasts` (`202`), and list the history with `GET` |
+
+Login also sets a `device` cookie (HttpOnly, path `/api/v1/auth`, one year) that recognizes the browser at its next
+login, so it is not reported as a new device. Send login requests with credentials (`credentials: 'include'`) so the
+browser keeps and returns it.
 
 A password change or reset ends every session, including the current one: send the user to the login page afterwards.
 

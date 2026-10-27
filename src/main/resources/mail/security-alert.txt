@@ -1,0 +1,13 @@
+[(${message})]
+
+[# th:each="detail : ${details}"][(${detail.key})]: [(${detail.value})]
+[/]
+If this was you, no action is needed.
+
+If it was not, reset your password with "Forgot password" on the login
+page, then end the sessions you do not recognize:
+
+[(${sessionsUrl})]
+
+--
+[(${appName})]

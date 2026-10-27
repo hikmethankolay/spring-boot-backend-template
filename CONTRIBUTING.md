@@ -34,6 +34,8 @@ explain the details.
   changes on purpose, copy `target/mail-preview/<name>.html` over its snapshot in
   `src/test/resources/mail-snapshots/` (see the Email templates guide). An email that users may turn off belongs
   to an optional `MailCategory`, with a description they understand, and is sent with the category-aware `enqueue`.
+- A new security-relevant action records an `AuditEvent` and, if its user should know about it, queues a
+  `SecurityMailer` alert in the same transaction, with a test in `SecurityAlertIntegrationTest`.
 
 ## Commits and pull requests
 

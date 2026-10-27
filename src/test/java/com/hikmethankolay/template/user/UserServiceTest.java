@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.hikmethankolay.template.TestProperties;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.mail.SecurityMailer;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
@@ -61,7 +62,8 @@ class UserServiceTest {
                         new SimpleMeterRegistry(),
                         mock(JdbcTemplate.class),
                         mock(PlatformTransactionManager.class),
-                        JsonMapper.builder().build()));
+                        JsonMapper.builder().build()),
+                mock(SecurityMailer.class));
     }
 
     @Test

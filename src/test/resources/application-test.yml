@@ -12,6 +12,11 @@ app:
   mail:
     # Tests call EmailOutbox.sendDue() themselves; a background retry would race with them.
     outbox-poll-interval: 1h
+    # Small batches, so the broadcast test crosses batch boundaries with the users the suite creates.
+    broadcast-batch-size: 3
+    security-alerts:
+      # Off so tests of other features get no extra emails; the alert tests turn them on.
+      enabled: false
   admin:
     username: admin
     email: admin@example.com

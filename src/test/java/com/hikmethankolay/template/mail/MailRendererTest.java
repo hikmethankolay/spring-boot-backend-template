@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -119,17 +120,47 @@ class MailRendererTest {
                 .hasMessageContaining("no-such-email");
     }
 
+    @Test
+    void securityAlertListsItsDetailsWithoutAFooter() throws IOException {
+        Map<String, String> details = new LinkedHashMap<>();
+        details.put("Device", "<Chrome> on Windows");
+        details.put("Time", "2026-10-27 12:00 UTC");
+
+        RenderedMail mail = renderer.render(
+                "security-alert",
+                "New sign-in to your account",
+                Map.of(
+                        "message",
+                        "Your account was signed in to from a device it has not used recently.",
+                        "details",
+                        details,
+                        "sessionsUrl",
+                        "https://app.example.com/settings/sessions"));
+
+        assertThat(mail.html())
+                .contains("<strong>Device</strong>", "&lt;Chrome&gt; on Windows", "If this was you")
+                .contains("href=\"https://app.example.com/settings/sessions\"")
+                .doesNotContain("Unsubscribe");
+        assertThat(mail.text())
+                .contains("Device: <Chrome> on Windows", "Time: 2026-10-27 12:00 UTC")
+                .contains("https://app.example.com/settings/sessions");
+        assertMatchesSnapshot("security-alert", mail.html());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"verify-email", "password-reset", "sign-up-link", "already-registered"})
     void htmlMatchesItsSnapshot(String template) throws IOException {
-        String html = render(template).html();
-        Path preview = Path.of("target/mail-preview", template + ".html");
+        assertMatchesSnapshot(template, render(template).html());
+    }
+
+    private static void assertMatchesSnapshot(String name, String html) throws IOException {
+        Path preview = Path.of("target/mail-preview", name + ".html");
         Files.createDirectories(preview.getParent());
         Files.writeString(preview, html);
-        Path snapshot = Path.of("src/test/resources/mail-snapshots", template + ".html");
+        Path snapshot = Path.of("src/test/resources/mail-snapshots", name + ".html");
 
         assertThat(Files.exists(snapshot) ? Files.readString(snapshot) : "")
-                .as("%s differs from %s; if the change is intended, copy %s over it", template, snapshot, preview)
+                .as("%s differs from %s; if the change is intended, copy %s over it", name, snapshot, preview)
                 .isEqualTo(html);
     }
 }

@@ -154,6 +154,11 @@ public class TestMailConfiguration {
                     .findFirst();
         }
 
+        /** Returns every message sent so far, oldest first. */
+        public List<SimpleMailMessage> sent() {
+            return List.copyOf(messages);
+        }
+
         /** Returns the MIME message a captured message came from; empty for a plain-text send. */
         public Optional<MimeMessage> mime(SimpleMailMessage message) {
             return Optional.ofNullable(mimeMessages.get(message));

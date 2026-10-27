@@ -127,8 +127,11 @@ public class EmailOutbox {
         this.dropped = Counter.builder("mail.outbox.dropped")
                 .description("Emails given up")
                 .register(meterRegistry);
-        Gauge.builder("mail.outbox.pending", outbox, OutboxEmailRepository::count)
-                .description("Emails waiting to be sent")
+        Gauge.builder("mail.outbox.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNull)
+                .description("Emails waiting to be sent, broadcasts not included")
+                .register(meterRegistry);
+        Gauge.builder("mail.outbox.broadcast.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNotNull)
+                .description("Broadcast emails waiting to be sent")
                 .register(meterRegistry);
     }
 
@@ -173,13 +176,55 @@ public class EmailOutbox {
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean enqueue(
             long userId, String to, MailCategory category, String template, String subject, Map<String, Object> model) {
+        return enqueue(null, userId, to, category, template, subject, model);
+    }
+
+    /**
+     * Queues one recipient of a broadcast like {@link #enqueue(long, String, MailCategory, String, String, Map)},
+     * but leaves the sending to {@link #sendDue()}, which takes the other emails first: a large broadcast neither
+     * holds up the request that queues it nor delays a password reset. Must run in a transaction.
+     *
+     * @param broadcastId the broadcast
+     * @param userId      the recipient's user id
+     * @param to          the recipient's address
+     * @param category    the broadcast's optional category
+     * @param template    template name without extension
+     * @param subject     subject line
+     * @param model       template variables
+     * @return {@code false} if the user turned the category off and nothing was queued
+     */
+    boolean enqueueBroadcast(
+            long broadcastId,
+            long userId,
+            String to,
+            MailCategory category,
+            String template,
+            String subject,
+            Map<String, Object> model) {
+        return enqueue(broadcastId, userId, to, category, template, subject, model);
+    }
+
+    private boolean enqueue(
+            Long broadcastId,
+            long userId,
+            String to,
+            MailCategory category,
+            String template,
+            String subject,
+            Map<String, Object> model) {
         if (!preferences.isEnabled(userId, category)) {
             countSuppressed(category);
             return false;
         }
         String token = category.optional() ? tokens.issue(userId, category) : null;
         RenderedMail mail = renderer.render(template, subject, model, category, token);
-        queue(new OutboxEmail(to, mail.subject(), mail.text(), mail.html(), token));
+        OutboxEmail email = new OutboxEmail(to, mail.subject(), mail.text(), mail.html(), token);
+        if (broadcastId == null) {
+            queue(email);
+        } else {
+            email.setBroadcastId(broadcastId);
+            outbox.save(email);
+        }
         return true;
     }
 

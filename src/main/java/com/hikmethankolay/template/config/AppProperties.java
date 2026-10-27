@@ -147,6 +147,16 @@ public record AppProperties(
         public String refreshCookieName() {
             return secure ? "__Secure-" + refreshName : refreshName;
         }
+
+        /**
+         * Returns the name of the device cookie, which recognizes a browser at its next login. Like the refresh
+         * cookie it is sent only to {@code /api/v1/auth}, and {@code __Secure-} keeps it to HTTPS.
+         *
+         * @return the cookie name
+         */
+        public String deviceCookieName() {
+            return secure ? "__Secure-device" : "device";
+        }
     }
 
     /**

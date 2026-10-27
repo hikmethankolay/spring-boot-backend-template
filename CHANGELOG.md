@@ -19,11 +19,24 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
   `email_outbox.unsubscribe_token`. ADR 8.
 - `MAIL_UNSUBSCRIBE_BASE_URL`: the API's public URL for the unsubscribe header. The `prod` profile refuses to start
   while it points to localhost, so existing deployments must set it.
+- Security alert emails: a sign-in from a new device, and changes to the password, email address (to the old
+  address), two-factor authentication and linked accounts. A device is recognized by an OWASP-style device cookie
+  set at login, or, without it, by browser family and public network. Settings `MAIL_SECURITY_ALERTS_ENABLED`,
+  `MAIL_NEW_LOGIN_ALERT_ENABLED`, `MAIL_NEW_LOGIN_LOOKBACK`; metric `mail_security_alerts_total`. ADR 9.
+- Owner broadcasts: `POST /api/v1/admin/mail/broadcasts/preview`, `POST` and `GET /api/v1/admin/mail/broadcasts`
+  (owner and password, optional categories only, queued in the background), problem type `broadcast-in-progress`,
+  audit event `mail.broadcast_sent`, metrics `mail_outbox_broadcast_pending` and `mail_broadcast_recipients_total`.
+- `MAIL_APP_NAME`: the name shown in every email, by default the application name.
+- Migration `V15` adds `known_devices`, `mail_broadcasts` and `email_outbox.broadcast_id`.
 
 ### Changed
 
 - `EmailOutbox` sends through a `JavaMailSender` (Spring Boot's mail auto-configuration provides one).
   `enqueue(to, subject, text)` still sends plain text.
+- The outbox sends broadcast emails after every other email due, and `mail_outbox_pending` (with the
+  `EmailBacklog` alert) no longer counts them.
+- Login responses also set a `device` cookie (HttpOnly, `/api/v1/auth`, one year).
+- Background work runs on Spring Boot's task executor, which now waits up to 25 seconds for it at shutdown.
 
 ## [4.0.3] - 2026-10-26
 

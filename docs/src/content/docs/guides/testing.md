@@ -21,7 +21,9 @@ Integration tests extend `IntegrationTest`, which starts the full application ag
 the email outbox and is captured in memory (`TestMailConfiguration`), so tests can follow the verification and reset
 links from the emails. `CapturingMailSender.latest(to, subject)` returns the text part of HTML emails too, and
 `html(message)` and `mime(message)` return the HTML part and the MIME message for headers, e.g.
-`List-Unsubscribe` on optional emails (`EmailPreferenceIntegrationTest`).
+`List-Unsubscribe` on optional emails (`EmailPreferenceIntegrationTest`). Security alerts are off in the test
+profile, so other tests get no extra emails; `SecurityAlertIntegrationTest` turns them on with
+`@TestPropertySource(properties = "app.mail.security-alerts.enabled=true")`.
 `CapturingMailSender.failNext(n)` simulates an SMTP outage, and `EmailOutbox.sendDue(time)`
 runs a retry pass at a chosen time. The test profile sets the background retry to once an hour
 (`application-test.yml`), so it does not interfere with a test.

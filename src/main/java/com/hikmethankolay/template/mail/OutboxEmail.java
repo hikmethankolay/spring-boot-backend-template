@@ -48,6 +48,9 @@ public class OutboxEmail {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "broadcast_id")
+    private Long broadcastId;
+
     /** Constructor required by JPA. */
     protected OutboxEmail() {}
 
@@ -145,6 +148,15 @@ public class OutboxEmail {
      */
     public String getUnsubscribeToken() {
         return unsubscribeToken;
+    }
+
+    /**
+     * Marks the email as part of a broadcast, which the outbox sends after the other emails.
+     *
+     * @param broadcastId the broadcast
+     */
+    void setBroadcastId(Long broadcastId) {
+        this.broadcastId = broadcastId;
     }
 
     /**
