@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Queues and sends emails (transactional outbox).
@@ -72,6 +75,14 @@ public class EmailOutbox {
 
     private final AppProperties.Mail properties;
 
+    private final MailRenderer renderer;
+
+    private final EmailPreferenceService preferences;
+
+    private final UnsubscribeTokens tokens;
+
+    private final MeterRegistry meterRegistry;
+
     private final Counter sent;
 
     private final Counter failures;
@@ -85,6 +96,9 @@ public class EmailOutbox {
      * @param mailSender         sends the messages
      * @param transactionManager runs each send in its own transaction
      * @param properties         application properties holding the mail settings
+     * @param renderer           renders emails in a category
+     * @param preferences        tells whether a user receives an optional category
+     * @param tokens             issues the unsubscribe tokens of optional emails
      * @param meterRegistry      registry for the outbox metrics
      */
     public EmailOutbox(
@@ -92,12 +106,19 @@ public class EmailOutbox {
             JavaMailSender mailSender,
             PlatformTransactionManager transactionManager,
             AppProperties properties,
+            MailRenderer renderer,
+            EmailPreferenceService preferences,
+            UnsubscribeTokens tokens,
             MeterRegistry meterRegistry) {
         this.outbox = outbox;
         this.mailSender = mailSender;
         this.newTransaction = new TransactionTemplate(transactionManager);
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.properties = properties.mail();
+        this.renderer = renderer;
+        this.preferences = preferences;
+        this.tokens = tokens;
+        this.meterRegistry = meterRegistry;
         this.sent =
                 Counter.builder("mail.outbox.sent").description("Emails sent").register(meterRegistry);
         this.failures = Counter.builder("mail.outbox.failures")
@@ -133,8 +154,42 @@ public class EmailOutbox {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void enqueue(String to, RenderedMail mail) {
-        long id = outbox.save(new OutboxEmail(to, mail.subject(), mail.text(), mail.html()))
-                .getId();
+        queue(new OutboxEmail(to, mail.subject(), mail.text(), mail.html()));
+    }
+
+    /**
+     * Renders and queues an email in a category, like {@link #enqueue(String, RenderedMail)}. An optional category
+     * is skipped if the user turned it off (counted in {@code mail.outbox.suppressed}); otherwise the email gets the
+     * user's unsubscribe link in its footer and {@code List-Unsubscribe} headers.
+     *
+     * @param userId   the recipient's user id
+     * @param to       the recipient's address
+     * @param category what the email is about
+     * @param template template name without extension
+     * @param subject  subject line
+     * @param model    template variables
+     * @return {@code false} if the user turned the category off and nothing was queued
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean enqueue(
+            long userId, String to, MailCategory category, String template, String subject, Map<String, Object> model) {
+        if (!preferences.isEnabled(userId, category)) {
+            countSuppressed(category);
+            return false;
+        }
+        String token = category.optional() ? tokens.issue(userId, category) : null;
+        RenderedMail mail = renderer.render(template, subject, model, category, token);
+        queue(new OutboxEmail(to, mail.subject(), mail.text(), mail.html(), token));
+        return true;
+    }
+
+    /**
+     * Stores an email and sends it once the transaction commits, unless another immediate send is in progress.
+     *
+     * @param email the email to store
+     */
+    private void queue(OutboxEmail email) {
+        long id = outbox.save(email).getId();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -184,6 +239,10 @@ public class EmailOutbox {
      * @param now   the current time
      */
     private void send(OutboxEmail email, Instant now) {
+        if (unsubscribedSinceQueued(email)) {
+            outbox.delete(email);
+            return;
+        }
         try {
             if (email.getHtmlBody() == null) {
                 mailSender.send(plainMessage(email));
@@ -217,6 +276,28 @@ public class EmailOutbox {
     }
 
     /**
+     * Tells whether the recipient of an optional email turned its category off while it waited, e.g. during an SMTP
+     * outage or behind a long queue; such an email is dropped and counted as suppressed.
+     *
+     * @param email the email about to be sent
+     * @return {@code true} if it must not be sent
+     */
+    private boolean unsubscribedSinceQueued(OutboxEmail email) {
+        Optional<UnsubscribeTokens.Claim> off = tokens.verify(email.getUnsubscribeToken())
+                .filter(claim -> !preferences.isEnabled(claim.userId(), claim.category()));
+        off.ifPresent(claim -> countSuppressed(claim.category()));
+        return off.isPresent();
+    }
+
+    private void countSuppressed(MailCategory category) {
+        Counter.builder("mail.outbox.suppressed")
+                .description("Optional emails not sent because the recipient turned their category off")
+                .tag("category", category.key())
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
      * Builds a plain-text message.
      *
      * @param email the queued email
@@ -247,6 +328,15 @@ public class EmailOutbox {
             helper.setTo(email.getRecipient());
             helper.setSubject(email.getSubject());
             helper.setText(email.getBody(), email.getHtmlBody());
+            if (email.getUnsubscribeToken() != null) {
+                // RFC 8058: mailbox providers POST "List-Unsubscribe=One-Click" to this URL, without cookies.
+                String url = UriComponentsBuilder.fromUriString(properties.unsubscribeBaseUrl())
+                        .path("/api/v1/mail/unsubscribe")
+                        .queryParam("token", email.getUnsubscribeToken())
+                        .toUriString();
+                message.setHeader("List-Unsubscribe", "<" + url + ">");
+                message.setHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
+            }
             return message;
         } catch (MessagingException ex) {
             throw new MailPreparationException("Could not build email " + email.getId(), ex);

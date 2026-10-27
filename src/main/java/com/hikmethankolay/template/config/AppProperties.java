@@ -225,12 +225,16 @@ public record AppProperties(
      * @param linkBaseUrl        base URL of the frontend that handles the links in emails, e.g.
      *                           {@code https://app.example.com}; links go to {@code /verify-email?token=...}
      *                           and {@code /reset-password?token=...}
+     * @param unsubscribeBaseUrl public URL of this API, e.g. {@code https://api.example.com}; the
+     *                           {@code List-Unsubscribe} header of optional emails points to
+     *                           {@code /api/v1/mail/unsubscribe} there, which mailbox providers call directly
      * @param maxAttempts        sending attempts before an email is given up
      * @param retryDelay         wait after the first failed attempt; doubles after each further failure
      */
     public record Mail(
             @NotBlank String from,
             @NotBlank String linkBaseUrl,
+            @NotBlank String unsubscribeBaseUrl,
             @Positive int maxAttempts,
             @NotNull Duration retryDelay) {}
 

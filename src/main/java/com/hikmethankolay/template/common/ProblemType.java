@@ -52,6 +52,10 @@ public enum ProblemType {
     /** An email verification or password reset token is unknown, used or expired. */
     INVALID_TOKEN("invalid-token", "The email verification or password reset token is unknown, used or expired"),
 
+    /** An unsubscribe link's token is malformed or was not issued by this server. */
+    UNSUBSCRIBE_TOKEN_INVALID(
+            "unsubscribe-token-invalid", "The unsubscribe link's token is malformed or was not issued by this server"),
+
     /** The username belongs to another account. */
     USERNAME_TAKEN("username-taken", "The username belongs to another account"),
 

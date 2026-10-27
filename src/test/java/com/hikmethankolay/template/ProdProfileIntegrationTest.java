@@ -25,6 +25,7 @@ import org.springframework.test.context.TestPropertySource;
         properties = {
             "app.cors.allowed-origins=https://app.example.com",
             "app.mail.link-base-url=https://app.example.com",
+            "app.mail.unsubscribe-base-url=https://api.example.com",
             "app.social-login.redirect-uri=https://app.example.com/oauth2/callback",
             "app.mail.from=no-reply@acme.test",
             "spring.mail.host=smtp.acme.test",

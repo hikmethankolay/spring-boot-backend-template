@@ -25,7 +25,7 @@ class MailRendererTest {
 
     private static final String LINK = "https://app.example.com/verify-email?token=abc";
 
-    private final MailRenderer renderer = new MailRenderer("Acme");
+    private final MailRenderer renderer = new MailRenderer("Acme", "https://app.example.com");
 
     private RenderedMail render(String template) {
         return renderer.render(template, "Subject of " + template, Map.of("link", LINK, "ttl", "24 hours"));
@@ -76,6 +76,40 @@ class MailRendererTest {
             String markup = Files.readString(file).replaceAll("(?s)<!--/\\*.*?\\*/-->", "");
             assertThat(markup).as(file.toString()).doesNotContain("th:utext", "[(");
         });
+    }
+
+    @Test
+    void optionalEmailGetsTheUnsubscribeFooter() {
+        RenderedMail mail = renderer.render(
+                "broadcast/announcement",
+                "News",
+                Map.of("title", "What's new", "paragraphs", List.of("One", "Two")),
+                MailCategory.PRODUCT_UPDATES,
+                "zz9");
+
+        assertThat(mail.html())
+                .contains(
+                        "href=\"https://app.example.com/unsubscribe?token=zz9\"",
+                        "Product updates",
+                        "href=\"https://app.example.com/settings/emails\"",
+                        "<p>One</p>");
+        assertThat(mail.text())
+                .contains(
+                        "Unsubscribe from Product updates: https://app.example.com/unsubscribe?token=zz9",
+                        "Manage email preferences: https://app.example.com/settings/emails");
+    }
+
+    @Test
+    void transactionalEmailNeverGetsTheFooter() {
+        Map<String, Object> model = Map.of("link", LINK, "ttl", "1 hour", "unsubscribeUrl", "https://evil.test");
+
+        RenderedMail plain = renderer.render("verify-email", "Subject", model);
+        RenderedMail security = renderer.render("verify-email", "Subject", model, MailCategory.SECURITY, "zz9");
+
+        for (RenderedMail mail : List.of(plain, security)) {
+            assertThat(mail.html()).doesNotContain("evil.test", "Unsubscribe", "zz9");
+            assertThat(mail.text()).doesNotContain("Unsubscribe", "zz9");
+        }
     }
 
     @Test

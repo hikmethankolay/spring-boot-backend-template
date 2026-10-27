@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout.html :: layout(~{::content})}">
+<body>
+<th:block th:fragment="content">
+    <p><strong th:text="${title}">Title</strong></p>
+    <p th:each="paragraph : ${paragraphs}" th:text="${paragraph}">Paragraph</p>
+</th:block>
+</body>
+</html>

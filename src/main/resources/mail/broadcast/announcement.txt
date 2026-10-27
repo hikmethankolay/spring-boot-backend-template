@@ -1,0 +1,6 @@
+[(${title})]
+
+[# th:each="paragraph : ${paragraphs}"][(${paragraph})]
+
+[/]--
+[(${appName})]

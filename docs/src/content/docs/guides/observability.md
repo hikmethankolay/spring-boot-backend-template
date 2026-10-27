@@ -17,6 +17,8 @@ Besides the standard JVM, HTTP (with latency histograms), HikariCP and cache met
 | `security_audit_events_total{event}` | Security events, see [Audit log](../security/#audit-log) |
 | `mail_outbox_pending` | Emails waiting to be sent |
 | `mail_outbox_sent_total`, `mail_outbox_failures_total`, `mail_outbox_dropped_total` | Email delivery |
+| `mail_outbox_suppressed_total{category}` | Optional emails not sent because the recipient turned their category off |
+| `mail_unsubscribe_total{category,source}` | Opt-outs, by `source`: `one-click` (mail client), `link` (unsubscribe page) or `user` (preferences page) |
 
 ## Alerts and dashboard
 

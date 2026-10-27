@@ -9,6 +9,9 @@
   font-weight, color, background-color, padding, margin, border, border-radius, text-align, text-decoration,
   line-height, width, max-width, display, word-break. No flexbox, grid, <style> blocks or external CSS.
 
+  The footer adds an unsubscribe link only for optional categories: MailRenderer sets unsubscribeUrl, categoryName
+  and preferencesUrl for those and clears them for transactional emails.
+
   Values go through th:text or th:href, which escape them. Never th:utext or [(...)]: they do not escape.
 */-->
 <html lang="en" xmlns:th="http://www.thymeleaf.org" th:fragment="layout(content)">
@@ -37,6 +40,12 @@
                 <tr>
                     <td style="padding: 16px 32px; font-family: Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.5; color: #71717a; text-align: center">
                         Sent by <span th:text="${appName}">App</span>.
+                        <th:block th:if="${unsubscribeUrl}"><br>
+                            <a th:href="${unsubscribeUrl}" style="color: #71717a">Unsubscribe from
+                                <span th:text="${categoryName}">Product updates</span></a>
+                            ·
+                            <a th:href="${preferencesUrl}" style="color: #71717a">Manage email preferences</a>
+                        </th:block>
                     </td>
                 </tr>
             </table>

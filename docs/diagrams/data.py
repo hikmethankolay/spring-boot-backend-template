@@ -29,7 +29,7 @@ def table(d, x, y, w, name, rows, kind="box", note=None):
 
 def data_model():
     d = Diagram("data-model", 720, 760, "Database tables",
-                "Six tables belong to a user through user_id and are deleted with it; the email outbox and the "
+                "Seven tables belong to a user through user_id and are deleted with it; the email outbox and the "
                 "append-only audit log have no foreign key to users.")
     d.zone(14, 462, 692, 248, "NO FOREIGN KEY TO users")
     account = table(d, 14, 40, 190, "account_tokens", [
@@ -43,19 +43,22 @@ def data_model():
         ("session_version", ""), ("session_started_at", "")])
     social = table(d, 516, 226, 190, "social_identities", [
         ("id", "PK"), ("user_id", "FK"), ("provider", "UQ PAIR"), ("subject", "UQ PAIR")])
+    preferences = table(d, 516, 352, 190, "email_preferences", [
+        ("user_id", "PK · FK"), ("category", "PK"), ("enabled, source", "")])
     # Foreign keys enter users from the side; the lower tables climb through the gaps between the columns.
     d.wire((204, account(1)), (252, account(1)))
     d.wire((204, recovery(1)), (222, recovery(1)), (222, 160), (252, 160))
     d.wire((204, notes(1)), (236, notes(1)), (236, 200), (252, 200))
     d.wire((516, refresh(1)), (468, refresh(1)))
     d.wire((516, social(1)), (492, social(1)), (492, 180), (468, 180))
+    d.wire((516, preferences(0)), (504, preferences(0)), (504, 220), (468, 220))
     table(d, 252, 40, 216, "users", [
         ("id", "PK"), ("username, email", "UQ"), ("password_hash", ""), ("role", "USER·ADMIN·OWNER"),
         ("email_verified", ""), ("session_version", ""), ("totp_secret", "AES-GCM"), ("totp_enabled", ""),
         ("totp_last_step", "")], kind="box-focal")
     table(d, 34, 496, 310, "email_outbox", [
         ("id", "PK"), ("recipient, subject", ""), ("body, html_body", "HTML OPTIONAL"),
-        ("attempts, next_attempt_at", "INDEX"), ("last_error", "")])
+        ("attempts, next_attempt_at", "INDEX"), ("last_error, unsubscribe_token", "")])
     table(d, 376, 496, 310, "audit_events", [
         ("id", "PK"), ("occurred_at, action", ""), ("user_id", "NO FK"), ("actor_id, client_ip", ""),
         ("details", "JSONB")], note="APPEND-ONLY")
@@ -63,7 +66,7 @@ def data_model():
                               "only purge_audit_events() removes rows older than 90 days.",
                               "With no foreign key, the trail outlives a deleted user."]):
         d.text(360, 652 + 20 * i, line, anchor="middle")
-    d.legend(744, [("wire", "user_id → users.id, ON DELETE CASCADE"), ("box-focal", "parent of six tables")])
+    d.legend(744, [("wire", "user_id → users.id, ON DELETE CASCADE"), ("box-focal", "parent of seven tables")])
     d.save()
 
 

@@ -45,6 +45,23 @@ Every template also gets `subject` and `appName` (`spring.application.name`).
 4. Add the template to the lists in `MailRendererTest`, run it once, check `target/mail-preview/<name>.html` in a
    browser and copy it to `src/test/resources/mail-snapshots/`.
 
+## Categories and unsubscribe
+
+Every email belongs to a `MailCategory`. `ACCOUNT` and `SECURITY` are transactional: always sent, never with an
+unsubscribe link, and they cannot be turned off through any API. `PRODUCT_UPDATES` is optional: on by default, and
+users turn it off on the preferences page or with the link in each such email ([ADR 8](../../adr/0008-unsubscribe/)).
+
+Send an optional email with the category-aware `enqueue`, which skips users who turned the category off and adds the
+footer and the one-click `List-Unsubscribe` headers itself:
+
+```java
+outbox.enqueue(userId, to, MailCategory.PRODUCT_UPDATES, "broadcast/announcement", "What's new",
+        Map.of("title", "What's new", "paragraphs", List.of("…")));
+```
+
+To add an optional category, add a constant with `optional = true` and a description users understand: the
+preferences endpoint, the unsubscribe links and the data export pick it up.
+
 ## Layout and CSS rules
 
 `layout.html` holds the 600 px table container, the app name and the footer. `button.html` is the call-to-action: a

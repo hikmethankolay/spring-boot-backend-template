@@ -31,11 +31,12 @@ class ProductionSettingsCheckTest {
                 "localhost",
                 1025);
 
-        assertThat(problems).hasSize(6);
+        assertThat(problems).hasSize(7);
         assertThat(String.join("\n", problems))
                 .contains(
                         "CORS_ALLOWED_ORIGINS",
                         "MAIL_LINK_BASE_URL",
+                        "MAIL_UNSUBSCRIBE_BASE_URL",
                         "OAUTH2_REDIRECT_URI",
                         "DB_PASSWORD",
                         "MAIL_HOST",
@@ -188,7 +189,7 @@ class ProductionSettingsCheckTest {
                 p.login(),
                 p.rateLimit(),
                 p.account(),
-                new AppProperties.Mail("no-reply@acme.test", linkBaseUrl, 10, Duration.ofSeconds(30)),
+                new AppProperties.Mail("no-reply@acme.test", linkBaseUrl, linkBaseUrl, 10, Duration.ofSeconds(30)),
                 p.admin(),
                 p.mfa(),
                 new AppProperties.SocialLogin(
@@ -204,7 +205,7 @@ class ProductionSettingsCheckTest {
                 p.login(),
                 p.rateLimit(),
                 p.account(),
-                new AppProperties.Mail(from, m.linkBaseUrl(), m.maxAttempts(), m.retryDelay()),
+                new AppProperties.Mail(from, m.linkBaseUrl(), m.unsubscribeBaseUrl(), m.maxAttempts(), m.retryDelay()),
                 p.admin(),
                 p.mfa(),
                 p.socialLogin());

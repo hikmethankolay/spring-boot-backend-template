@@ -11,7 +11,7 @@ This page lists what the frontend has to do; [Security](../security/) explains w
 | Variable | Locally | In production |
 |----------|---------|---------------|
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Your frontend's origin, e.g. `https://app.example.com` |
-| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email` and `/reset-password` pages |
+| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email`, `/reset-password`, `/unsubscribe` and `/settings/emails` pages |
 | `OAUTH2_REDIRECT_URI` | `http://localhost:3000/oauth2/callback` | Your callback page, registered at GitHub and Google |
 
 With `SPRING_PROFILES_ACTIVE=prod` the app refuses to start while any of these still points to localhost
@@ -66,6 +66,8 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | `/oauth2/callback` | Only with GitHub or Google login: check `state`, then `POST /api/v1/auth/oauth2/{provider}` with `code` and `codeVerifier`; see [the steps](../security/#login-with-github-and-google) |
 | Account settings | `GET`/`PATCH /api/v1/users/me`, `PUT /api/v1/users/me/password`, two-factor enrollment, `GET /api/v1/users/me/export`, `DELETE /api/v1/users/me` with `{"password": "…"}` |
 | Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others |
+| `/unsubscribe?token=…` | No login. `GET /api/v1/mail/unsubscribe?token=…` returns `{"category": "product-updates", "categoryName": "Product updates", "enabled": true}`; ask to confirm, then `POST /api/v1/mail/unsubscribe?token=…` (no body), or `POST …/unsubscribe/all?token=…` for every optional email. Never change anything on load: mail scanners open links. Serve the page with `Referrer-Policy: no-referrer`, since the token does not expire |
+| `/settings/emails` | `GET /api/v1/users/me/email-preferences` lists `[{"category", "name", "description", "enabled"}]`; save with `PUT` and `{"product-updates": false}`. Account and security emails are not listed and cannot be turned off |
 
 A password change or reset ends every session, including the current one: send the user to the login page afterwards.
 

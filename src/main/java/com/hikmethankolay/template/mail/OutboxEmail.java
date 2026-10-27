@@ -33,6 +33,9 @@ public class OutboxEmail {
     @Column(name = "html_body", columnDefinition = "text")
     private String htmlBody;
 
+    @Column(name = "unsubscribe_token", length = 200)
+    private String unsubscribeToken;
+
     @Column(nullable = false)
     private int attempts;
 
@@ -68,10 +71,24 @@ public class OutboxEmail {
      * @param htmlBody  HTML alternative of the body, or {@code null} for a plain-text email
      */
     public OutboxEmail(String recipient, String subject, String body, String htmlBody) {
+        this(recipient, subject, body, htmlBody, null);
+    }
+
+    /**
+     * Queues a new email in an optional category for immediate sending.
+     *
+     * @param recipient        recipient address
+     * @param subject          subject line
+     * @param body             plain-text body
+     * @param htmlBody         HTML alternative of the body, or {@code null} for a plain-text email
+     * @param unsubscribeToken token for the {@code List-Unsubscribe} header, or {@code null} for transactional email
+     */
+    public OutboxEmail(String recipient, String subject, String body, String htmlBody, String unsubscribeToken) {
         this.recipient = recipient;
         this.subject = subject;
         this.body = body;
         this.htmlBody = htmlBody;
+        this.unsubscribeToken = unsubscribeToken;
         this.createdAt = Instant.now();
         this.nextAttemptAt = createdAt;
     }
@@ -119,6 +136,15 @@ public class OutboxEmail {
      */
     public String getHtmlBody() {
         return htmlBody;
+    }
+
+    /**
+     * Returns the unsubscribe token.
+     *
+     * @return the token for the {@code List-Unsubscribe} header, or {@code null} for transactional email
+     */
+    public String getUnsubscribeToken() {
+        return unsubscribeToken;
     }
 
     /**

@@ -67,6 +67,11 @@ class ProductionSettingsCheck {
         if (isLocal(linkBaseUrl)) {
             problems.add("MAIL_LINK_BASE_URL must be your frontend's URL, not localhost (" + linkBaseUrl + ")");
         }
+        String unsubscribeBaseUrl = properties.mail().unsubscribeBaseUrl();
+        if (isLocal(unsubscribeBaseUrl)) {
+            problems.add("MAIL_UNSUBSCRIBE_BASE_URL must be this API's public URL, not localhost (" + unsubscribeBaseUrl
+                    + ")");
+        }
         AppProperties.SocialLogin social = properties.socialLogin();
         boolean socialLogin = social.github().isConfigured() || social.google().isConfigured();
         if (socialLogin && isLocal(social.redirectUri())) {

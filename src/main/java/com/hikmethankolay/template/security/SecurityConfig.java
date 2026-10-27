@@ -81,6 +81,8 @@ public class SecurityConfig {
         "/api/v1/auth/verify-email/resend",
         "/api/v1/auth/password-reset",
         "/api/v1/auth/password-reset/confirm",
+        "/api/v1/mail/unsubscribe",
+        "/api/v1/mail/unsubscribe/all",
         "/.well-known/jwks.json",
         "/actuator/health",
         "/actuator/health/**",

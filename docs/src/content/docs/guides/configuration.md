@@ -43,6 +43,7 @@ defaults marked *prod: must change* below.
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` | `localhost`, `1025`, `no-reply@example.com` | Outgoing mail (Mailpit by default). Set `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` for a real SMTP server (*prod: Mailpit's `localhost:1025` and `example.com` senders are refused*) |
 | `MAIL_STARTTLS_REQUIRED` | `true` (*prod only*) | The prod profile refuses to send without STARTTLS on port 587; port 465 with implicit TLS (`SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`) also works. Set `false` only for a relay without TLS. Other profiles use STARTTLS when the server offers it. See [Production](../production/#mail-encryption) |
 | `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Frontend that handles `/sign-up?token=…`, `/verify-email?token=…` and `/reset-password?token=…` (*prod: must change*) |
+| `MAIL_UNSUBSCRIBE_BASE_URL` | `http://localhost:8080` | Public URL of this API: the one-click `List-Unsubscribe` header of optional emails points to its `/api/v1/mail/unsubscribe`, which mailbox providers call directly (*prod: must change*) |
 | `MAIL_MAX_ATTEMPTS` / `MAIL_RETRY_DELAY` / `MAIL_OUTBOX_POLL_INTERVAL` | `10` / `30s` / `10s` | Email outbox retries (the delay doubles after each failure, up to 1 hour) |
 | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | *(none; `setup` fills them in)* | The owner account (role `OWNER`, see [Security](../security/#roles)), created only when all three are set and no owner exists; they must pass the registration rules or startup fails |
 | `TRACING_SAMPLING_PROBABILITY` | `1.0` (`0.1` in prod) | Share of requests traced |
@@ -64,8 +65,8 @@ The schema is managed by Flyway (`src/main/resources/db/migration`), and Hiberna
 match it. Databases created before Flyway was introduced are baselined at version 1 instead of failing.
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/data-model-light.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens and social_identities point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
-  <img class="light:sl-hidden" src="../../diagrams/data-model-dark.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens and social_identities point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
+  <img class="dark:sl-hidden" src="../../diagrams/data-model-light.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens, social_identities and email_preferences point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
+  <img class="light:sl-hidden" src="../../diagrams/data-model-dark.svg" width="720" height="760" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens, social_identities and email_preferences point to users through user_id with ON DELETE CASCADE; email_outbox and the append-only audit_events have no foreign key to users." />
 </figure>
 
 Migrations run with the same `statement_timeout` as the application. For a migration that needs longer (a large

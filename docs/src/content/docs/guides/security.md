@@ -214,6 +214,11 @@ password or logged in on a newer version cannot log in until they reset their pa
 - Emails go through an outbox with retries, see [Observability](../observability/#email-outbox).
 - Email templates print values with `th:text` and `th:href`, which escape them; `th:utext` and `[(...)]` are
   banned in HTML templates and a test enforces it. See [Email templates](../email-templates/).
+- Unsubscribe links carry `v1.<base64url(userId.category)>.<base64url(HMAC-SHA256)>`, keyed by HKDF from
+  `MFA_ENCRYPTION_KEY` ([ADR 8](../../adr/0008-unsubscribe/)). They need no login and never expire, so they can only
+  turn off an optional category; `GET` changes nothing (mail scanners open links). The endpoints are public paths
+  and pass the CSRF filter because mail clients send them without cookies, which is the only case that filter
+  checks. Tokens are never logged.
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/sign-up-light.svg" width="720" height="684" alt="POST /auth/register claims a Redis cooldown, looks up the address and emails either an already-registered notice or a sign-up link, answering 202 either way; the link's page posts to /register/complete, which checks the link is unused, inserts a verified user, marks the link used and answers 201." />

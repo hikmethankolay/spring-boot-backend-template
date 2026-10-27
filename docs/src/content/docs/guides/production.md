@@ -14,7 +14,8 @@ Start the app with `SPRING_PROFILES_ACTIVE=prod` to switch to:
 - 10% trace sampling
 - Actuator on port `8081`, which must stay internal
 - a startup check that refuses the development defaults: the app does not start while `CORS_ALLOWED_ORIGINS`,
-  `MAIL_LINK_BASE_URL` or (with GitHub or Google login on) `OAUTH2_REDIRECT_URI` point to localhost, while
+  `MAIL_LINK_BASE_URL`, `MAIL_UNSUBSCRIBE_BASE_URL` or (with GitHub or Google login on) `OAUTH2_REDIRECT_URI` point
+  to localhost, while
   `DB_PASSWORD` is the local `app`, while `MAIL_HOST`/`MAIL_PORT` are the local Mailpit (`localhost:1025`), or while
   `MAIL_FROM` is an `example.com`, `example.net` or `example.org` address. Without the mail checks, verification
   emails would never arrive and nobody could finish signing up. The error names every variable to set.
@@ -186,9 +187,18 @@ STARTTLS step is skipped, because the connection is already encrypted, so the se
 Set `MAIL_STARTTLS_REQUIRED=false` only for a relay without TLS on the same host or private network. The other
 profiles use STARTTLS when the server offers it, so the local Mailpit, which has no TLS, keeps working.
 
+### Bulk sender rules
+
+Gmail and Yahoo require senders of optional email to offer one-click unsubscribe (RFC 8058), honour it within two
+days and keep the spam rate under 0.3 %. Optional emails meet the first two out of the box: each carries
+`List-Unsubscribe` and `List-Unsubscribe-Post` headers pointing to `MAIL_UNSUBSCRIBE_BASE_URL`, and the opt-out
+applies at once, even to emails still waiting in the outbox. Set `MAIL_UNSUBSCRIBE_BASE_URL` to the API's public
+HTTPS URL (providers call it server to server), and set up SPF, DKIM and DMARC for the `MAIL_FROM` domain at your
+provider. Account and security emails are transactional and carry no unsubscribe link.
+
 ## Checklist
 
-- [ ] Set real values for `CORS_ALLOWED_ORIGINS` and `MAIL_LINK_BASE_URL`.
+- [ ] Set real values for `CORS_ALLOWED_ORIGINS`, `MAIL_LINK_BASE_URL` and `MAIL_UNSUBSCRIBE_BASE_URL`.
 - [ ] Use an SMTP server (`MAIL_HOST`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) over TLS on 465 or 587 (see
       [Mail encryption](#mail-encryption)) and a sender of your own domain (`MAIL_FROM`).
 - [ ] Use a Redis with a password and TLS (`REDIS_PASSWORD`, `REDIS_SSL_ENABLED=true`).

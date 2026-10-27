@@ -32,7 +32,8 @@ explain the details.
 - Database changes are new Flyway migrations (`V<n>__description.sql`); never edit a released one.
 - Emails are templates in `src/main/resources/mail/` (an `.html` and a `.txt`), not strings in Java. When a template
   changes on purpose, copy `target/mail-preview/<name>.html` over its snapshot in
-  `src/test/resources/mail-snapshots/` (see the Email templates guide).
+  `src/test/resources/mail-snapshots/` (see the Email templates guide). An email that users may turn off belongs
+  to an optional `MailCategory`, with a description they understand, and is sent with the category-aware `enqueue`.
 
 ## Commits and pull requests
 

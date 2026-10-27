@@ -11,6 +11,14 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - HTML emails: `MailRenderer` renders every email from a Thymeleaf template pair in `src/main/resources/mail/` (a
   shared layout and a plain-text twin), and the outbox sends both as `multipart/alternative`. Migration `V13` adds
   `email_outbox.html_body`. New Email templates guide and ADR 7.
+- Email categories and preferences: `MailCategory` marks emails as transactional or optional. Optional ones carry an
+  unsubscribe footer and one-click `List-Unsubscribe` headers (RFC 8058), and are skipped for users who turned them
+  off. New endpoints `GET`/`PUT /api/v1/users/me/email-preferences` and `GET`/`POST /api/v1/mail/unsubscribe`
+  (+ `/all`), problem type `unsubscribe-token-invalid`, audit event `user.email_preferences_changed`, metrics
+  `mail_outbox_suppressed_total` and `mail_unsubscribe_total`. Migration `V14` adds `email_preferences` and
+  `email_outbox.unsubscribe_token`. ADR 8.
+- `MAIL_UNSUBSCRIBE_BASE_URL`: the API's public URL for the unsubscribe header. The `prod` profile refuses to start
+  while it points to localhost, so existing deployments must set it.
 
 ### Changed
 

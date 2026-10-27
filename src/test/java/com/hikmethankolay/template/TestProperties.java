@@ -41,7 +41,12 @@ public final class TestProperties {
                 new AppProperties.Login(3, 5, Duration.ofHours(1)),
                 new AppProperties.RateLimit(true, 120, List.of()),
                 new AppProperties.Account(false, Duration.ofHours(24), Duration.ofHours(1), false),
-                new AppProperties.Mail("no-reply@example.com", "http://localhost:3000", 10, Duration.ofSeconds(30)),
+                new AppProperties.Mail(
+                        "no-reply@example.com",
+                        "http://localhost:3000",
+                        "http://localhost:8080",
+                        10,
+                        Duration.ofSeconds(30)),
                 new AppProperties.Admin(null, null, null),
                 new AppProperties.Mfa("unit-test-mfa-key-that-is-at-least-32-chars", Duration.ofMinutes(5)),
                 new AppProperties.SocialLogin(
