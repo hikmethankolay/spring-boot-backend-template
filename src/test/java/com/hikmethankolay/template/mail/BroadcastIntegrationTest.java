@@ -44,8 +44,10 @@ class BroadcastIntegrationTest extends IntegrationTest {
 
     private static MockHttpServletRequestBuilder broadcast(
             String path, String token, String category, String password) {
+        // Its own IP: the wrong password below counts as a failed login of that IP.
         return post(path)
                 .with(bearer(token))
+                .with(fromIp("10.0.31.7"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json("""
                         {"category":"%s","subject":"%s","title":"What's new","body":"<b>Faster</b> logins.\\n\\nAnd more.",

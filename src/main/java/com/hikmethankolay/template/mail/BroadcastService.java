@@ -3,11 +3,13 @@ package com.hikmethankolay.template.mail;
 import com.hikmethankolay.template.audit.AuditEvent;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.mail.dto.BroadcastPreview;
 import com.hikmethankolay.template.mail.dto.BroadcastRequest;
 import com.hikmethankolay.template.mail.dto.BroadcastResponse;
 import com.hikmethankolay.template.mail.dto.BroadcastResult;
+import com.hikmethankolay.template.security.LoginAttemptService;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.UserService;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -85,6 +87,8 @@ public class BroadcastService {
 
     private final TaskExecutor executor;
 
+    private final LoginAttemptService loginAttempts;
+
     /**
      * Creates the service.
      *
@@ -98,6 +102,7 @@ public class BroadcastService {
      * @param batchSize          recipients queued per transaction
      * @param executor           Spring Boot's task executor, which queues broadcasts in the background and lets
      *                           them finish when the app stops ({@code spring.task.execution.shutdown})
+     * @param loginAttempts      locks out repeated wrong passwords
      */
     public BroadcastService(
             JdbcTemplate jdbc,
@@ -108,7 +113,8 @@ public class BroadcastService {
             MeterRegistry meterRegistry,
             PlatformTransactionManager transactionManager,
             @Value("${app.mail.broadcast-batch-size}") int batchSize,
-            @Qualifier("applicationTaskExecutor") TaskExecutor executor) {
+            @Qualifier("applicationTaskExecutor") TaskExecutor executor,
+            LoginAttemptService loginAttempts) {
         this.jdbc = jdbc;
         this.outbox = outbox;
         this.renderer = renderer;
@@ -119,6 +125,7 @@ public class BroadcastService {
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.batchSize = batchSize;
         this.executor = executor;
+        this.loginAttempts = loginAttempts;
     }
 
     /**
@@ -138,15 +145,30 @@ public class BroadcastService {
     /**
      * Records a broadcast and starts queuing it for every user in its audience, in the background.
      *
-     * @param ownerId the owner sending it
-     * @param request the broadcast, with the owner's current password
+     * @param ownerId  the owner sending it
+     * @param clientIp address of the client, for the failed-password lockout
+     * @param request  the broadcast, with the owner's current password
      * @return the broadcast id and the number of recipients expected
      * @throws ApiException 400 if the category is unknown or transactional or the password is wrong, 409 if a
-     *                      broadcast is still being queued or started less than a minute ago
+     *                      broadcast is still being queued or started less than a minute ago, 429 if the IP or
+     *                      account is locked after failed passwords, 503 if the failed-login counters cannot be
+     *                      checked
      */
-    public BroadcastResult send(long ownerId, BroadcastRequest request) {
+    public BroadcastResult send(long ownerId, String clientIp, BroadcastRequest request) {
         MailCategory category = category(request);
+        // Wrong passwords count as failed logins, as when turning off two-factor authentication, so a stolen access
+        // token cannot be used to guess the owner's password here.
+        String accountKey = "account:" + ownerId;
+        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
+        if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
+            throw ApiException.tooManyRequests(
+                    ProblemType.LOGIN_LOCKED,
+                    "Too many failed attempts. Please try again later.",
+                    loginAttempts.lockDuration());
+        }
         users.confirmPassword(ownerId, request.currentPassword());
+        loginAttempts.reset(accountKey);
+        loginAttempts.release(ipKey);
         int recipients = recipients(request, category);
         long id =
                 Objects.requireNonNull(newTransaction.execute(status -> start(ownerId, request, category, recipients)));
