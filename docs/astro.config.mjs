@@ -11,6 +11,8 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Spring Boot Backend Template',
+      // The 404 page is src/content/docs/404.md, rendered by the docs route; Starlight's own would clash with it.
+      disable404Route: true,
       description:
         'Production-ready Spring Boot backend template: JWT auth, account flows, caching, rate limiting, observability.',
       social: [{ icon: 'github', label: 'GitHub', href: repository }],
