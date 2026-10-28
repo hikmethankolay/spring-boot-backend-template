@@ -1,16 +1,16 @@
 <!--/*
-  Call-to-action button for HTML emails: ~{button.html :: button(${link}, 'Label')}. The link sits in a padded,
-  coloured cell, which renders in Outlook too, and the raw URL follows for clients that block the button.
+  Call-to-action button for HTML emails: ~{button.html :: button(${link}, 'Label')}. The padding and colour sit on
+  the table cell, not the link ("bulletproof" button), so it keeps its size in Outlook and in clients without
+  display: inline-block; the raw URL follows for clients that block the button.
 */-->
 <th:block xmlns:th="http://www.thymeleaf.org" th:fragment="button(href, label)">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
         <tr>
-            <td style="border-radius: 6px; background-color: #2563eb">
-                <a th:href="${href}" th:text="${label}"
-                   style="display: inline-block; padding: 12px 24px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: bold; color: #ffffff; text-decoration: none; border-radius: 6px">Label</a>
+            <td style="padding: 12px 24px; background-color: #2563eb; font-family: Arial, Helvetica, sans-serif; font-size: 16px">
+                <a th:href="${href}" style="color: #ffffff"><b th:text="${label}">Label</b></a>
             </td>
         </tr>
     </table>
     <p>If the button does not work, open this link:<br>
-        <a th:href="${href}" th:text="${href}" style="word-break: break-all">https://example.com</a></p>
+        <a th:href="${href}" th:text="${href}">https://example.com</a></p>
 </th:block>
