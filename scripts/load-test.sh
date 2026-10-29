@@ -3,7 +3,8 @@
 # so no local k6 install is needed. All requests come from one IP, so start the target app with
 # RATE_LIMIT_ENABLED=false (and REQUIRE_VERIFIED_EMAIL=false), e.g.:
 #   RATE_LIMIT_ENABLED=false scripts/dev.sh
-# With FAILED_LOGINS=true, also raise the login lockout, or the run locks the IP out. A short lock duration
+# With FAILED_LOGINS=true, or many users (stress, spike), also raise the login lockout: it counts every login still
+# in progress, so more than LOGIN_MAX_ATTEMPTS concurrent logins from the one IP get 429. A short lock duration
 # lets the IP's failure count expire soon after the run, before the app is restarted with the normal limit:
 #   RATE_LIMIT_ENABLED=false LOGIN_MAX_ATTEMPTS=1000000 LOGIN_LOCK_DURATION=1m scripts/dev.sh
 #

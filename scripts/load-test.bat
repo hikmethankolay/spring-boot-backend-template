@@ -1,8 +1,8 @@
 @echo off
 rem Runs the k6 load test (load-tests\api.js) against a running app, using the k6 container image.
 rem All requests come from one IP, so start the target app with RATE_LIMIT_ENABLED=false
-rem (and REQUIRE_VERIFIED_EMAIL=false). With FAILED_LOGINS=true, also set LOGIN_MAX_ATTEMPTS=1000000
-rem and LOGIN_LOCK_DURATION=1m, or the run locks the IP out.
+rem (and REQUIRE_VERIFIED_EMAIL=false). With FAILED_LOGINS=true, or many users (stress, spike), also set
+rem LOGIN_MAX_ATTEMPTS=1000000 and LOGIN_LOCK_DURATION=1m: the lockout counts every login still in progress.
 rem Usage: scripts\load-test.bat [base-url]   (default http://host.docker.internal:8080)
 rem Env:   PROFILE (smoke, load, stress, spike, soak or throughput; default load), VUS (peak users, default 20),
 rem        DURATION (time at the peak), THINK_TIME (default 1), USERS (default 20), FAILED_LOGINS.

@@ -83,8 +83,9 @@ time. It runs weekly in CI (`.github/workflows/mutation.yml`) and fails below th
 
 Sign-up is email-first, so the test reads the sign-up links from Mailpit
 (`MAILPIT_URL`, default `http://localhost:8025`; `scripts/smoke.sh` does the same). All requests come from one IP,
-so start the target with `RATE_LIMIT_ENABLED=false`. With `FAILED_LOGINS=true`, also
-raise the login lockout, or the run locks the IP out:
+so start the target with `RATE_LIMIT_ENABLED=false`. Also raise the login lockout with `FAILED_LOGINS=true`, or for a
+profile with many users (`stress`, `spike`): the lockout counts every login still in progress, so more than
+`LOGIN_MAX_ATTEMPTS` (10) concurrent logins from that one IP are answered `429`:
 
 ```bash
 RATE_LIMIT_ENABLED=false LOGIN_MAX_ATTEMPTS=1000000 LOGIN_LOCK_DURATION=1m scripts/dev.sh   # terminal 1
@@ -95,6 +96,11 @@ PROFILE=smoke scripts/load-test.sh                                              
 peak), `stress` (the peak, then twice and three times it), `spike` (a sudden jump to five times the peak) and `soak`
 (1 h at the peak). `DURATION` changes the time at the peak and `THINK_TIME` (default `1` s, randomised) the pause
 between a user's requests. The test users are created in setup and deleted at the end.
+
+A user whose journey fails waits about five think times before starting again, as a real user would, so an
+overloaded app does not also get a retry storm. Requests carry `X-Requested-With: XMLHttpRequest`, as a browser app's
+do: k6 sends back the auth cookies that login sets, and the [CSRF guard](../security/) rejects a cookie request
+without that header.
 
 Each kind of request has its own threshold, so one slow kind cannot hide behind fast ones: p95 under 300 ms for
 reads, 500 ms for writes and 1.5 s for requests that check a password with Argon2id, with fewer than 1% failed
@@ -109,6 +115,18 @@ PROFILE=throughput VUS=100 DURATION=20s scripts/load-test.sh
 
 On a 20-core developer machine, one instance served about **7,500 req/s at a p95 of 19 ms**, with k6 running on the
 same machine.
+
+On a small server, with the app, PostgreSQL and Redis sharing **2 CPUs and 4 GB** (one Podman pod started with
+`--cpus 2 --memory 4g`, k6 and Mailpit outside it), version 4.1 after a one-minute warm-up (a cold JVM served less
+than half):
+
+- `throughput` peaked at **about 9,100 req/s** with 100 users, at a p95 of 40 ms. Both CPUs were busy from 10 users
+  on; more users only added latency (a p95 of 161 ms at 800) and cost about 15% of the throughput, with no errors.
+- `stress` with `VUS=100` held **200 browsing users at about 320 req/s**, every p95 within its threshold and 1.65 CPUs
+  busy, and reached its limit at **300 users and about 475 req/s**, both CPUs saturated and password requests at a
+  p95 of 0.8 s.
+- The limit for real traffic is password hashing: each Argon2id check costs about 35 ms of CPU, so 2 CPUs handle
+  about 55 logins, sign-ups or password changes per second. Memory peaked at 1.7 GB.
 
 ## Continuous integration
 

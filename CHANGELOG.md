@@ -10,9 +10,16 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 - The Javadoc check, and with it the CI Documentation job and the 4.1.0 documentation site build, failed on an
   undocumented constructor parameter of `SocialAccountService`.
+- A server error during a login (for example, no free database connection) counted as a failed attempt, so after an
+  outage a busy IP could stay locked out for `LOGIN_LOCK_DURATION`. A failed user lookup was also answered
+  `401 Invalid username or password` instead of `500`. The same counting applied to the MFA login, turning off
+  two-factor authentication and sending a broadcast. New `LoginAttemptService.giveBack`.
+- Load test: the CSRF guard answered `403` to refresh, logout and the second login in setup (cookies without a Bearer
+  token), and a failed journey started again at once, turning an overloaded app into a retry storm.
 
 ### Changed
 
+- Testing guide: load test results on 2 CPUs and 4 GB, and when to raise the login lockout for a load test.
 - `scripts/smoke.sh` and `scripts\smoke.bat` also read and change the email preferences.
 - README: a full features table, the 4.1 features and a new recording of the first run.
 
