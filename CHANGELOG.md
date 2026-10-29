@@ -19,7 +19,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ### Changed
 
-- Testing guide: load test results on 2 CPUs and 4 GB, and when to raise the login lockout for a load test.
+- Testing guide: load test results on 2 CPUs and 4 GB, explained, in place of the developer-machine numbers, and when
+  to raise the login lockout for a load test. Production guide: a Sizing section.
 - `scripts/smoke.sh` and `scripts\smoke.bat` also read and change the email preferences.
 - README: a full features table, the 4.1 features and a new recording of the first run.
 

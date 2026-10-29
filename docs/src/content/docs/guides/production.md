@@ -163,6 +163,21 @@ digest by hand from the release workflow's log.
 
 PostgreSQL, Redis and SMTP are expected to be managed services or deployed separately.
 
+### Sizing
+
+On one server with 2 CPUs and 4 GB shared by the app, PostgreSQL and Redis, the
+[load test](../testing/#results-on-2-cpus-and-4-gb) measured:
+
+- **About 200 users active at the same moment** with room to spare, and about 300 at the limit. Plan for the first
+  number.
+- **About 55 password checks per second:** logins, sign-ups and password changes. Argon2id makes them by far the most
+  expensive requests, so a burst of logins, such as everyone signing in at 9:00, reaches the limit first.
+- **CPU, not memory, is the limit.** To serve more, add CPUs or instances; more memory does not help. Keep the rate
+  limit on: it stops a flood of logins before it uses up the database connections.
+
+The Kubernetes manifests size pods differently (a 250m CPU request and a 768 MiB memory limit) and scale out on CPU
+with the HorizontalPodAutoscaler, so load test your own pods before relying on these numbers.
+
 ### Database connections
 
 Each instance opens up to `DB_POOL_SIZE` connections (10). Keep *maximum replicas × `DB_POOL_SIZE`* below the

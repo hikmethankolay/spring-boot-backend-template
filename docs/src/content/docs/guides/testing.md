@@ -104,8 +104,7 @@ without that header.
 
 Each kind of request has its own threshold, so one slow kind cannot hide behind fast ones: p95 under 300 ms for
 reads, 500 ms for writes and 1.5 s for requests that check a password with Argon2id, with fewer than 1% failed
-requests or journeys and no 429. With the default `load` profile (25 users), one instance on a developer machine
-answered reads at a p95 of 4 ms, writes at 16 ms and password requests at 136 ms.
+requests or journeys and no 429.
 
 `PROFILE=throughput` measures raw capacity instead: every user reads `/api/v1/users/me` without pausing.
 
@@ -113,20 +112,38 @@ answered reads at a p95 of 4 ms, writes at 16 ms and password requests at 136 ms
 PROFILE=throughput VUS=100 DURATION=20s scripts/load-test.sh
 ```
 
-On a 20-core developer machine, one instance served about **7,500 req/s at a p95 of 19 ms**, with k6 running on the
-same machine.
+### Results on 2 CPUs and 4 GB
 
-On a small server, with the app, PostgreSQL and Redis sharing **2 CPUs and 4 GB** (one Podman pod started with
-`--cpus 2 --memory 4g`, k6 and Mailpit outside it), version 4.1 after a one-minute warm-up (a cold JVM served less
-than half):
+These numbers come from a small server: the app, PostgreSQL and Redis sharing 2 CPUs and 4 GB (one Podman pod
+started with `--cpus 2 --memory 4g`, with k6 and Mailpit outside it), version 4.1. Run the test once before you
+measure: a freshly started JVM is still compiling its hot code and served less than half as much.
 
-- `throughput` peaked at **about 9,100 req/s** with 100 users, at a p95 of 40 ms. Both CPUs were busy from 10 users
-  on; more users only added latency (a p95 of 161 ms at 800) and cost about 15% of the throughput, with no errors.
-- `stress` with `VUS=100` held **200 browsing users at about 320 req/s**, every p95 within its threshold and 1.65 CPUs
-  busy, and reached its limit at **300 users and about 475 req/s**, both CPUs saturated and password requests at a
-  p95 of 0.8 s.
-- The limit for real traffic is password hashing: each Argon2id check costs about 35 ms of CPU, so 2 CPUs handle
-  about 55 logins, sign-ups or password changes per second. Memory peaked at 1.7 GB.
+How to read them: *req/s* is how many requests the app answered per second. *p95* is the response time that 95 of
+100 requests beat, a near-worst case. A *user* is one k6 user going through a journey with about a second's pause
+between clicks, so 200 users means 200 people clicking at the same moment, not 200 accounts.
+
+| Test | Result | What it means |
+|---|---|---|
+| `throughput`: the cheapest request, no pauses | **About 9,100 req/s** at its peak, with 100 users (p95 40 ms) | The ceiling. Both CPUs were full from 10 users on: more users made everyone wait longer (p95 161 ms at 800) and lowered throughput by about 15%, but nothing failed. |
+| `stress`: real journeys, 200 users | **About 320 req/s**, every p95 within its threshold, 1.65 of 2 CPUs busy | Comfortable: fast, with room left for bursts. |
+| `stress`: real journeys, 300 users | **About 475 req/s**, both CPUs full, password requests at a p95 of 0.8 s | The limit: still within the thresholds, with nothing to spare. |
+
+Real traffic gets about 20 times less than the ceiling because of password checks. Argon2id is slow on purpose, so
+that a leaked password hash is expensive to crack: one check costs about 35 ms of CPU, about 150 times a profile
+read. Two CPUs therefore handle about **55 logins, sign-ups or password changes per second**, and the share of those
+in your traffic decides your capacity more than anything else. Memory was never the limit: the whole pod peaked at
+1.7 GB of 4 GB. Tracing every request (`TRACING_SAMPLING_PROBABILITY=1.0`) made no measurable difference while no
+exporter was configured.
+
+Past 300 users the run broke down, mostly because of how it was run rather than the app:
+
+- **429 on login:** the lockout counts every login still in progress, and all k6 users share one IP, so more than
+  10 slow logins at once blocked it. Real users come from many addresses; for a run like this, raise
+  `LOGIN_MAX_ATTEMPTS` as described above.
+- **500 with `Connection is not available`:** the blocked users retried at once (the script now pauses after a
+  failure), and even a blocked login reads the user and writes an audit entry, so the 10 database connections ran
+  out. With virtual threads, the connection pool is the only limit on concurrent work. In production the rate limit
+  stops such a flood before it reaches the database, so keep it on.
 
 ## Continuous integration
 
