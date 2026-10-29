@@ -189,10 +189,23 @@ public class MfaService {
                     "Too many failed attempts. Please try again later.",
                     loginAttempts.lockDuration());
         }
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+        boolean passwordOk;
+        boolean codeOk;
+        boolean checked = false;
+        try {
+            passwordOk = passwordEncoder.matches(currentPassword, user.getPasswordHash());
+            codeOk = passwordOk && checkCode(user, code);
+            checked = true;
+        } finally {
+            // The code could not be checked (database down): no failed attempt.
+            if (!checked) {
+                loginAttempts.giveBack(ipKey, accountKey);
+            }
+        }
+        if (!passwordOk) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
         }
-        if (!checkCode(user, code)) {
+        if (!codeOk) {
             throw ApiException.badRequest(ProblemType.INVALID_MFA_CODE, "The code is wrong, expired or used.");
         }
         loginAttempts.reset(accountKey);

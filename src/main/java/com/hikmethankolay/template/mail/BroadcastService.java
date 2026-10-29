@@ -166,7 +166,19 @@ public class BroadcastService {
                     "Too many failed attempts. Please try again later.",
                     loginAttempts.lockDuration());
         }
-        users.confirmPassword(ownerId, request.currentPassword());
+        boolean checked = false;
+        try {
+            users.confirmPassword(ownerId, request.currentPassword());
+            checked = true;
+        } catch (ApiException ex) {
+            checked = true; // a wrong password stays counted
+            throw ex;
+        } finally {
+            // The password could not be checked (database down): no failed attempt.
+            if (!checked) {
+                loginAttempts.giveBack(ipKey, accountKey);
+            }
+        }
         loginAttempts.reset(accountKey);
         loginAttempts.release(ipKey);
         int recipients = recipients(request, category);

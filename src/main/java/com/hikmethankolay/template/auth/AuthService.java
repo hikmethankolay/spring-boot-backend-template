@@ -27,9 +27,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.core.NestedRuntimeException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -189,19 +191,35 @@ public class AuthService {
                     loginAttempts.lockDuration());
         }
 
-        Authentication authentication;
+        AppUserDetails user;
+        boolean mfaEnabled;
+        // Set once the credentials were checked, right or wrong. An attempt that ends before that in a server error
+        // (e.g. no free database connection) is given back: it is no failed login.
+        boolean checked = false;
         try {
-            authentication = authenticationManager.authenticate(
+            Authentication authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(identifier, request.password()));
+            user = (AppUserDetails) Objects.requireNonNull(authentication.getPrincipal());
+            mfaEnabled =
+                    userRepository.findById(user.id()).map(User::isTotpEnabled).orElse(false);
+            checked = true;
+        } catch (InternalAuthenticationServiceException ex) {
+            // Spring wraps a failed user lookup in this. It is a server error, not wrong credentials, so it is
+            // answered as one (500, not 401).
+            if (ex.getCause() instanceof NestedRuntimeException cause) {
+                throw cause;
+            }
+            throw ex;
         } catch (AuthenticationException ex) {
+            checked = true;
             // The attempt was already counted by tryAcquire.
             audit.record(AuditEvent.LOGIN_FAILED, accountId, "identifierHash", identifierHash);
             throw new BadCredentialsException("Invalid username or password.");
+        } finally {
+            if (!checked) {
+                loginAttempts.giveBack(ipKey, accountKey);
+            }
         }
-
-        AppUserDetails user = (AppUserDetails) Objects.requireNonNull(authentication.getPrincipal());
-        boolean mfaEnabled =
-                userRepository.findById(user.id()).map(User::isTotpEnabled).orElse(false);
         // Only the account counter is reset: one valid login must not clear the IP's failures, it
         // only takes back its own attempt. With a second factor, the account's failures stay until the code
         // is right, so wrong codes add up across logins.
@@ -252,12 +270,25 @@ public class AuthService {
                     "Too many failed login attempts. Please try again later.",
                     loginAttempts.lockDuration());
         }
-        if (!mfa.verifyLogin(challenge.userId(), code)) {
+        boolean verified;
+        boolean consumed;
+        boolean checked = false;
+        try {
+            verified = mfa.verifyLogin(challenge.userId(), code);
+            consumed = verified && challenges.consume(mfaToken);
+            checked = true;
+        } finally {
+            // The code could not be checked (database or Redis down): no failed attempt.
+            if (!checked) {
+                loginAttempts.giveBack(ipKey, accountKey);
+            }
+        }
+        if (!verified) {
             audit.record(AuditEvent.MFA_FAILED, challenge.userId());
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED, ProblemType.INVALID_MFA_CODE, "The code is wrong, expired or used.");
         }
-        if (!challenges.consume(mfaToken)) {
+        if (!consumed) {
             throw mfaChallengeExpired();
         }
         loginAttempts.reset(accountKey);

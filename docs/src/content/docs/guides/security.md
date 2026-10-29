@@ -337,6 +337,13 @@ failures (default 10), an account after `LOGIN_ACCOUNT_MAX_ATTEMPTS` (default 10
 is rejected with `429` and `Retry-After`, even with the right password, until `LOGIN_LOCK_DURATION` has passed without
 new failures. A successful login only resets the account counter, not the IP counter.
 
+Each attempt is counted before the password is checked, so concurrent requests cannot all pass a stale count, and a
+successful one takes its attempt back. So at most `LOGIN_MAX_ATTEMPTS` logins from one IP can be in progress at once.
+Only wrong passwords and codes stay counted: an attempt that ends in a server error (for example, no free database
+connection) is given back and answered `500`, so an outage does not leave clients locked out after it is over. The
+same holds where the current password confirms an action: turning off two-factor authentication and sending a
+broadcast.
+
 An IPv6 client counts as its whole `/64` network, here and in the rate limit below: one host usually gets a `/64`
 and could otherwise use a new address for every attempt.
 

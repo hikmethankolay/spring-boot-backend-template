@@ -122,6 +122,19 @@ public class LoginAttemptService {
     }
 
     /**
+     * Takes back an attempt whose check ended in a server error (e.g. no free database connection) instead of a
+     * wrong password or code. Otherwise every error during an outage would count as a failed login, and an IP
+     * shared by many users (an office, a mobile carrier) would stay locked out long after the outage.
+     *
+     * @param ipKey      the IP key given to {@link #tryAcquire}
+     * @param accountKey the account key given to {@link #tryAcquire}
+     */
+    public void giveBack(String ipKey, String accountKey) {
+        release(ipKey);
+        release(accountKey);
+    }
+
+    /**
      * Clears the failures of a key, e.g. after a successful login.
      *
      * @param key the key to reset
