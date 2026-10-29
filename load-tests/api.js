@@ -108,7 +108,9 @@ export const options = {
 // thresholds above. Statuses in `expected` are not counted as failed requests (e.g. 401 for a wrong password).
 function call(method, path, { body, token, name, kind = 'read', expected } = {}) {
   const params = {
-    headers: { 'Content-Type': 'application/json' },
+    // k6 sends back the auth cookies login sets, and CookieCsrfFilter answers a POST that carries them but no
+    // Bearer token (refresh, logout, setup's second login) 403 unless it comes with this header.
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     tags: { name: name || `${method} ${path.split('?')[0]}`, kind },
   };
   if (token) {
@@ -180,6 +182,11 @@ function run(name, steps) {
   });
   journeySuccess.add(ok, { journey: name });
   journeyDuration.add(Date.now() - start, { journey: name });
+  // A failed journey stops early. Without a pause its user would start over at once, far faster than a
+  // working one, and turn an overloaded app into a retry storm; real users stop for a few seconds.
+  if (!ok && THINK_TIME > 0) {
+    sleep(THINK_TIME * 5 * (0.5 + Math.random()));
+  }
 }
 
 export function setup() {
