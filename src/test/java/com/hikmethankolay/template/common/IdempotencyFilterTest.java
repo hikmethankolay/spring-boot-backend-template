@@ -84,6 +84,36 @@ class IdempotencyFilterTest {
     }
 
     @Test
+    void responsesWithSecretsAreNeverKept() {
+        // Two-factor enrollment answers with the TOTP secret and the recovery codes: never copy them to Redis.
+        MockHttpServletRequest enroll = request();
+        enroll.setRequestURI("/api/v1/users/me/mfa/totp");
+        MockHttpServletRequest confirm = request();
+        confirm.setRequestURI("/api/v1/users/me/mfa/totp/confirm");
+
+        assertThat(filter.shouldNotFilter(enroll)).isTrue();
+        assertThat(filter.shouldNotFilter(confirm)).isTrue();
+        verifyNoInteractions(redis);
+    }
+
+    @Test
+    void aLargeBodyRunsWithoutAKeyInsteadOfBeingBuffered() throws Exception {
+        byte[] large = new byte[1024 * 1024 + 1];
+        java.util.Arrays.fill(large, (byte) 'a');
+        MockHttpServletRequest request = request();
+        request.setContent(large);
+        AtomicReference<Integer> read = new AtomicReference<>();
+
+        filter.doFilter(
+                request,
+                new MockHttpServletResponse(),
+                (req, res) -> read.set(req.getInputStream().readAllBytes().length));
+
+        assertThat(read.get()).isEqualTo(large.length);
+        verifyNoInteractions(redis);
+    }
+
+    @Test
     void aBlankKeyIsRefused() throws Exception {
         MockHttpServletRequest request = request();
         request.removeHeader(IdempotencyFilter.HEADER);

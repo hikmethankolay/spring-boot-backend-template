@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -373,6 +374,32 @@ class AccountIntegrationTest extends IntegrationTest {
 
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
                 .andExpect(jsonPath("$.email").value(newAddress));
+    }
+
+    @Test
+    void endingTheSessionsCancelsAPendingEmailChange() throws Exception {
+        // Someone with the password asks to move the account to their own address...
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        String theirs = "taken-over-" + username + "@example.com";
+        changeEmail(token, theirs);
+        String link = CapturingMailSender.token(
+                mail.latest(theirs, "Confirm your email").orElseThrow());
+
+        // ...and the owner changes the password, which ends every session.
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"currentPassword":"%s","newPassword":"Changed#456-passphrase"}""", PASSWORD)))
+                .andExpect(status().isNoContent());
+
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", link), 400);
+        String fresh = login(username, "Changed#456-passphrase");
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(fresh)))
+                .andExpect(jsonPath("$.email").value(username + "@example.com"))
+                .andExpect(jsonPath("$.pendingEmail").doesNotExist());
     }
 
     @Test

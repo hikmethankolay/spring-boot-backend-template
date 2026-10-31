@@ -119,14 +119,28 @@ public class AccountService {
     }
 
     /**
-     * Revokes outstanding password reset links when the user's sessions end (e.g. a password change),
-     * in the same transaction.
+     * Revokes outstanding password reset links and cancels a pending email change when the user's sessions end (a
+     * password change or reset, a role change, a suspension), in the same transaction. Ending the sessions is how an
+     * account is taken back, so whoever asked to move it to their own address must not finish that afterwards.
      *
      * @param event identifies the user
      */
     @EventListener
-    public void revokeResetTokensOnSessionsEnd(SessionsInvalidated event) {
+    public void revokeLinksOnSessionsEnd(SessionsInvalidated event) {
         tokens.deleteAllByUserIdAndType(event.userId(), AccountTokenType.PASSWORD_RESET);
+        tokens.deleteAllByUserIdAndType(event.userId(), AccountTokenType.EMAIL_CHANGE);
+        users.findById(event.userId()).ifPresent(user -> user.setPendingEmail(null));
+    }
+
+    /**
+     * Revokes the link of an earlier email change in the transaction that asks for a new one, so it can never confirm
+     * the new address; the new link is sent after the commit.
+     *
+     * @param event identifies the user changing their address
+     */
+    @EventListener
+    public void revokeEarlierEmailChangeLinks(EmailChangeRequested event) {
+        tokens.deleteAllByUserIdAndType(event.userId(), AccountTokenType.EMAIL_CHANGE);
     }
 
     /**

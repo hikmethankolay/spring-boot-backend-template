@@ -6,6 +6,17 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Security
+
+- A pending email change survived the owner taking the account back: someone with the password could ask to move
+  the account to their own address and open the link after the owner changed or reset the password. Ending every
+  session (password change or reset, role change, suspension) now cancels the pending change and its link, and asking
+  for a new change revokes the earlier link in the same transaction.
+- `Idempotency-Key` kept the answers of the two-factor enrollment endpoints, with the TOTP secret and the recovery
+  codes, in plain text in Redis for 24 hours. `/api/v1/users/me/mfa/**` is no longer covered (the header is ignored
+  and no longer documented there).
+- `IdempotencyFilter` read the whole request body into memory. Bodies over 1 MiB now run without the key instead.
+
 ## [4.2.0] - 2026-10-31
 
 ### Added

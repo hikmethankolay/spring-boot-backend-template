@@ -202,7 +202,9 @@ retry: within 24 hours a retry gets the first response again, with `Idempotent-R
 second note or queuing a second broadcast. This follows the IETF `Idempotency-Key` header draft.
 
 - Keys belong to the signed-in caller. Anonymous `POST`s (login, sign-up, password reset) ignore the header: replaying
-  a login would hand its tokens to anyone who knows the key.
+  a login would hand its tokens to anyone who knows the key. So do the two-factor enrollment endpoints
+  (`/api/v1/users/me/mfa/**`): their answers hold the secret and the recovery codes, which are never copied to Redis.
+- A body over 1 MiB is not buffered for the comparison, so such a request runs without the key.
 - The same key with another path or body is refused with `422`; a retry while the first request still runs gets `409`.
 - `5xx` responses are not kept, so such a request can be retried with the same key.
 - A key is held for a running request for at most one minute, so that a request whose instance stops does not block

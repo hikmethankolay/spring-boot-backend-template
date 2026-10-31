@@ -117,7 +117,7 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
                         operation
                                 .getResponses()
                                 .putIfAbsent("401", OpenApiConfig.responseRef(OpenApiConfig.UNAUTHORIZED));
-                        if (method == PathItem.HttpMethod.POST) {
+                        if (method == PathItem.HttpMethod.POST && IdempotencyFilter.covers(path)) {
                             addIdempotencyKey(operation);
                         }
                     }

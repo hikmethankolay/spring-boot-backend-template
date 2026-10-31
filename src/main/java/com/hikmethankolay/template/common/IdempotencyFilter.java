@@ -10,7 +10,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -18,6 +20,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +30,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.PathContainer;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +38,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.util.ContentCachingResponseWrapper;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 /**
  * Makes retried {@code POST} requests safe with the {@code Idempotency-Key} header (IETF
@@ -48,7 +54,10 @@ import org.springframework.web.util.ContentCachingResponseWrapper;
  *       runs gets {@code 409}.</li>
  *   <li>A {@code 5xx} response is not kept, so the request can be retried.</li>
  *   <li>Anonymous requests (login, sign-up) are not covered: a replayed login would give its tokens to anyone who
- *       knows the key.</li>
+ *       knows the key. Nor are the {@link #UNCOVERED_PATHS}, whose responses hold secrets (the two-factor secret and
+ *       recovery codes) that must not be copied to Redis.</li>
+ *   <li>A body larger than {@value #MAX_BODY_BYTES} bytes is not buffered for the fingerprint: such a request runs
+ *       without the key.</li>
  *   <li>Without Redis the header is ignored and requests run as usual (ADR 2).</li>
  * </ul>
  *
@@ -73,6 +82,16 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Duration IN_PROGRESS_TTL = Duration.ofMinutes(1);
 
     private static final int MAX_KEY_LENGTH = 255;
+
+    /** Largest body read into memory for the fingerprint; the template's own requests are a few kilobytes. */
+    static final int MAX_BODY_BYTES = 1024 * 1024;
+
+    /** Signed-in POST paths not covered because their responses hold secrets. */
+    public static final List<String> UNCOVERED_PATHS = List.of("/api/v1/users/me/mfa/**");
+
+    private static final List<PathPattern> UNCOVERED = UNCOVERED_PATHS.stream()
+            .map(PathPatternParser.defaultInstance::parse)
+            .toList();
 
     private final StringRedisTemplate redis;
 
@@ -104,7 +123,22 @@ public class IdempotencyFilter extends OncePerRequestFilter {
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !"POST".equals(request.getMethod()) || request.getHeader(HEADER) == null || caller() == null;
+        return !"POST".equals(request.getMethod())
+                || request.getHeader(HEADER) == null
+                || caller() == null
+                || !covers(request.getRequestURI()
+                        .substring(request.getContextPath().length()));
+    }
+
+    /**
+     * Tells whether a path may use the header: every signed-in POST but the {@link #UNCOVERED_PATHS}.
+     *
+     * @param path the request path, without the context path
+     * @return {@code false} for paths whose responses must not be kept
+     */
+    public static boolean covers(String path) {
+        PathContainer container = PathContainer.parsePath(path);
+        return UNCOVERED.stream().noneMatch(pattern -> pattern.matches(container));
     }
 
     /**
@@ -130,6 +164,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             return;
         }
         CachedBodyRequest cached = new CachedBodyRequest(request);
+        if (!cached.complete) {
+            log.warn("Request body over {} bytes, running it without its Idempotency-Key", MAX_BODY_BYTES);
+            chain.doFilter(cached, response);
+            return;
+        }
         String fingerprint = fingerprint(request, cached.body);
         // The braces keep both keys of one caller in the same Redis Cluster slot.
         String claimKey = keyPrefix + "{" + caller() + "}:" + SecureTokens.hash(key);
@@ -285,23 +324,36 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
     }
 
-    /** A request whose body was read for the fingerprint and can be read again by the controller. */
+    /**
+     * A request whose body was read for the fingerprint, up to {@link #MAX_BODY_BYTES}, and can be read again by the
+     * controller. A longer body is not read further: its first bytes are replayed, then the rest of the original
+     * stream.
+     */
     private static final class CachedBodyRequest extends HttpServletRequestWrapper {
 
         private final byte[] body;
 
+        private final boolean complete;
+
         CachedBodyRequest(HttpServletRequest request) throws IOException {
             super(request);
-            this.body = request.getInputStream().readAllBytes();
+            this.body = request.getInputStream().readNBytes(MAX_BODY_BYTES + 1);
+            this.complete = body.length <= MAX_BODY_BYTES;
         }
 
         @Override
-        public ServletInputStream getInputStream() {
-            ByteArrayInputStream in = new ByteArrayInputStream(body);
+        public ServletInputStream getInputStream() throws IOException {
+            InputStream in = complete
+                    ? new ByteArrayInputStream(body)
+                    : new SequenceInputStream(new ByteArrayInputStream(body), super.getInputStream());
             return new ServletInputStream() {
                 @Override
                 public boolean isFinished() {
-                    return in.available() == 0;
+                    try {
+                        return in.available() == 0;
+                    } catch (IOException ex) {
+                        return true;
+                    }
                 }
 
                 @Override
@@ -315,19 +367,19 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                 }
 
                 @Override
-                public int read() {
+                public int read() throws IOException {
                     return in.read();
                 }
 
                 @Override
-                public int read(byte[] buffer, int offset, int length) {
+                public int read(byte[] buffer, int offset, int length) throws IOException {
                     return in.read(buffer, offset, length);
                 }
             };
         }
 
         @Override
-        public BufferedReader getReader() {
+        public BufferedReader getReader() throws IOException {
             return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8));
         }
     }

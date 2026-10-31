@@ -2950,16 +2950,6 @@
       "post" : {
         "description" : "Returns a new secret and its `otpauth://` URI: show the URI as a QR code. Two-factor authentication stays off until the first code is confirmed; calling this again replaces the pending secret.",
         "operationId" : "enrollTotp",
-        "parameters" : [ {
-          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
-          "in" : "header",
-          "name" : "Idempotency-Key",
-          "required" : false,
-          "schema" : {
-            "type" : "string",
-            "maxLength" : 255
-          }
-        } ],
         "responses" : {
           "200" : {
             "content" : {
@@ -2984,9 +2974,6 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
-          },
-          "400" : {
-            "$ref" : "#/components/responses/BadRequest"
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
@@ -3018,9 +3005,6 @@
               }
             }
           },
-          "422" : {
-            "$ref" : "#/components/responses/IdempotencyKeyReused"
-          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -3041,16 +3025,6 @@
       "post" : {
         "description" : "Checks the password and a code from the app and turns two-factor authentication on. Returns ten single-use recovery codes; they cannot be shown again. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "confirmTotp",
-        "parameters" : [ {
-          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
-          "in" : "header",
-          "name" : "Idempotency-Key",
-          "required" : false,
-          "schema" : {
-            "type" : "string",
-            "maxLength" : 255
-          }
-        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -3139,9 +3113,6 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
-          },
-          "422" : {
-            "$ref" : "#/components/responses/IdempotencyKeyReused"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"

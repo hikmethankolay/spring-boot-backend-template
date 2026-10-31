@@ -225,7 +225,9 @@ password or logged in on a newer version cannot log in until they reset their pa
   one, already verified, the old address is told, and every reset and verification link sent to it stops working. A
   mistyped address therefore never takes over the account's mail, and sending the current address again cancels the
   change. A lost link is sent again by `POST /api/v1/auth/verify-email/resend` with the new address, like a
-  verification link. An administrator's change (`PATCH /api/v1/users/{id}`) is immediate and marks the new address unverified.
+  verification link. Whatever ends every session (a password change or reset, a role change, a suspension) also
+  cancels a pending change and its link, so someone who got hold of the password and asked to move the account to
+  their address cannot finish that once the owner has taken it back. An administrator's change (`PATCH /api/v1/users/{id}`) is immediate and marks the new address unverified.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding
   reset links. A login or refresh running at the same moment cannot keep a session alive.
 - With `REQUIRE_VERIFIED_EMAIL=true` (the prod default), users whose address an administrator changed and who have not
