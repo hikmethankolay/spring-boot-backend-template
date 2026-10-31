@@ -6,6 +6,14 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Fixed
+
+- The documentation site of 4.2.0 and 4.2.1 was not published: its mutation testing step failed because the 4.2
+  security code lowered the mutation score of `security` and `auth` to 94%, below the 95% gate. Tests now cover the
+  password confirmation that cannot be checked, the refused logins of suspended users and where `Idempotency-Key` is
+  documented (96%). The `Rename project` CI job failed on a new architecture rule that named the template's package;
+  the rule now uses the project's own package. No change to the application.
+
 ## [4.2.1] - 2026-10-31
 
 ### Security
