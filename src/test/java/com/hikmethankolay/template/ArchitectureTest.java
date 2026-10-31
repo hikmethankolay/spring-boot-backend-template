@@ -48,21 +48,24 @@ class ArchitectureTest {
             .areAnnotatedWith(RestController.class)
             .because("controllers are entry points, not reusable components");
 
+    /** The application's root package, so the rule below survives scripts/rename-project.sh. */
+    private static final String ROOT = ArchitectureTest.class.getPackageName();
+
     @ArchTest
     static final ArchRule sharedPackagesDependOnNoFeature = noClasses()
             .that()
-            .resideInAnyPackage("..template.audit..", "..template.common..")
+            .resideInAnyPackage(ROOT + ".audit..", ROOT + ".common..")
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage(
-                    "..template.account..",
-                    "..template.auth..",
-                    "..template.mail..",
-                    "..template.mfa..",
-                    "..template.note..",
-                    "..template.security..",
-                    "..template.social..",
-                    "..template.user..")
+                    ROOT + ".account..",
+                    ROOT + ".auth..",
+                    ROOT + ".mail..",
+                    ROOT + ".mfa..",
+                    ROOT + ".note..",
+                    ROOT + ".security..",
+                    ROOT + ".social..",
+                    ROOT + ".user..")
             .because("every feature uses audit and common, so they must not use a feature back (no cycles); put "
                     + "endpoints that read them in the feature that owns the data");
 
