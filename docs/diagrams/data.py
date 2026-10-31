@@ -34,7 +34,7 @@ def data_model():
                 "users.")
     d.zone(14, 592, 692, 268, "NO FOREIGN KEY TO users")
     account = table(d, 14, 40, 190, "account_tokens", [
-        ("id", "PK"), ("user_id", "FK"), ("type", "VERIFY · RESET"), ("token_hash", "UQ"), ("expires_at", "")])
+        ("id", "PK"), ("user_id", "FK"), ("type", "3 PURPOSES"), ("token_hash", "UQ"), ("expires_at", "")])
     recovery = table(d, 14, 190, 190, "recovery_codes", [
         ("id", "PK"), ("user_id", "FK"), ("code_hash", "SHA-256"), ("used_at", "")])
     notes = table(d, 14, 322, 190, "notes", [
@@ -54,11 +54,12 @@ def data_model():
     d.wire((516, social(1)), (492, social(1)), (492, 180), (468, 180))
     d.wire((516, preferences(0)), (504, preferences(0)), (504, 220), (468, 220))
     # known_devices hangs straight below users.
-    d.wire((360, 300), (360, 238))
+    d.wire((360, 300), (360, 274))
     table(d, 252, 40, 216, "users", [
         ("id", "PK"), ("username, email", "UQ"), ("password_hash", ""), ("role", "USER·ADMIN·OWNER"),
         ("email_verified", ""), ("session_version", ""), ("totp_secret", "AES-GCM"), ("totp_enabled", ""),
-        ("totp_last_step", "")], kind="box-focal")
+        ("totp_last_step", ""), ("pending_email", "UNTIL CONFIRMED"), ("suspended_at", "SUSPENSION")],
+        kind="box-focal")
     table(d, 252, 300, 216, "known_devices", [
         ("user_id", "FK"), ("token_hash", "SHA-256 · UQ"), ("device, network", "FALLBACK"),
         ("last_seen_at", "LOOKBACK")])

@@ -106,8 +106,8 @@ the new key alone, which ends every access token at once (refresh tokens keep wo
 | Role | Can |
 |------|-----|
 | `USER` | Manage their own account (`/api/v1/users/me`) |
-| `ADMIN` | Everything a user can, plus list, read, update and delete **regular users** |
-| `OWNER` | Everything an admin can, plus change roles and update or delete administrators |
+| `ADMIN` | Everything a user can, plus list, read, update, suspend and delete **regular users** |
+| `OWNER` | Everything an admin can, plus change roles and update, suspend or delete administrators |
 
 The owner is the account `AdminBootstrap` creates from `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`, which must
 follow the registration rules (otherwise the application does not start); there is at most one (a partial unique
@@ -121,8 +121,20 @@ role from the database, so they apply even while an older access token still car
   same body, and deleting an administrator needs a `{"password": "…"}` body, like `DELETE /api/v1/users/me`. A missing
   or wrong password is `400` with `urn:problem:wrong-password`, so a stolen access token alone cannot hand out
   admin rights or remove administrators.
-- **Nobody removes the owner through the API**: the owner cannot be demoted or deleted, not even by themselves, and
-  `OWNER` cannot be assigned (`409`, `urn:problem:owner-protected`). Transferring ownership is a database operation.
+- **Nobody removes the owner through the API**: the owner cannot be demoted, suspended or deleted, not even by
+  themselves, and `OWNER` cannot be assigned (`409`, `urn:problem:owner-protected`). Transferring ownership is a
+  database operation.
+
+### Suspending a user
+
+`PUT /api/v1/users/{id}/suspension` blocks an account without deleting it; `DELETE` on the same path lifts it. Both
+return the user, whose `suspendedAt` is set while it is suspended. Suspending ends every session at once (like a
+password change) and refuses the user's logins, by password, second factor or GitHub/Google, with `403` and
+`urn:problem:account-suspended`. That answer comes only after a correct password, so it does not tell anyone else
+that the account exists. The data stays, so a suspension can be undone, unlike `DELETE /api/v1/users/{id}`.
+Administrators suspend regular users and the owner also administrators; nobody suspends the owner or their own
+account. Each change is audited (`admin.user_suspended`, `admin.user_unsuspended`), as is each refused login
+(`auth.login_suspended`).
 
 Migration `V5__owner_role.sql` turns the oldest administrator of an existing installation, the one `AdminBootstrap`
 created, into the owner.
@@ -191,7 +203,10 @@ password or logged in on a newer version cannot log in until they reset their pa
 - Tokens are single-use and expire after 24 hours (verification) or 1 hour (reset). Requesting a new one invalidates
   the previous one.
 - The `202` endpoints answer the same way for unknown addresses, so they cannot be used to find accounts. They send at
-  most one email per account per minute, so nobody can flood an inbox.
+  most one email per account per minute, so nobody can flood an inbox. Their emails are left to the outbox poller
+  (`MAIL_OUTBOX_POLL_INTERVAL`, 10 seconds by default) instead of being sent before the response, so a known address
+  is not answered measurably later than an unknown one.
+- Concurrent requests with the same link cannot both use it: the token row is locked while it is redeemed.
 - Sign-up is email-first. `POST /api/v1/auth/register` takes only the address and always answers `202` with no
   body: a new address gets a link to finish the sign-up, an address that already has an account gets a notice
   without a link (and `user.registration_repeated` is audited). Nothing is created or stored, so registration
@@ -204,13 +219,18 @@ password or logged in on a newer version cannot log in until they reset their pa
   the
   address got an account in the meantime (another sign-up link was used, or Redis was down when this one was). A taken
   username answers `409 username-taken` (usernames are public).
-- Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword`, marks the new address unverified, sends a new
-  verification email and revokes every reset and verification link sent to the old address.
+- Changing an email (`PATCH /api/v1/users/me`) needs `currentPassword` and is not immediate. The new address is
+  kept as `pendingEmail` and gets a link (to the same `/verify-email` page as a verification link); the account keeps
+  its old address, for logins and password resets, until the link is opened. Then the new address replaces the old
+  one, already verified, the old address is told, and every reset and verification link sent to it stops working. A
+  mistyped address therefore never takes over the account's mail, and sending the current address again cancels the
+  change. A lost link is sent again by `POST /api/v1/auth/verify-email/resend` with the new address, like a
+  verification link. An administrator's change (`PATCH /api/v1/users/{id}`) is immediate and marks the new address unverified.
 - Changing a password, or an administrator changing the password or role, ends every session and revokes outstanding
   reset links. A login or refresh running at the same moment cannot keep a session alive.
-- With `REQUIRE_VERIFIED_EMAIL=true` (the prod default), users who changed their address and have not confirmed
-  the new one get `403` at login. Sign-ups are verified when the account is created, so this applies only after
-  an email change.
+- With `REQUIRE_VERIFIED_EMAIL=true` (the prod default), users whose address an administrator changed and who have not
+  confirmed it get `403` at login. Sign-ups are verified when the account is created, and a user's own change takes
+  effect only once confirmed, so this applies only after an administrator's change.
 - Emails go through an outbox with retries, see [Observability](../observability/#email-outbox).
 - Email templates print values with `th:text` and `th:href`, which escape them; `th:utext` and `[(...)]` are
   banned in HTML templates and a test enforces it. See [Email templates](../email-templates/).
@@ -340,9 +360,13 @@ new failures. A successful login only resets the account counter, not the IP cou
 Each attempt is counted before the password is checked, so concurrent requests cannot all pass a stale count, and a
 successful one takes its attempt back. So at most `LOGIN_MAX_ATTEMPTS` logins from one IP can be in progress at once.
 Only wrong passwords and codes stay counted: an attempt that ends in a server error (for example, no free database
-connection) is given back and answered `500`, so an outage does not leave clients locked out after it is over. The
-same holds where the current password confirms an action: turning off two-factor authentication and sending a
-broadcast.
+connection) is given back and answered `500`, so an outage does not leave clients locked out after it is over.
+
+Wherever a signed-in user confirms an action with the current password, a wrong password counts as a failed login of
+the IP and the account, the same way: changing the password or the email, deleting the account, turning two-factor
+authentication on or off, and, for the owner, changing a role, deleting an administrator or sending a broadcast.
+Otherwise a stolen access token could guess the password there without the lockout and then take the account over.
+These endpoints answer `429` while the IP or account is blocked and `503` when Redis is down, like the login.
 
 An IPv6 client counts as its whole `/64` network, here and in the rate limit below: one host usually gets a `/64`
 and could otherwise use a new address for every attempt.
@@ -397,14 +421,14 @@ Security events are written to the `audit` logger and counted in the `security_a
 
 | Event | When |
 |-------|------|
-| `auth.login_succeeded`, `auth.login_failed`, `auth.login_blocked`, `auth.login_unverified` | Login attempts |
+| `auth.login_succeeded`, `auth.login_failed`, `auth.login_blocked`, `auth.login_unverified`, `auth.login_suspended` | Login attempts |
 | `auth.mfa_failed`, `auth.recovery_code_used`, `auth.social_account_linked` | Second factor and social login |
 | `auth.logout`, `auth.session_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused`, `auth.session_expired_absolute` | Session changes |
 | `user.mfa_enabled`, `user.mfa_disabled` | Two-factor authentication turned on or off |
-| `user.registered`, `user.registration_repeated`, `user.email_verified`, `user.password_changed` | Account changes |
+| `user.registered`, `user.registration_repeated`, `user.email_verified`, `user.email_change_requested`, `user.email_changed`, `user.password_changed` | Account changes |
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |
 | `user.account_deleted`, `user.data_exported` | Personal data requests |
-| `admin.user_updated`, `admin.role_changed`, `admin.user_deleted` | Administrator actions |
+| `admin.user_updated`, `admin.role_changed`, `admin.user_deleted`, `admin.user_suspended`, `admin.user_unsuspended` | Administrator actions |
 
 Each entry has the affected `userId`, the authenticated `actorId`, the `clientIp`, and event-specific fields. Failed
 and
@@ -427,10 +451,22 @@ compromised. Rows older than `AUDIT_RETENTION` (365 days) are removed daily thro
 `purge_audit_events`, which keeps the last 90 days whoever calls it. If storing a row fails, the error is logged and
 the request goes on; the log line still has the event.
 
+### Reading the audit log through the API
+
+`GET /api/v1/users/me/security-events` shows a user their own events, newest first and paginated: each has
+`occurredAt`, `event`, `clientIp` and `actorId` (the signed-in user who caused it: the user, or an administrator).
+A "recent activity" page built on it lets users spot a login or failed logins they do not recognize.
+`GET /api/v1/users/{id}/security-events` gives administrators the same view of any user, also of a deleted one (the
+events outlive the account). The event-specific fields are left out, since `identifierHash` may hash a mistyped
+password. The events are also part of the personal data export (`securityEvents`). Searching across all users is
+left to the `audit` log lines and your log tooling; the Grafana dashboard only has the per-event counts.
+
 ## Redis outages
 
 The rate limit and revocation checks fail open: if Redis is unreachable, requests are allowed and a warning is
 logged. That keeps the API available, at the cost of briefly disabling these protections. Login fails closed instead:
 it answers `503` (`urn:problem:login-unavailable`) until Redis is back, so an outage is never a window for unlimited
-password guessing; the second login step of users with 2FA also needs Redis. Signed-in clients are unaffected, and refresh tokens live in PostgreSQL and keep working. See
+password guessing; the second login step of users with 2FA also needs Redis, and so does every action confirmed with
+the current password (`503` too). The `Idempotency-Key` header is ignored while Redis is down, so a retried `POST`
+may run twice. Signed-in clients are unaffected, and refresh tokens live in PostgreSQL and keep working. See
 [ADR 2](../../adr/0002-redis-fail-open/) and [Production](../production/).

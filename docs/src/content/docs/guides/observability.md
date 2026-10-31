@@ -86,7 +86,10 @@ for Elasticsearch, Loki or any log pipeline.
 ## Audit log
 
 Security events go to the `audit` logger as structured entries. See [Security](../security/#audit-log) for the event
-list and fields. Route that logger to storage with a longer retention than application logs.
+list and fields. Route that logger to storage with a longer retention than application logs. The Grafana dashboard
+shows only how many events of each kind happened (`security_audit_events_total`); one user's events, with time and
+IP, are also served by `GET /api/v1/users/{id}/security-events` from the `audit_events` table, and searching across
+users is a job for your log storage.
 
 ## Email outbox
 
@@ -94,7 +97,9 @@ Emails are not sent from the request directly. They are stored in the `email_out
 the change that triggers them, so an email is sent only if the change commits, and a restart or SMTP outage never
 loses it:
 
-1. Right after the commit, the email is sent once.
+1. Right after the commit, the email is sent once. Emails an anonymous request sends only when an account exists
+   (password reset, a new verification link) skip this step and wait for the next run (`EmailOutbox.enqueueDeferred`),
+   so the response time does not tell whether the address has an account.
 2. If SMTP fails, it is retried every `MAIL_OUTBOX_POLL_INTERVAL` with exponential backoff from `MAIL_RETRY_DELAY`
    (30 s, 1 min, 2 min, … up to 1 hour).
 3. After `MAIL_MAX_ATTEMPTS` attempts it is dropped, an error is logged and `mail_outbox_dropped_total` grows.

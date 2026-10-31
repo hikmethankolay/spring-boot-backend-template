@@ -89,11 +89,12 @@ push and type-checks it, but check the generator you choose against your own bui
 | `POST` | `/api/v1/auth/oauth2/{provider}` | public | `200` tokens, or `202` + `mfaToken` with 2FA |
 | `POST` | `/api/v1/auth/refresh` | refresh token | `200` new tokens; the refresh token is single-use |
 | `POST` | `/api/v1/auth/logout` | public | `204`; revokes the tokens, clears the cookies |
-| `POST` | `/api/v1/auth/verify-email` | public | `204`; confirms a changed address |
+| `POST` | `/api/v1/auth/verify-email` | public | `204`; confirms an address, or replaces the email with the pending one |
 | `POST` | `/api/v1/auth/verify-email/resend` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset/confirm` | public | `204` |
-| `GET` / `PATCH` | `/api/v1/users/me` | authenticated (+ password to change the email) | `200` |
+| `GET` / `PATCH` | `/api/v1/users/me` | authenticated (+ password to change the email) | `200`; a new email is `pendingEmail` until its link is opened |
+| `GET` | `/api/v1/users/me/security-events` | authenticated | `200` page of the user's audit events, newest first |
 | `PUT` | `/api/v1/users/me/password` | authenticated | `204`; ends every session |
 | `DELETE` | `/api/v1/users/me` | authenticated + password | `204` |
 | `GET` | `/api/v1/users/me/export` | authenticated | `200` JSON attachment |
@@ -105,6 +106,8 @@ push and type-checks it, but check the generator you choose against your own bui
 | `GET` | `/api/v1/users?page=0&size=20&sort=createdAt,desc` | admin | `200` page |
 | `GET` | `/api/v1/users/{id}` | admin or that user | `200` |
 | `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; administrators: owner; role changes and deleting an administrator: owner + password | `200` / `204` |
+| `PUT` / `DELETE` | `/api/v1/users/{id}/suspension` | admin; administrators: owner | `200`; suspends (ends the sessions, refuses logins) / reactivates |
+| `GET` | `/api/v1/users/{id}/security-events` | admin or that user | `200` page of the user's audit events, also of deleted users |
 | `GET` / `POST` | `/api/v1/notes` | authenticated (own notes only) | `200` page / `201` + `Location` |
 | `GET` / `PUT` / `DELETE` | `/api/v1/notes/{id}` | the note's owner | `200` / `200` / `204` |
 | `GET` / `PUT` | `/api/v1/users/me/email-preferences` | authenticated | `200` optional email categories; `PUT` takes `{"product-updates": false}` |
@@ -164,6 +167,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:cross-site-request` | 403 | A state-changing request authenticated by cookie came without an allowed `Origin` or `X-Requested-With: XMLHttpRequest` |
 | `urn:problem:owner-required` | 403 | Only the owner can change roles and manage administrators |
 | `urn:problem:email-not-verified` | 403 | Login before the email address is verified (when required) |
+| `urn:problem:account-suspended` | 403 | Login to an account an administrator suspended |
 | `urn:problem:user-not-found` | 404 | No user has this id |
 | `urn:problem:note-not-found` | 404 | The caller has no note with this id (other users' notes look missing too) |
 | `urn:problem:session-not-found` | 404 | The caller has no session with this id (other users' sessions look missing too) |
@@ -172,6 +176,9 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |
 | `urn:problem:owner-protected` | 409 | The owner cannot be deleted or demoted, and `OWNER` cannot be assigned |
 | `urn:problem:conflict` | 409 | A concurrent change got there first; retry |
+| `urn:problem:idempotency-key-invalid` | 400 | The `Idempotency-Key` header is empty or longer than 255 characters |
+| `urn:problem:idempotency-key-in-use` | 409 | A request with the same `Idempotency-Key` is still running; retry later |
+| `urn:problem:idempotency-key-reused` | 422 | The `Idempotency-Key` was used for a request with another path or body |
 | `urn:problem:login-locked` / `rate-limited` | 429 | Too many failed logins / requests; wait `Retry-After` seconds |
 | `urn:problem:internal-error` | 500 | Unexpected error; quote `X-Trace-Id` when reporting it |
 | `urn:problem:login-unavailable` | 503 | Login cannot check the failed-login counters (Redis is down); retry later |
@@ -187,6 +194,24 @@ hash, is rejected with `400`, because sorting by a hidden column reveals informa
 { "content": [ ... ], "page": { "size": 20, "number": 0, "totalElements": 42, "totalPages": 3 } }
 ```
 
+## Retrying POST requests
+
+A client that retries a `POST` after a timeout cannot know whether the first attempt ran. Send an
+`Idempotency-Key` header (any unique value, for example a UUID, up to 255 characters) and send the same key with the
+retry: within 24 hours a retry gets the first response again, with `Idempotent-Replayed: true`, instead of creating a
+second note or queuing a second broadcast. This follows the IETF `Idempotency-Key` header draft.
+
+- Keys belong to the signed-in caller. Anonymous `POST`s (login, sign-up, password reset) ignore the header: replaying
+  a login would hand its tokens to anyone who knows the key.
+- The same key with another path or body is refused with `422`; a retry while the first request still runs gets `409`.
+- `5xx` responses are not kept, so such a request can be retried with the same key.
+- A key is held for a running request for at most one minute, so that a request whose instance stops does not block
+  its key for a day. A request that takes longer and is retried after that minute runs a second time; none of the
+  template's endpoints come close.
+- Without Redis the header is ignored and every request runs (ADR 2).
+
+`PUT`, `PATCH` and `DELETE` are idempotent by design and do not need the header.
+
 ## Response headers
 
 | Header | Meaning |
@@ -195,6 +220,7 @@ hash, is rejected with `400`, because sorting by a hidden column reveals informa
 | `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset` | Rate limit state (seconds until reset) |
 | `Retry-After` | On `429`: seconds to wait |
 | `Location` | On `201`: URL of the created resource |
+| `Idempotent-Replayed: true` | On a `POST` repeated with the same `Idempotency-Key`: the stored first response |
 | `Cache-Control: no-store` | On every response: exactly `no-store` on token responses, Spring Security's `no-cache, no-store, max-age=0, must-revalidate` elsewhere |
 | `Content-Security-Policy`, `Referrer-Policy`, `Permissions-Policy` | Browser hardening, see [Security](../security/#security-headers) |
 

@@ -62,7 +62,8 @@ Fast, non-SLO versions of the budget alerts over five and ten minutes; follow th
 
 More than 30 failed logins per minute: likely credential stuffing.
 
-1. Search the `audit` logger for `auth.login_failed` and group by `clientIp`.
+1. Search the `audit` logger for `auth.login_failed` and group by `clientIp`. For one account,
+   `GET /api/v1/users/{id}/security-events` lists its events with time and IP.
 2. The per-account lockout and per-IP rate limit already slow the attack. Block persistent sources at the ingress or
    firewall. Lower `RATE_LIMIT_PER_MINUTE` if needed.
 3. **Impact:** an account is locked for its real user (`LOGIN_LOCK_DURATION`) only after `LOGIN_ACCOUNT_MAX_ATTEMPTS`
@@ -75,6 +76,17 @@ A refresh token was used twice, so it was probably copied. The session was alrea
 1. Find the `auth.refresh_token_reused` audit entry: user id and client IP.
 2. If the user does not recognise the activity, ask them to change their password (this ends every session).
 3. **Impact:** that user is logged out on every device of that session.
+
+### Compromised or abusive account
+
+Not an alert: a user reports activity they do not recognise, or an account is abused.
+
+1. Read its events: `GET /api/v1/users/{id}/security-events` (logins, failed logins, password, email and two-factor
+   changes, with time and IP).
+2. Suspend it: `PUT /api/v1/users/{id}/suspension` ends every session at once and refuses its logins with
+   `403 account-suspended`, while keeping its data. Lift it with `DELETE` on the same path once the owner has
+   regained control (for example after a password reset). Suspending an administrator needs the owner.
+3. **Impact:** only that account; it is logged out everywhere until reactivated.
 
 ### PrivilegeChanges
 
@@ -108,7 +120,8 @@ Emails were abandoned after every retry. Users did not get verification or passw
 1. Check the SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `SPRING_MAIL_USERNAME`) and the provider's status. A log line
    with `STARTTLS is required but host does not support STARTTLS` means the server offers no TLS on that port: use
    the provider's TLS port (see [Mail encryption](../production/#mail-encryption)).
-2. Users can request the email again (`/api/v1/auth/verify-email/resend`, `/api/v1/auth/password-reset`).
+2. Users can request the email again (`/api/v1/auth/verify-email/resend`, also for the link of a pending email
+   change, and `/api/v1/auth/password-reset`).
 
 If an email is never queued at all, look for a `TemplateInputException` in the log: it names the template that is
 missing or broken under `src/main/resources/mail/`. Fix the template, deploy, and let users request the email again.

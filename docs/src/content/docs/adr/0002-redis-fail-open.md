@@ -14,8 +14,11 @@ PostgreSQL and the application are healthy.
 
 The rate limit and the revocation check fail open: when Redis does not answer within its short timeout (500 ms), the
 request is allowed and a warning is logged. The login lockout fails closed: login answers `503` with the problem type
-`urn:problem:login-unavailable` until Redis is back. Redis runs with `noeviction`, so counters and revocations are
-never silently dropped while it is up.
+`urn:problem:login-unavailable` until Redis is back, and so do actions a signed-in user confirms with the current
+password (changing the password or email, deleting the account, two-factor changes, owner confirmations), which count
+wrong passwords in the same counters. `Idempotency-Key` handling fails open: without Redis the header is ignored and
+the request runs. Redis runs with `noeviction`, so counters and revocations are never silently dropped while it is
+up.
 
 Login is the exception because it is the one endpoint where a missing limit is directly exploitable: without the
 lockout, an outage is a window for unlimited password guessing. Logins are a small share of traffic, and signed-in

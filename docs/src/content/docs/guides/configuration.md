@@ -20,7 +20,7 @@ defaults marked *prod: must change* below.
 | `DB_POOL_SIZE` / `DB_CONNECTION_TIMEOUT_MS` | `10` / `5000` | Connections per instance; how long a request waits for one |
 | `DB_STATEMENT_TIMEOUT` / `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `30s` / `60s` | PostgreSQL cancels longer queries and idle transactions (`0` disables) |
 | `FLYWAY_ENABLED` | `true` | Run the migrations at startup; `false` when a separate migration Job (profile `migrate`) owns the schema, see [Production](../production/#kubernetes) |
-| `REDIS_HOST`, `REDIS_PORT` | `localhost`, `6379` | Redis: cache, lockout, rate limit, token revocation |
+| `REDIS_HOST`, `REDIS_PORT` | `localhost`, `6379` | Redis: cache, lockout, rate limit, token revocation, `Idempotency-Key` responses |
 | `REDIS_PASSWORD` / `REDIS_SSL_ENABLED` | *(none)* / `false` | Managed Redis with authentication and TLS; add `SPRING_DATA_REDIS_USERNAME` for an ACL user |
 | `CACHE_TTL` | `10m` | How long cached entries live |
 | `JWT_ALGORITHM` | `HS256` | `HS256` (shared secret) or `RS256` (private key, public keys at `/.well-known/jwks.json`) |

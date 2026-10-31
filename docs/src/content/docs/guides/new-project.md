@@ -163,15 +163,16 @@ first entry of its changelog) in your own README.
 ```
 src/main/java/com/hikmethankolay/template/
 ├── auth/        login (with the two-factor step), refresh-token rotation, logout, session revocation
-├── account/     email verification and password reset: tokens, mailer, endpoints
+├── account/     email verification, email change confirmation and password reset: tokens, mailer, endpoints
 ├── mfa/         two-factor authentication: TOTP enrollment, encrypted secrets, recovery codes
 ├── social/      login with GitHub and Google: profile client, linked identities
-├── user/        User entity, service, controller, account deletion, data export, admin bootstrap
+├── user/        User entity, service, controllers, suspension, security activity, account deletion, data export,
+│                admin bootstrap
 ├── note/        sample feature: notes owned by a user (copy it, then delete it)
 ├── security/    filter chains, headers, JWT, token revocation, login lockout, rate limiting
-├── audit/       AuditLog and AuditEvent: the security audit trail
+├── audit/       AuditLog and AuditEvent: the security audit trail, and SecurityEvents to read it back
 ├── mail/        EmailOutbox (transactional outbox with retries), MailRenderer (templates in resources/mail/)
-├── common/      ApiException, RFC 9457 error handler, X-Trace-Id filter, SecureTokens
+├── common/      ApiException, RFC 9457 error handler, X-Trace-Id and Idempotency-Key filters, SecureTokens
 └── config/      AppProperties (typed app.* config), Redis cache, OpenAPI
 src/main/resources/
 ├── application.yml        all configuration, overridable via env/.env

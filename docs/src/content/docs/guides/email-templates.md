@@ -118,5 +118,7 @@ both, so the diff of the rendered HTML is part of the review.
 ## What not to do
 
 - Do not build an email body as a string in Java; add a template.
-- Do not send from a request thread or after the commit; queue with `EmailOutbox.enqueue` in the transaction.
+- Do not send from a request thread or after the commit; queue with `EmailOutbox.enqueue` in the transaction. Use
+  `EmailOutbox.enqueueDeferred` for an email an anonymous request sends only when an account exists, so its timing
+  does not reveal the account.
 - Do not put tokens anywhere but the link the email exists for, and never log them.

@@ -89,7 +89,10 @@ architectures (`linux/amd64`, `linux/arm64`) share one tag; `docker pull` and `p
 Kustomize base:
 
 - **Deployment:** two replicas, rolling updates without downtime, and startup, liveness and readiness probes on the
-  management port. A `preStop` pause plus graceful shutdown keeps in-flight requests from failing.
+  management port. A `preStop` pause plus graceful shutdown keeps in-flight requests from failing, and
+  `terminationGracePeriodSeconds: 70` covers the pause (10 s), graceful shutdown (30 s) and the task executor's wait
+  for a broadcast being queued (25 s); raise it if you lengthen any of them. The image runs the JVM with
+  `-XX:+ExitOnOutOfMemoryError`, so a pod out of heap restarts instead of running on half-broken.
 - **Pod security:** passes the `restricted` Pod Security Standard (non-root, read-only root filesystem, no
   capabilities, `RuntimeDefault` seccomp).
 - **Service:** for the API port only.

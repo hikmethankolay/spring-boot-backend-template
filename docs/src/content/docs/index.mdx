@@ -38,16 +38,19 @@ built from <code>{import.meta.env.PUBLIC_SITE_COMMIT ?? 'local'}</code> on {impo
     Google through a PKCE redirect that keeps the API stateless. Each provider turns on when its credentials are set.
   </Card>
   <Card title="Account flows" icon="email">
-    Email verification and password reset with single-use, hashed tokens, in templated HTML emails with a text
-    fallback, delivered through an outbox with retries; optional emails have one-click unsubscribe, and users are
-    told of new sign-ins and security changes. Account deletion and data export for GDPR/KVKK.
+    Email verification, password reset and confirmed email changes with single-use, hashed tokens, in templated HTML
+    emails with a text fallback, delivered through an outbox with retries; optional emails have one-click
+    unsubscribe, and users are told of new sign-ins and security changes. Account deletion and data export for
+    GDPR/KVKK.
   </Card>
   <Card title="Abuse protection" icon="warning">
-    Login lockout per IP and account, a per-IP API rate limit shared through Redis, CSP and other security
-    headers, and an audit log of every security event.
+    Login lockout per IP and account, also for password confirmations, a per-IP API rate limit shared through
+    Redis, CSP and other security headers, account suspension, and an audit log of every security event that users
+    can read as their recent activity.
   </Card>
   <Card title="Standard HTTP" icon="seti:json">
-    Versioned `/api/v1` URLs, correct status codes and RFC 9457 problem details for every error.
+    Versioned `/api/v1` URLs, correct status codes, RFC 9457 problem details for every error, and an
+    `Idempotency-Key` header that makes `POST` retries safe.
   </Card>
   <Card title="Observability" icon="seti:graphql">
     Prometheus metrics with ready alert rules and a Grafana dashboard, OpenTelemetry tracing, trace ids in logs

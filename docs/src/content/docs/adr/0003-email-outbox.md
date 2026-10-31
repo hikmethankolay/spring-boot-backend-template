@@ -26,4 +26,8 @@ them with retries and backoff, and gives up after a fixed number of attempts.
 - An email is sent only if its change committed, and survives restarts and SMTP outages.
 - Delivery is asynchronous (seconds, not milliseconds), and needs monitoring: `mail_outbox_pending` and
   `mail_outbox_dropped_total` have alerts.
+- The commit is normally followed by one immediate send attempt. Emails an anonymous request sends only when an
+  account exists (password reset, resent verification links) skip it and wait for the dispatcher
+  (`EmailOutbox.enqueueDeferred`): the SMTP round trip would otherwise make those answers slower for registered
+  addresses and reveal them.
 - Emails are rendered from templates before they are queued; see [ADR 7](../0007-email-templates/).

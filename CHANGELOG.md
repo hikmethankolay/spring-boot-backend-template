@@ -6,6 +6,36 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- Suspending users: `PUT` and `DELETE /api/v1/users/{id}/suspension`. A suspended user's sessions end at once and
+  every login (password, second factor, GitHub/Google) is refused with `403 account-suspended`, after the password so
+  it reveals nothing; the data is kept. Administrators suspend regular users, the owner also administrators. Users get
+  `suspendedAt`. Migration `V16__user_suspension.sql` (a nullable column).
+- Security activity from the audit log: `GET /api/v1/users/me/security-events` for users and
+  `GET /api/v1/users/{id}/security-events` for administrators (also for deleted users), paginated, newest first. The
+  events are also in the personal data export (`securityEvents`).
+- `Idempotency-Key` for signed-in `POST` requests: a retry with the same key within 24 hours gets the first response
+  again (`Idempotent-Replayed: true`) instead of running twice; another request with the same key gets `422`, a retry
+  while the first runs `409`. Kept in Redis; ignored without it. A key is held for a running request for at most one
+  minute. See the API overview.
+- Runbook for a compromised or abusive account: read its security events, then suspend it.
+
+### Security
+
+- Confirming a change with the current password had no lockout outside the login, turning off two-factor
+  authentication and broadcasts. With a stolen access token, the password could be guessed at the rate limit
+  (120 requests a minute) through changing the password or email, deleting the account, turning two-factor
+  authentication on, or the owner's role change and administrator deletion, and the account then taken over. Wrong
+  passwords there now count as failed logins of the IP and the account (`429` when blocked, `503` without Redis).
+  New `LoginAttemptService.checkReentered`; `BroadcastService.send` no longer takes the client IP.
+- `POST /api/v1/auth/password-reset` and `POST /api/v1/auth/verify-email/resend` sent their email over SMTP before
+  answering, but only for addresses with an account, so the response time told which addresses are registered. The
+  email is now left to the outbox poller and arrives within `MAIL_OUTBOX_POLL_INTERVAL` (10 seconds by default).
+  New `EmailOutbox.enqueueDeferred`.
+- Two concurrent requests with the same password-reset or verification link could both use it, setting two different
+  passwords. The token row is now locked while it is redeemed.
+
 ### Fixed
 
 - The Javadoc check, and with it the CI Documentation job and the 4.1.0 documentation site build, failed on an
@@ -19,6 +49,18 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ### Changed
 
+- **Changing your own email waits for confirmation.** `PATCH /api/v1/users/me` with a new email no longer switches the
+  address: it is returned as `pendingEmail` and gets a link to the existing `/verify-email` page; opening it makes it
+  the account's address, already verified, and tells the old one. Until then logins and password resets keep using the
+  old address, so a mistyped address cannot take over the account's mail. Frontends that show `email` after the
+  `PATCH` should show `pendingEmail` instead. An administrator's change is still immediate. Migration
+  `V17__email_change_confirmation.sql` (a nullable, partially indexed column and the `EMAIL_CHANGE` token type).
+  `POST /api/v1/auth/verify-email/resend` with the new address sends a lost link again.
+- Kubernetes: `terminationGracePeriodSeconds` raised from 45 to 70 seconds. The preStop pause (10s), graceful shutdown
+  (30s) and the task executor's wait for a broadcast being queued (25s) could add up to 65, and the pod was killed
+  before the broadcast was fully queued.
+- Docker image: `-XX:+ExitOnOutOfMemoryError`, so a JVM that ran out of heap exits and is restarted instead of running
+  on half-broken (its liveness probe is on the separate management port and could stay up).
 - Testing guide: load test results on 2 CPUs and 4 GB, explained, in place of the developer-machine numbers, and when
   to raise the login lockout for a load test. Production guide: a Sizing section.
 - `scripts/smoke.sh` and `scripts\smoke.bat` also read and change the email preferences.

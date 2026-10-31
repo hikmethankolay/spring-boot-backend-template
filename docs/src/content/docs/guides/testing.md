@@ -26,7 +26,13 @@ profile, so other tests get no extra emails; `SecurityAlertIntegrationTest` turn
 `@TestPropertySource(properties = "app.mail.security-alerts.enabled=true")`.
 `CapturingMailSender.failNext(n)` simulates an SMTP outage, and `EmailOutbox.sendDue(time)`
 runs a retry pass at a chosen time. The test profile sets the background retry to once an hour
-(`application-test.yml`), so it does not interfere with a test.
+(`application-test.yml`), so it does not interfere with a test. Password reset and resend-verification emails are
+never sent from the request (`EmailOutbox.enqueueDeferred`): call `outbox.sendDue(Instant.now())` after those requests
+before reading the email, as `AccountIntegrationTest.postJson` does.
+Failed logins and wrong confirmation passwords (changing the password or email, deleting the account, turning
+two-factor authentication on or off, owner confirmations) count against the client IP, and all test classes share one
+Redis. A test that sends a wrong password therefore uses its own address with `fromIp("10.0.x.y")`, or it could lock
+`127.0.0.1` out for the classes that run after it.
 Without a container runtime the integration tests fail instead of being skipped, so a passing build always means every
 test ran. Use `scripts/test.sh --unit` to run only the unit tests.
 

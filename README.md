@@ -23,8 +23,9 @@ secure login, user accounts, errors, caching, monitoring and deployment. All of 
 - **Authentication you don't have to write.** Short-lived JWTs with rotating refresh tokens and reuse detection,
   logout that really revokes, a list of signed-in devices users can log out, every session ended on a password
   change, email verification, password reset, two-factor authentication with authenticator apps, login with GitHub
-  and Google, brute-force lockout, rate limiting, security headers and an audit log. Users are emailed when someone
-  signs in from a new device or changes their password, email address or two-factor settings.
+  and Google, brute-force lockout, rate limiting, security headers and an audit log users can read as their recent
+  activity. Users are emailed when someone signs in from a new device or changes their password, email address or
+  two-factor settings, and administrators can suspend an account without deleting it.
 - **Email that looks finished.** HTML templates with a plain-text twin and a shared layout, sent through an outbox
   that survives SMTP outages, email preferences with RFC 8058 one-click unsubscribe, and owner broadcasts that never
   delay a password reset.
@@ -34,7 +35,7 @@ secure login, user accounts, errors, caching, monitoring and deployment. All of 
 - **Production defaults out of the box.** One `prod` profile switches on JSON logs, secure cookies, required email
   verification and an internal metrics port. Migrations, Redis caching, an HTML email outbox, query timeouts,
   metrics with alert rules and a Grafana dashboard, tracing, account deletion and data export are already wired in.
-- **Tested against the real thing.** 380+ tests, 170 of them against real PostgreSQL and Redis containers, alongside
+- **Tested against the real thing.** 400+ tests, 180 of them against real PostgreSQL and Redis containers, alongside
   architecture rules, mutation testing, a load test and a vulnerability scan of the Docker image in CI.
 - **Ready to ship.** Releases publish signed multi-arch images with an SBOM; Kubernetes manifests pass the
   `restricted` Pod Security Standard.
@@ -69,14 +70,14 @@ is generally available and the tests pass, and is recorded in the
 | Area | What you get |
 |------|--------------|
 | Sign-up and login | Email-first sign-up, login by username or email, "remember me", JWT access tokens (HS256 or RS256 with a JWK Set) and rotating refresh tokens with reuse detection, HttpOnly cookies or Bearer tokens |
-| Account security | Two-factor authentication (TOTP) with recovery codes, GitHub and Google login with PKCE, session list with remote logout, every session ended on a password change, brute-force lockout per IP and account, breached-password check |
-| Account flows | Email verification, password reset, email change with re-verification, account deletion and a personal data export (GDPR/KVKK) |
-| Roles | `USER`, `ADMIN` and a single `OWNER`; role changes and administrator management need the owner and their password |
+| Account security | Two-factor authentication (TOTP) with recovery codes, GitHub and Google login with PKCE, session list with remote logout, every session ended on a password change, brute-force lockout per IP and account (also for password confirmations), breached-password check, a security activity page from the audit log |
+| Account flows | Email verification, password reset, email change that waits for the link sent to the new address, account deletion and a personal data export (GDPR/KVKK) |
+| Roles | `USER`, `ADMIN` and a single `OWNER`; role changes and administrator management need the owner and their password; administrators suspend and reactivate accounts |
 | Email | HTML templates with a plain-text twin and a shared layout, a transactional outbox with retries, snapshot tests of every template |
 | Email preferences | Transactional and optional categories, a preferences endpoint, unsubscribe links and RFC 8058 one-click `List-Unsubscribe` headers, opt-outs honoured even for queued mail |
 | Security alerts | Emails on a sign-in from a new device (OWASP-style device cookie), password, email address and two-factor changes and linked accounts |
 | Broadcasts | Owner-only announcements by role in an optional category, with preview, password check, background queuing and sending after all other mail |
-| API | Versioned REST API, RFC 9457 problem details with stable `urn:problem` types, pagination with an allow-listed sort, OpenAPI document and Swagger UI, generated TypeScript (or any language) client |
+| API | Versioned REST API, RFC 9457 problem details with stable `urn:problem` types, pagination with an allow-listed sort, `Idempotency-Key` for safe `POST` retries, OpenAPI document and Swagger UI, generated TypeScript (or any language) client |
 | Protection | Deny-by-default security, CSRF guard for cookie clients, CORS, security headers and CSP, per-IP and per-route rate limiting, audit log in an append-only table |
 | Data | PostgreSQL with Flyway migrations, optimistic locking, Redis caching that fails open, statement and idle-transaction timeouts |
 | Operations | `prod` profile that refuses development defaults, JSON logs, Prometheus metrics with alert rules and a Grafana dashboard, OpenTelemetry tracing, health probes, runbooks |

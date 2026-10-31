@@ -60,11 +60,12 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | Sign up | `POST /api/v1/auth/register` with `email` only. The answer is `202` whether or not the address already has an account: show "Check your inbox" either way |
 | `/sign-up?token=…` | Ask for `username` and `password` (15–128 characters, no composition rules), then `POST /api/v1/auth/register/complete` with them and the `token` from the URL; `201` means the account exists, so send the user to log in. On `400 invalid-token` (or `409 email-taken`) the link was already used: offer login or password reset |
 | Log in | `POST /api/v1/auth/login` with `identifier` (username or email), `password` and optional `rememberMe`; see [Logging in](#logging-in) |
-| `/verify-email?token=…` | After an email change: `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL; offer `POST /api/v1/auth/verify-email/resend` |
+| `/verify-email?token=…` | After an email change: `POST /api/v1/auth/verify-email` with `{"token": "…"}` from the URL (`204`: the new address is now the account's); offer `POST /api/v1/auth/verify-email/resend`, which also resends the link of a pending email change |
 | Forgot password | `POST /api/v1/auth/password-reset` with `{"email": "…"}`; it answers `202` even for unknown addresses |
 | `/reset-password?token=…` | `POST /api/v1/auth/password-reset/confirm` with `{"token": "…", "newPassword": "…"}`, then send the user to log in |
 | `/oauth2/callback` | Only with GitHub or Google login: check `state`, then `POST /api/v1/auth/oauth2/{provider}` with `code` and `codeVerifier`; see [the steps](../security/#login-with-github-and-google) |
-| Account settings | `GET`/`PATCH /api/v1/users/me`, `PUT /api/v1/users/me/password`, two-factor enrollment, `GET /api/v1/users/me/export`, `DELETE /api/v1/users/me` with `{"password": "…"}` |
+| Account settings | `GET`/`PATCH /api/v1/users/me`, `PUT /api/v1/users/me/password`, two-factor enrollment, `GET /api/v1/users/me/export`, `DELETE /api/v1/users/me` with `{"password": "…"}`. A new email does not apply at once: while `pendingEmail` is set, show "Confirm the link we sent to …", with a button that sends the current email to cancel |
+| Recent activity | `GET /api/v1/users/me/security-events`: logins, failed logins, password and email changes, with time and IP |
 | Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others |
 | `/unsubscribe?token=…` | No login. `GET /api/v1/mail/unsubscribe?token=…` returns `{"category": "product-updates", "categoryName": "Product updates", "enabled": true}`; ask to confirm, then `POST /api/v1/mail/unsubscribe?token=…` (no body), or `POST …/unsubscribe/all?token=…` for every optional email. Never change anything on load: mail scanners open links. Serve the page with `Referrer-Policy: no-referrer`, since the token does not expire |
 | `/settings/emails` | `GET /api/v1/users/me/email-preferences` lists `[{"category", "name", "description", "enabled"}]`; save with `PUT` and `{"product-updates": false}`. Account and security emails are not listed and cannot be turned off |
@@ -143,6 +144,7 @@ add an `errors` list with one entry per field. Branch on `type`, never on `title
 | `urn:problem:validation-failed` | The message of each field in `errors` next to its input |
 | `urn:problem:invalid-credentials` | "Wrong username or password" |
 | `urn:problem:email-not-verified` | A hint to check the inbox, with the resend button |
+| `urn:problem:account-suspended` | "This account has been suspended", with how to contact you |
 | `urn:problem:invalid-mfa-code` / `mfa-challenge-expired` | Ask for the code again / restart the login |
 | `urn:problem:login-locked` / `rate-limited` | Wait `Retry-After` seconds |
 | `urn:problem:username-taken` / `email-taken` | Mark the field (`POST /register` never answers `email-taken`; `/register/complete` does when the address already has an account) |

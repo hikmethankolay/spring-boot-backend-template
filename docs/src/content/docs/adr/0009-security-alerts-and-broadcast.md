@@ -19,8 +19,8 @@ before login, consent under GDPR and KVKK, and a frontend this template does not
 ## Decision
 
 **Alerts.** `SecurityMailer` emails the user about a sign-in from a new device, a password change or reset, an
-email change (to the old address, never naming the new one), two-factor authentication turned on or off, and a
-login provider linked to an existing account. Each alert is queued through the outbox in the transaction of the
+email change once the new address is confirmed (to the old address, never naming the new one), two-factor
+authentication turned on or off, and a login provider linked to an existing account. Each alert is queued through the outbox in the transaction of the
 change, so a change that rolls back sends nothing. Alerts are transactional (`MailCategory.SECURITY`): they cannot be
 turned off and carry no unsubscribe link, and they never contain tokens, codes or new values.
 
