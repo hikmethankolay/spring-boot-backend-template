@@ -46,4 +46,6 @@ COPY --from=build /workspace/target/extracted/application/ ./
 # 8080: API. 8081: Actuator with SPRING_PROFILES_ACTIVE=prod (keep it internal).
 # No HEALTHCHECK: the image has no shell or HTTP client; Kubernetes uses the probes in deploy/kubernetes.
 EXPOSE 8080 8081
-ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=75", "org.springframework.boot.loader.launch.JarLauncher"]
+# ExitOnOutOfMemoryError: a JVM that ran out of heap is left half-broken, and liveness is served by the separate
+# management port, so it might never be restarted. Exiting lets the orchestrator restart it.
+ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", "org.springframework.boot.loader.launch.JarLauncher"]

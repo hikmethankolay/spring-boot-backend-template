@@ -17,8 +17,9 @@ spec:
         prometheus.io/port: "8081"
         prometheus.io/path: /actuator/prometheus
     spec:
-      # Longer than Spring's graceful shutdown (30s) plus the preStop pause.
-      terminationGracePeriodSeconds: 45
+      # Longer than the preStop pause (10s), Spring's graceful shutdown (30s) and the task executor's wait for
+      # background work such as a broadcast being queued (spring.task.execution.shutdown, 25s).
+      terminationGracePeriodSeconds: 70
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

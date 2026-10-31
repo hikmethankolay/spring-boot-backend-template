@@ -1,5 +1,5 @@
 # Every value can be overridden with an environment variable or a .env file in the working directory.
-# See .env.example for the full list.
+# Every variable is listed in docs/src/content/docs/guides/configuration.md; .env.example has the common ones.
 spring:
   application:
     name: spring-boot-template

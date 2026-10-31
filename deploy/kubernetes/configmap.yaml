@@ -1,4 +1,4 @@
-# Non-secret settings; every variable is documented in the Configuration guide and .env.example.
+# Non-secret settings; every variable is documented in the Configuration guide (.env.example has the common ones).
 apiVersion: v1
 kind: ConfigMap
 metadata:
