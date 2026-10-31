@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.2.2] - 2026-10-31
+
 ### Fixed
 
 - The documentation site of 4.2.0 and 4.2.1 was not published: its mutation testing step failed because the 4.2
@@ -468,7 +470,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.1...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.2...HEAD
+[4.2.2]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.3...v4.1.0
