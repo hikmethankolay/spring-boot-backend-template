@@ -161,6 +161,20 @@ public class EmailOutbox {
     }
 
     /**
+     * Queues a rendered email like {@link #enqueue(String, RenderedMail)}, but leaves the sending to the next
+     * {@link #sendDue()} run. For emails an anonymous request sends only if the address has an account (a password
+     * reset, a new verification link): sent from the request, the SMTP round trip would make those requests slower
+     * and tell which addresses have accounts.
+     *
+     * @param to   recipient address
+     * @param mail the email, usually from {@link MailRenderer}
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void enqueueDeferred(String to, RenderedMail mail) {
+        outbox.save(new OutboxEmail(to, mail.subject(), mail.text(), mail.html()));
+    }
+
+    /**
      * Renders and queues an email in a category, like {@link #enqueue(String, RenderedMail)}. An optional category
      * is skipped if the user turned it off (counted in {@code mail.outbox.suppressed}); otherwise the email gets the
      * user's unsubscribe link in its footer and {@code List-Unsubscribe} headers.

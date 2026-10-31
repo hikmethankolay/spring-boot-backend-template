@@ -7,6 +7,7 @@ import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.security.SignUpTokens;
+import com.hikmethankolay.template.user.EmailChangeRequested;
 import com.hikmethankolay.template.user.EmailVerificationRequired;
 import com.hikmethankolay.template.user.SessionsInvalidated;
 import com.hikmethankolay.template.user.User;
@@ -15,6 +16,7 @@ import com.hikmethankolay.template.user.UserService;
 import com.hikmethankolay.template.user.dto.UserResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -135,7 +137,7 @@ public class AccountService {
     @TransactionalEventListener
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onEmailVerificationRequired(EmailVerificationRequired event) {
-        users.findById(event.userId()).ifPresent(this::sendVerification);
+        users.findById(event.userId()).ifPresent(user -> sendVerification(user, false));
     }
 
     /**
@@ -202,28 +204,68 @@ public class AccountService {
     }
 
     /**
-     * Sends a new verification email if the address belongs to an unverified account.
+     * Sends a new link if the address belongs to an unverified account, or is the new address an email change is
+     * waiting for (the link sent to it was lost or expired).
      *
      * @param email the address to verify
      */
     @Transactional
     public void resendVerification(String email) {
-        users.findByEmail(normalize(email))
+        String address = normalize(email);
+        users.findByEmail(address)
                 .filter(user -> !user.isEmailVerified())
                 .filter(user -> !recentlyIssued(user.getId(), AccountTokenType.EMAIL_VERIFICATION))
-                .ifPresent(this::sendVerification);
+                .ifPresent(user -> sendVerification(user, true));
+        users.findAllByPendingEmail(address).stream()
+                .filter(user -> !recentlyIssued(user.getId(), AccountTokenType.EMAIL_CHANGE))
+                .forEach(user -> sendEmailChangeLink(user, true));
     }
 
     /**
-     * Confirms a changed email address.
+     * Confirms an email address with the link sent to it: the address of a new or admin-changed account, or the new
+     * address a user asked to change to, which then replaces the old one.
      *
      * @param token the token from the verification email
-     * @throws ApiException 400 if the token is unknown, already used or expired
+     * @throws ApiException 400 if the token is unknown, already used or expired, or the change it confirms was
+     *                      cancelled; 409 if another account took the new address meanwhile
      */
     @Transactional
     public void verifyEmail(String token) {
-        userService.markEmailVerified(
-                consume(token, AccountTokenType.EMAIL_VERIFICATION).getUserId());
+        AccountToken used = consume(token, AccountTokenType.EMAIL_VERIFICATION, AccountTokenType.EMAIL_CHANGE);
+        if (used.getType() == AccountTokenType.EMAIL_VERIFICATION) {
+            userService.markEmailVerified(used.getUserId());
+        } else if (userService.applyPendingEmail(used.getUserId())) {
+            // Links sent to the old address must not reset the password of the account it no longer belongs to.
+            tokens.deleteAllByUserIdAndType(used.getUserId(), AccountTokenType.PASSWORD_RESET);
+            tokens.deleteAllByUserIdAndType(used.getUserId(), AccountTokenType.EMAIL_VERIFICATION);
+        } else {
+            throw ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN);
+        }
+    }
+
+    /**
+     * Emails the link that confirms a new address to that address, once the change request has committed.
+     *
+     * @param event identifies the user changing their address
+     */
+    @TransactionalEventListener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onEmailChangeRequested(EmailChangeRequested event) {
+        users.findById(event.userId())
+                .filter(user -> user.getPendingEmail() != null)
+                .ifPresent(user -> sendEmailChangeLink(user, false));
+    }
+
+    /**
+     * Issues an email change token, replacing earlier ones, and emails it to the pending address.
+     *
+     * @param user     the user changing their address
+     * @param deferred leave the sending to the outbox poller, for anonymous requests
+     */
+    private void sendEmailChangeLink(User user, boolean deferred) {
+        Duration ttl = properties.verificationTokenTtl();
+        mailer.sendEmailVerification(
+                user.getPendingEmail(), issue(user.getId(), AccountTokenType.EMAIL_CHANGE, ttl), ttl, deferred);
     }
 
     /**
@@ -271,12 +313,13 @@ public class AccountService {
     /**
      * Issues a verification token and emails it.
      *
-     * @param user the user to verify
+     * @param user     the user to verify
+     * @param deferred leave the sending to the outbox poller, for anonymous requests
      */
-    private void sendVerification(User user) {
+    private void sendVerification(User user, boolean deferred) {
         Duration ttl = properties.verificationTokenTtl();
         mailer.sendEmailVerification(
-                user.getEmail(), issue(user.getId(), AccountTokenType.EMAIL_VERIFICATION, ttl), ttl);
+                user.getEmail(), issue(user.getId(), AccountTokenType.EMAIL_VERIFICATION, ttl), ttl, deferred);
     }
 
     /**
@@ -312,15 +355,15 @@ public class AccountService {
      * Validates a token and deletes it (and any other token of the same type for that user).
      *
      * @param token the raw token
-     * @param type  the required purpose
+     * @param types the purposes it may have
      * @return the consumed token
      * @throws ApiException 400 if the token is unknown, already used or expired
      */
-    private AccountToken consume(String token, AccountTokenType type) {
-        AccountToken stored = tokens.findByTokenHashAndType(SecureTokens.hash(token), type)
+    private AccountToken consume(String token, AccountTokenType... types) {
+        AccountToken stored = tokens.findByTokenHashAndTypeIn(SecureTokens.hash(token), List.of(types))
                 .filter(candidate -> !candidate.isExpired(Instant.now()))
                 .orElseThrow(() -> ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN));
-        tokens.deleteAllByUserIdAndType(stored.getUserId(), type);
+        tokens.deleteAllByUserIdAndType(stored.getUserId(), stored.getType());
         return stored;
     }
 

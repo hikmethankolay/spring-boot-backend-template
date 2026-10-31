@@ -16,15 +16,16 @@ class VerifiedEmailRequiredIntegrationTest extends IntegrationTest {
 
     @Test
     void userWithAnUnconfirmedNewAddressCannotLogInUntilVerified() throws Exception {
-        // Sign-ups are verified when the account is created, so an unverified user is one who changed their email.
+        // Sign-ups are verified when the account is created, so an unverified user is one whose address an
+        // administrator changed (a user's own change takes effect only once confirmed).
         String username = uniqueUsername();
-        String token = registerAndLogin(username);
+        long id = register(username);
         String newAddress = "moved-" + username + "@example.com";
-        mockMvc.perform(patch("/api/v1/users/me")
-                        .with(bearer(token))
+        mockMvc.perform(patch("/api/v1/users/{id}", id)
+                        .with(bearer(login(ADMIN_USERNAME, ADMIN_PASSWORD)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
-                                {"email":"%s","currentPassword":"%s"}""", newAddress, PASSWORD)))
+                                {"email":"%s"}""", newAddress)))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/auth/login")

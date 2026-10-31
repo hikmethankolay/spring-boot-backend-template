@@ -3,6 +3,8 @@ package com.hikmethankolay.template.user;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +14,7 @@ import com.hikmethankolay.template.TestProperties;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.security.LoginAttemptService;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
@@ -19,7 +22,9 @@ import com.hikmethankolay.template.user.dto.UpdateProfileRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
 import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Instant;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +54,9 @@ class UserServiceTest {
     @Mock
     private ApplicationEventPublisher events;
 
+    @Mock
+    private LoginAttemptService loginAttempts;
+
     private UserService userService;
 
     @BeforeEach
@@ -63,7 +71,12 @@ class UserServiceTest {
                         mock(JdbcTemplate.class),
                         mock(PlatformTransactionManager.class),
                         JsonMapper.builder().build()),
-                mock(SecurityMailer.class));
+                mock(SecurityMailer.class),
+                loginAttempts);
+        lenient()
+                .when(loginAttempts.checkReentered(anyLong(), any()))
+                .thenAnswer(
+                        invocation -> invocation.<BooleanSupplier>getArgument(1).getAsBoolean());
     }
 
     @Test
@@ -443,6 +456,23 @@ class UserServiceTest {
 
         verify(userRepository).delete(other);
         verify(events).publishEvent(new SessionsInvalidated(6L));
+    }
+
+    @Test
+    void suspendingASuspendedUserOrReactivatingAnActiveOneChangesNothing() {
+        User suspended = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        suspended.setSuspendedAt(Instant.parse("2026-01-01T00:00:00Z"));
+        User active = withId(new User("bob", "bob@example.com", "hashed", Role.USER), 2L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(suspended));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(active));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(userService.suspend(1L, 5L).suspendedAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
+        assertThat(userService.unsuspend(2L, 5L).suspendedAt()).isNull();
+
+        // No new suspension: the sessions are left alone.
+        assertThat(suspended.getSessionVersion()).isZero();
+        verify(events, never()).publishEvent(any());
     }
 
     @Test

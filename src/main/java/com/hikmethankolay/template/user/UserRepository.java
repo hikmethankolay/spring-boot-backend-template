@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.user;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -26,6 +27,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return the matching user, if any
      */
     Optional<User> findByEmail(String email);
+
+    /**
+     * Finds the users waiting to change their email to an address. Pending addresses are not unique: two users may
+     * have asked for the same one, and whoever opens their link first gets it.
+     *
+     * @param pendingEmail lower-case email to match
+     * @return the users, possibly none
+     */
+    List<User> findAllByPendingEmail(String pendingEmail);
 
     /**
      * Checks whether a username is taken.

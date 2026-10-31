@@ -49,6 +49,24 @@ class ArchitectureTest {
             .because("controllers are entry points, not reusable components");
 
     @ArchTest
+    static final ArchRule sharedPackagesDependOnNoFeature = noClasses()
+            .that()
+            .resideInAnyPackage("..template.audit..", "..template.common..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "..template.account..",
+                    "..template.auth..",
+                    "..template.mail..",
+                    "..template.mfa..",
+                    "..template.note..",
+                    "..template.security..",
+                    "..template.social..",
+                    "..template.user..")
+            .because("every feature uses audit and common, so they must not use a feature back (no cycles); put "
+                    + "endpoints that read them in the feature that owns the data");
+
+    @ArchTest
     static final ArchRule noFieldInjection = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
     @ArchTest

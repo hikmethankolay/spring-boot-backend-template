@@ -185,7 +185,8 @@ public class AuthController {
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "403",
-            description = "Email address not verified (when verification is required)",
+            description =
+                    "The account is suspended, or its email address is not verified (when verification is required)",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "503",
@@ -221,6 +222,10 @@ public class AuthController {
             responseCode = "401",
             description = "Wrong, expired or used code (retry with the same `mfaToken`), or an unknown or expired "
                     + "`mfaToken` (log in again)",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "403",
+            description = "The account was suspended after the password was checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "503",
@@ -280,7 +285,7 @@ public class AuthController {
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "403",
-            description = "The provider account has no verified email address",
+            description = "The account is suspended, or the provider account has no verified email address",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "404",

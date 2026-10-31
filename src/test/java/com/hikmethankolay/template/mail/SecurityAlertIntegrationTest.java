@@ -141,6 +141,7 @@ class SecurityAlertIntegrationTest extends IntegrationTest {
 
         mockMvc.perform(put("/api/v1/users/me/password")
                         .with(bearer(token))
+                        .with(fromIp("10.0.20.4"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"currentPassword":"wrong-password-here","newPassword":"Changed#4567-passphrase"}""")))
@@ -170,6 +171,9 @@ class SecurityAlertIntegrationTest extends IntegrationTest {
                         .content(json("""
                                 {"email":"%s","currentPassword":"%s"}""", newAddress, PASSWORD)))
                 .andExpect(status().isOk());
+        // Reported once the new address is confirmed and replaces the old one.
+        assertThat(alert(address, "email address of your account was changed")).isEmpty();
+        confirmEmail(newAddress);
 
         SimpleMailMessage sent =
                 alert(address, "email address of your account was changed").orElseThrow();

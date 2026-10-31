@@ -165,8 +165,8 @@ public class AuthService {
      * @param request  username or email, password and remember-me flag
      * @param clientIp address of the client, used for rate limiting
      * @return the access and refresh tokens, or an MFA token if the user has two-factor authentication
-     * @throws ApiException            429 if the IP or account is blocked, 503 if the failed-login
-     *                                 counters cannot be checked
+     * @throws ApiException            403 if the account is suspended or its email is not verified, 429 if the IP or
+     *                                 account is blocked, 503 if the failed-login counters cannot be checked
      * @throws BadCredentialsException if the credentials are wrong (mapped to 401)
      */
     public LoginResult login(LoginRequest request, String clientIp) {
@@ -230,6 +230,10 @@ public class AuthService {
         }
         loginAttempts.release(ipKey);
         // Checked only after the password, so the response does not reveal whether an account exists.
+        if (user.suspended()) {
+            audit.record(AuditEvent.LOGIN_SUSPENDED, user.id(), "method", "password");
+            throw accountSuspended();
+        }
         if (requireVerifiedEmail && !user.emailVerified()) {
             audit.record(AuditEvent.LOGIN_UNVERIFIED, user.id());
             throw new ApiException(
@@ -255,7 +259,8 @@ public class AuthService {
      * @param code     an authenticator code or a recovery code
      * @param clientIp address of the client, used for rate limiting
      * @return the access and refresh tokens
-     * @throws ApiException 401 if the token is unknown or expired or the code is wrong, 429 if the IP or
+     * @throws ApiException 401 if the token is unknown or expired or the code is wrong, 403 if the account was
+     *                      suspended meanwhile, 429 if the IP or
      *                      account is blocked, 503 if Redis is unavailable
      */
     public AuthTokens loginWithMfa(String mfaToken, String code, String clientIp) {
@@ -294,6 +299,10 @@ public class AuthService {
         loginAttempts.reset(accountKey);
         loginAttempts.release(ipKey);
         User user = userRepository.findById(challenge.userId()).orElseThrow(AuthService::mfaChallengeExpired);
+        if (user.getSuspendedAt() != null) {
+            audit.record(AuditEvent.LOGIN_SUSPENDED, user.getId(), "method", "mfa");
+            throw accountSuspended();
+        }
         return issueTokens(
                 user.getId(),
                 user.getUsername(),
@@ -311,8 +320,8 @@ public class AuthService {
      * @param code         the authorization code the provider sent to the frontend
      * @param codeVerifier the PKCE code verifier
      * @return the tokens, or an MFA token if the user has two-factor authentication
-     * @throws ApiException            404 if the provider is not configured, 403 or 409 if the account cannot
-     *                                 be linked
+     * @throws ApiException            404 if the provider is not configured, 403 if the account is suspended, 403 or
+     *                                 409 if the account cannot be linked
      * @throws BadCredentialsException if the provider rejects the code (mapped to 401)
      */
     public LoginResult socialLogin(String provider, String code, String codeVerifier) {
@@ -323,6 +332,10 @@ public class AuthService {
         long userId = socialAccounts.userIdFor(socialProfiles.fetch(registration, code, codeVerifier));
         // Just found or created in the same request.
         User user = userRepository.findById(userId).orElseThrow();
+        if (user.getSuspendedAt() != null) {
+            audit.record(AuditEvent.LOGIN_SUSPENDED, userId, "method", provider);
+            throw accountSuspended();
+        }
         return startSession(
                 user.getId(),
                 user.getUsername(),
@@ -368,6 +381,11 @@ public class AuthService {
                 tokenService.issue(userId, username, role, refreshToken.sessionId()),
                 refreshToken,
                 knownDevices.recordLogin(userId));
+    }
+
+    private static ApiException accountSuspended() {
+        return new ApiException(
+                HttpStatus.FORBIDDEN, ProblemType.ACCOUNT_SUSPENDED, "This account has been suspended.");
     }
 
     private static ApiException mfaChallengeExpired() {

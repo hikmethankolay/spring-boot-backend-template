@@ -14,6 +14,7 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 class UserIntegrationTest extends IntegrationTest {
 
@@ -41,7 +42,9 @@ class UserIntegrationTest extends IntegrationTest {
                                 {"email":"new-%s@example.com","currentPassword":"%s"}""", username, PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value(username))
-                .andExpect(jsonPath("$.email").value("new-" + username + "@example.com"));
+                // The new address waits for the link sent to it.
+                .andExpect(jsonPath("$.email").value(username + "@example.com"))
+                .andExpect(jsonPath("$.pendingEmail").value("new-" + username + "@example.com"));
     }
 
     @Test
@@ -67,6 +70,7 @@ class UserIntegrationTest extends IntegrationTest {
 
         mockMvc.perform(put("/api/v1/users/me/password")
                         .with(bearer(token))
+                        .with(fromIp("10.0.20.2"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"currentPassword":"Wrong#123","newPassword":"%s"}""", newPassword)))
@@ -88,6 +92,31 @@ class UserIntegrationTest extends IntegrationTest {
                                 {"identifier":"%s","password":"%s"}""", username, PASSWORD)))
                 .andExpect(status().isUnauthorized());
         login(username, newPassword);
+    }
+
+    @Test
+    void guessingThePasswordWithAStolenTokenRunsIntoTheLockout() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+
+        // The test profile blocks an IP after 3 failures, as for logins.
+        for (int attempt = 0; attempt < 3; attempt++) {
+            mockMvc.perform(changePassword(token, "Wrong#123", "10.0.20.6")).andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(changePassword(token, PASSWORD, "10.0.20.6"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("urn:problem:login-locked"));
+        // Blocked before the check, so the password did not change.
+        login(username, PASSWORD);
+    }
+
+    private static MockHttpServletRequestBuilder changePassword(String token, String currentPassword, String ip) {
+        return put("/api/v1/users/me/password")
+                .with(bearer(token))
+                .with(fromIp(ip))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("""
+                        {"currentPassword":"%s","newPassword":"Changed#456-passphrase"}""", currentPassword));
     }
 
     @Test
@@ -297,6 +326,7 @@ class UserIntegrationTest extends IntegrationTest {
 
         mockMvc.perform(delete("/api/v1/users/me")
                         .with(bearer(token))
+                        .with(fromIp("10.0.20.3"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"password":"Wrong#123"}"""))

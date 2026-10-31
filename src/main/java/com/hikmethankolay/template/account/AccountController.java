@@ -59,15 +59,16 @@ public class AccountController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(
             summary = "Confirm an email address",
-            description = "Completes a sign-up, creating the account, or confirms the new address of an account.")
-    @ApiResponse(responseCode = "204", description = "Account created or email address verified")
+            description = "Confirms the address of an account, or a change of address: the `pendingEmail` a user "
+                    + "asked for replaces their email, and links sent to the old address stop working.")
+    @ApiResponse(responseCode = "204", description = "Email address verified, or changed to the pending one")
     @ApiResponse(
             responseCode = "400",
             description = INVALID_TOKEN,
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "409",
-            description = "The sign-up's username or email address was taken since; sign up again",
+            description = "Another account took the new email address since the change was requested",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public void verifyEmail(@Valid @RequestBody TokenRequest request) {
         accountService.verifyEmail(request.token());

@@ -1,10 +1,12 @@
 package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.config.AppProperties;
 import java.time.Duration;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +15,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Brute-force protection for the login endpoint.
@@ -145,6 +149,53 @@ public class LoginAttemptService {
         } catch (DataAccessException ex) {
             log.warn("Could not reset login failures: {}", ex.getMessage());
         }
+    }
+
+    /**
+     * Checks a password a signed-in user entered again to confirm a sensitive change, under the same limits as
+     * logins: the attempt is counted against the account and the client IP of the current request, a wrong password
+     * stays counted and a right one is taken back. Without this, a stolen access token could be used to guess the
+     * password with no lockout, then change the email or password and keep the account.
+     *
+     * @param userId the user whose password is checked
+     * @param check  compares the password; an exception means it could not be checked and is not counted
+     * @return the result of {@code check}
+     * @throws ApiException 429 if the IP or account is blocked, 503 if the counters cannot be checked
+     */
+    public boolean checkReentered(long userId, BooleanSupplier check) {
+        String accountKey = "account:" + userId;
+        String ipKey = "ip:" + ClientIp.limitKey(currentRemoteAddr());
+        if (!tryAcquire(ipKey, accountKey)) {
+            throw ApiException.tooManyRequests(
+                    ProblemType.LOGIN_LOCKED, "Too many failed attempts. Please try again later.", lockDuration);
+        }
+        boolean matches;
+        boolean checked = false;
+        try {
+            matches = check.getAsBoolean();
+            checked = true;
+        } finally {
+            // The password could not be checked (e.g. database down): no failed attempt.
+            if (!checked) {
+                giveBack(ipKey, accountKey);
+            }
+        }
+        if (matches) {
+            reset(accountKey);
+            release(ipKey);
+        }
+        return matches;
+    }
+
+    /**
+     * Returns the client address of the request being handled.
+     *
+     * @return {@code getRemoteAddr()} of the current request, or {@code "none"} outside a request
+     */
+    private static String currentRemoteAddr() {
+        return RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
+                ? attributes.getRequest().getRemoteAddr()
+                : "none";
     }
 
     /**

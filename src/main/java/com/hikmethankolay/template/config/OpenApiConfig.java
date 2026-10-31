@@ -86,6 +86,12 @@ public class OpenApiConfig {
     /** Component name of the 429 response of every operation. */
     static final String TOO_MANY_REQUESTS = "TooManyRequests";
 
+    /** Component name of the 409 response of a retry whose first request still runs ({@code Idempotency-Key}). */
+    public static final String IDEMPOTENCY_KEY_IN_USE = "IdempotencyKeyInUse";
+
+    /** Component name of the 422 response of an {@code Idempotency-Key} reused for another request. */
+    public static final String IDEMPOTENCY_KEY_REUSED = "IdempotencyKeyReused";
+
     /** Component name of the 500 response of every operation. */
     static final String INTERNAL_SERVER_ERROR = "InternalServerError";
 
@@ -168,6 +174,14 @@ public class OpenApiConfig {
                 TOO_MANY_REQUESTS,
                 problem("Too many requests or login attempts; wait for " + "`Retry-After` seconds")
                         .addHeaderObject(HttpHeaders.RETRY_AFTER, headerRef(HttpHeaders.RETRY_AFTER)));
+        components.addResponses(
+                IDEMPOTENCY_KEY_IN_USE,
+                problem(
+                        "A request with the same `Idempotency-Key` is still running (`urn:problem:idempotency-key-in-use`)"));
+        components.addResponses(
+                IDEMPOTENCY_KEY_REUSED,
+                problem("The `Idempotency-Key` was used for a request with another path or body "
+                        + "(`urn:problem:idempotency-key-reused`)"));
         components.addResponses(
                 INTERNAL_SERVER_ERROR, problem("Unexpected server error; quote `X-Trace-Id` when " + "reporting it"));
         components.getResponses().values().forEach(response -> addCommonHeaders(null, response));

@@ -17,9 +17,16 @@ import org.springframework.security.core.userdetails.UserDetails;
  * @param role          role of the user
  * @param emailVerified  whether the email address has been confirmed
  * @param sessionVersion the user's session version when the password was checked
+ * @param suspended      whether an administrator suspended the account
  */
 public record AppUserDetails(
-        long id, String username, String passwordHash, Role role, boolean emailVerified, int sessionVersion)
+        long id,
+        String username,
+        String passwordHash,
+        Role role,
+        boolean emailVerified,
+        int sessionVersion,
+        boolean suspended)
         implements UserDetails {
 
     /**
@@ -35,7 +42,8 @@ public record AppUserDetails(
                 user.getPasswordHash(),
                 user.getRole(),
                 user.isEmailVerified(),
-                user.getSessionVersion());
+                user.getSessionVersion(),
+                user.getSuspendedAt() != null);
     }
 
     /**

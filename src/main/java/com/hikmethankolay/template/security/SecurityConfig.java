@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.security;
 
+import com.hikmethankolay.template.common.IdempotencyFilter;
 import com.hikmethankolay.template.config.AppProperties;
 import java.util.List;
 import java.util.Map;
@@ -312,7 +313,7 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.cors().allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", IdempotencyFilter.HEADER));
         // Every header the OpenAPI document declares on responses, so cross-origin clients can read them.
         cors.setExposedHeaders(List.of(
                 "Location",
@@ -321,7 +322,8 @@ public class SecurityConfig {
                 "RateLimit-Limit",
                 "RateLimit-Remaining",
                 "RateLimit-Reset",
-                HttpHeaders.CONTENT_DISPOSITION));
+                HttpHeaders.CONTENT_DISPOSITION,
+                IdempotencyFilter.REPLAYED_HEADER));
         cors.setAllowCredentials(true);
         cors.setMaxAge(3600L);
 

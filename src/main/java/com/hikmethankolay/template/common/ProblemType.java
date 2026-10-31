@@ -38,6 +38,9 @@ public enum ProblemType {
     /** Login refused because the email address is not verified yet. */
     EMAIL_NOT_VERIFIED("email-not-verified", "The email address must be verified before logging in"),
 
+    /** Login refused because an administrator suspended the account. */
+    ACCOUNT_SUSPENDED("account-suspended", "An administrator suspended this account; it cannot log in"),
+
     /** The caller's current password, required to confirm a change, is missing or wrong. */
     WRONG_PASSWORD(
             "wrong-password", "The caller's current password, required to confirm the change, is missing or wrong"),
@@ -70,13 +73,17 @@ public enum ProblemType {
     /** Only the owner can change roles and manage administrators. */
     OWNER_REQUIRED("owner-required", "Only the owner can change roles and manage administrators"),
 
-    /** The owner account cannot be deleted or demoted, and the OWNER role cannot be assigned, through the API. */
+    /**
+     * The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the
+     * API.
+     */
     OWNER_PROTECTED(
             "owner-protected",
-            "The owner account cannot be deleted or demoted, and the OWNER role cannot be assigned, through the API"),
+            "The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through "
+                    + "the API"),
 
-    /** An administrator tried to delete their own account through the admin endpoint. */
-    OWN_ACCOUNT("own-account", "Administrators cannot delete their own account through the admin endpoint"),
+    /** An administrator tried to delete or suspend their own account through the admin endpoints. */
+    OWN_ACCOUNT("own-account", "Administrators cannot delete or suspend their own account through the admin endpoints"),
 
     /** No user has the requested id. */
     USER_NOT_FOUND("user-not-found", "No user has this id"),
@@ -119,6 +126,18 @@ public enum ProblemType {
 
     /** Login is refused because the brute-force counters cannot be checked (Redis is unavailable). */
     LOGIN_UNAVAILABLE("login-unavailable", "Login is temporarily unavailable; retry later"),
+
+    /** The Idempotency-Key header is empty or too long. */
+    IDEMPOTENCY_KEY_INVALID(
+            "idempotency-key-invalid", "The `Idempotency-Key` header is empty or longer than 255 characters"),
+
+    /** A request with the same Idempotency-Key is still running, or cannot be checked right now. */
+    IDEMPOTENCY_KEY_IN_USE(
+            "idempotency-key-in-use", "A request with this `Idempotency-Key` is still running; retry it later"),
+
+    /** The Idempotency-Key was used before for a request with another path or body. */
+    IDEMPOTENCY_KEY_REUSED(
+            "idempotency-key-reused", "This `Idempotency-Key` was used for a different request; use a new key"),
 
     /** The client exceeded the request rate limit. */
     RATE_LIMITED("rate-limited", "Too many requests from this IP; wait for `Retry-After` seconds"),

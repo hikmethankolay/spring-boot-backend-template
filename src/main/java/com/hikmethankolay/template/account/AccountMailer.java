@@ -3,6 +3,7 @@ package com.hikmethankolay.template.account;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.mail.EmailOutbox;
 import com.hikmethankolay.template.mail.MailRenderer;
+import com.hikmethankolay.template.mail.RenderedMail;
 import java.time.Duration;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -41,28 +42,34 @@ public class AccountMailer {
     /**
      * Sends the email verification link.
      *
-     * @param to    recipient address
-     * @param token the raw verification token
-     * @param ttl   how long the link is valid
+     * @param to       recipient address
+     * @param token    the raw verification token
+     * @param ttl      how long the link is valid
+     * @param deferred leave the sending to the outbox poller, for anonymous requests (see
+     *                 {@link EmailOutbox#enqueueDeferred})
      */
-    public void sendEmailVerification(String to, String token, Duration ttl) {
-        outbox.enqueue(
-                to,
-                renderer.render(
-                        "verify-email",
-                        "Confirm your email address",
-                        Map.of("link", link("/verify-email", token), "ttl", humanize(ttl))));
+    public void sendEmailVerification(String to, String token, Duration ttl, boolean deferred) {
+        RenderedMail mail = renderer.render(
+                "verify-email",
+                "Confirm your email address",
+                Map.of("link", link("/verify-email", token), "ttl", humanize(ttl)));
+        if (deferred) {
+            outbox.enqueueDeferred(to, mail);
+        } else {
+            outbox.enqueue(to, mail);
+        }
     }
 
     /**
-     * Sends the password reset link.
+     * Sends the password reset link. Deferred to the outbox poller: an anonymous request triggers it, only for
+     * addresses with an account (see {@link EmailOutbox#enqueueDeferred}).
      *
      * @param to    recipient address
      * @param token the raw reset token
      * @param ttl   how long the link is valid
      */
     public void sendPasswordReset(String to, String token, Duration ttl) {
-        outbox.enqueue(
+        outbox.enqueueDeferred(
                 to,
                 renderer.render(
                         "password-reset",

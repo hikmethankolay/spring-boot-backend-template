@@ -142,6 +142,16 @@
       "post" : {
         "description" : "Records the broadcast and queues its emails in the background; the outbox sends them over the following minutes, after any other email. The history shows the final counts once `finishedAt` is set. One broadcast at a time, at most one per minute. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "sendBroadcast",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -252,6 +262,9 @@
               }
             }
           },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -296,6 +309,16 @@
       "post" : {
         "description" : "Sends nothing.",
         "operationId" : "previewBroadcast",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -381,6 +404,12 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
+          },
+          "409" : {
+            "$ref" : "#/components/responses/IdempotencyKeyInUse"
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -506,7 +535,7 @@
                 }
               }
             },
-            "description" : "Email address not verified (when verification is required)",
+            "description" : "The account is suspended, or its email address is not verified (when verification is required)",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -635,7 +664,28 @@
             }
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The account was suspended after the password was checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -897,7 +947,7 @@
                 }
               }
             },
-            "description" : "The provider account has no verified email address",
+            "description" : "The account is suspended, or the provider account has no verified email address",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -1377,7 +1427,7 @@
     },
     "/api/v1/auth/verify-email" : {
       "post" : {
-        "description" : "Completes a sign-up, creating the account, or confirms the new address of an account.",
+        "description" : "Confirms the address of an account, or a change of address: the `pendingEmail` a user asked for replaces their email, and links sent to the old address stop working.",
         "operationId" : "verifyEmail",
         "requestBody" : {
           "content" : {
@@ -1391,7 +1441,7 @@
         },
         "responses" : {
           "204" : {
-            "description" : "Account created or email address verified",
+            "description" : "Email address verified, or changed to the pending one",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -1442,7 +1492,7 @@
                 }
               }
             },
-            "description" : "The sign-up's username or email address was taken since; sign up again",
+            "description" : "Another account took the new email address since the change was requested",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -1824,6 +1874,16 @@
       },
       "post" : {
         "operationId" : "createNote",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1875,6 +1935,12 @@
           },
           "403" : {
             "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "409" : {
+            "$ref" : "#/components/responses/IdempotencyKeyInUse"
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -2260,7 +2326,7 @@
     },
     "/api/v1/users/me" : {
       "delete" : {
-        "description" : "Needs the current password. Deletes the user's data and ends every session.",
+        "description" : "Needs the current password. Deletes the user's data and ends every session. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "deleteCurrentUser",
         "requestBody" : {
           "content" : {
@@ -2349,6 +2415,30 @@
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -2405,7 +2495,7 @@
         "tags" : [ "Users" ]
       },
       "patch" : {
-        "description" : "Changes the username and/or email; omitted fields stay unchanged. Changing the email needs `currentPassword`. A new email address is marked unverified and a verification email is sent to it; links sent to the old address stop working.",
+        "description" : "Changes the username and/or email; omitted fields stay unchanged. Changing the email needs `currentPassword` and is not immediate: the new address is returned as `pendingEmail` and gets a link (to `/verify-email`, like a verification link); once it is opened, it replaces `email` and the old address is told. Sending the current email again cancels the change. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "updateCurrentUser",
         "requestBody" : {
           "content" : {
@@ -2501,6 +2591,30 @@
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -2836,6 +2950,16 @@
       "post" : {
         "description" : "Returns a new secret and its `otpauth://` URI: show the URI as a QR code. Two-factor authentication stays off until the first code is confirmed; calling this again replaces the pending secret.",
         "operationId" : "enrollTotp",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {
@@ -2860,6 +2984,9 @@
                 "$ref" : "#/components/headers/X-Trace-Id"
               }
             }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
@@ -2891,6 +3018,9 @@
               }
             }
           },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -2909,8 +3039,18 @@
     },
     "/api/v1/users/me/mfa/totp/confirm" : {
       "post" : {
-        "description" : "Checks the password and a code from the app and turns two-factor authentication on. Returns ten single-use recovery codes; they cannot be shown again.",
+        "description" : "Checks the password and a code from the app and turns two-factor authentication on. Returns ten single-use recovery codes; they cannot be shown again. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "confirmTotp",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -3000,11 +3140,38 @@
               }
             }
           },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -3018,7 +3185,7 @@
     },
     "/api/v1/users/me/password" : {
       "put" : {
-        "description" : "Ends every session of the user, including the current one: log in again afterwards.",
+        "description" : "Ends every session of the user, including the current one: log in again afterwards. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "changeCurrentUserPassword",
         "requestBody" : {
           "content" : {
@@ -3083,6 +3250,30 @@
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -3091,6 +3282,92 @@
           "cookieAuth" : [ ]
         } ],
         "summary" : "Change the current user's password",
+        "tags" : [ "Users" ]
+      }
+    },
+    "/api/v1/users/me/security-events" : {
+      "get" : {
+        "description" : "Newest first. Each event has its time, its name (e.g. `auth.login_succeeded`, `auth.login_failed`, `user.password_changed`; the Security guide lists them), the client IP and the id of the signed-in user who caused it, if any. A failed login from an unknown address is a sign the password is targeted.",
+        "operationId" : "listCurrentUserSecurityEvents",
+        "parameters" : [ {
+          "description" : "Zero-based page index (0..N)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 0,
+            "minimum" : 0
+          }
+        }, {
+          "description" : "The size of the page to be returned",
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 20,
+            "maximum" : 100,
+            "minimum" : 1
+          }
+        }, {
+          "description" : "Sort order as `property,asc` or `property,desc`; repeat the parameter to sort by several properties. Allowed properties: occurredAt. Any other property is rejected with 400.",
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "array",
+            "default" : [ "occurredAt,DESC" ],
+            "items" : {
+              "type" : "string",
+              "pattern" : "^(occurredAt)(,(asc|desc|ASC|DESC))?$"
+            }
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelSecurityEventResponse"
+                }
+              }
+            },
+            "description" : "One page of events",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List the current user's security activity",
         "tags" : [ "Users" ]
       }
     },
@@ -3227,7 +3504,7 @@
     },
     "/api/v1/users/{id}" : {
       "delete" : {
-        "description" : "Administrators delete regular users. Deleting an administrator needs the owner and a body with the owner's current `password`. The owner cannot be deleted.",
+        "description" : "Administrators delete regular users. Deleting an administrator needs the owner and a body with the owner's current `password`. The owner cannot be deleted. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "deleteUser",
         "parameters" : [ {
           "in" : "path",
@@ -3348,6 +3625,30 @@
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -3422,7 +3723,7 @@
         "tags" : [ "Users" ]
       },
       "patch" : {
-        "description" : "Administrators update regular users. Changing a role, or changing an administrator or the owner, needs the owner; a role change also needs the owner's `currentPassword`. The owner cannot be demoted and the OWNER role cannot be assigned. A new password or role ends every session of that user, so it applies immediately. A new email address is marked unverified.",
+        "description" : "Administrators update regular users. Changing a role, or changing an administrator or the owner, needs the owner; a role change also needs the owner's `currentPassword`. The owner cannot be demoted and the OWNER role cannot be assigned. A new password or role ends every session of that user, so it applies immediately. A new email address is marked unverified. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "updateUser",
         "parameters" : [ {
           "in" : "path",
@@ -3551,6 +3852,30 @@
           },
           "500" : {
             "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
           }
         },
         "security" : [ {
@@ -3559,6 +3884,368 @@
           "cookieAuth" : [ ]
         } ],
         "summary" : "Update a user (admin)",
+        "tags" : [ "Users" ]
+      }
+    },
+    "/api/v1/users/{id}/security-events" : {
+      "get" : {
+        "description" : "Newest first. Each event has its time, its name (e.g. `auth.login_succeeded`, `auth.login_failed`, `user.password_changed`; the Security guide lists them), the client IP and the id of the signed-in user who caused it, if any. Events outlive the account, so a deleted user's can still be read.",
+        "operationId" : "listUserSecurityEvents",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "description" : "Zero-based page index (0..N)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 0,
+            "minimum" : 0
+          }
+        }, {
+          "description" : "The size of the page to be returned",
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 20,
+            "maximum" : 100,
+            "minimum" : 1
+          }
+        }, {
+          "description" : "Sort order as `property,asc` or `property,desc`; repeat the parameter to sort by several properties. Allowed properties: occurredAt. Any other property is rejected with 400.",
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "array",
+            "default" : [ "occurredAt,DESC" ],
+            "items" : {
+              "type" : "string",
+              "pattern" : "^(occurredAt)(,(asc|desc|ASC|DESC))?$"
+            }
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelSecurityEventResponse"
+                }
+              }
+            },
+            "description" : "One page of events",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
+          },
+          "404" : {
+            "$ref" : "#/components/responses/UserNotFound"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List a user's security activity (admin or self)",
+        "tags" : [ "Users" ]
+      }
+    },
+    "/api/v1/users/{id}/suspension" : {
+      "delete" : {
+        "description" : "The user can log in again. The same rules as for suspending apply. Reactivating an active user changes nothing.",
+        "operationId" : "unsuspendUser",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "The reactivated user, with `suspendedAt` empty",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The caller's own account",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Not an administrator, or the user is an administrator and the caller is not the owner",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "404" : {
+            "$ref" : "#/components/responses/UserNotFound"
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The owner cannot be suspended",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Lift a user's suspension (admin)",
+        "tags" : [ "Users" ]
+      },
+      "put" : {
+        "description" : "Ends every session of the user at once and refuses their logins with `403 account-suspended` until the suspension is lifted; their data is kept. Administrators suspend regular users, the owner also administrators; nobody suspends the owner or their own account. Suspending a suspended user changes nothing.",
+        "operationId" : "suspendUser",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "The suspended user, with `suspendedAt` set",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The caller's own account",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Not an administrator, or the user is an administrator and the caller is not the owner",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "404" : {
+            "$ref" : "#/components/responses/UserNotFound"
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The owner cannot be suspended",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Suspend a user (admin)",
         "tags" : [ "Users" ]
       }
     }
@@ -3664,6 +4351,54 @@
           }
         },
         "description" : "Authenticated, but not allowed",
+        "headers" : {
+          "RateLimit-Limit" : {
+            "$ref" : "#/components/headers/RateLimit-Limit"
+          },
+          "RateLimit-Remaining" : {
+            "$ref" : "#/components/headers/RateLimit-Remaining"
+          },
+          "RateLimit-Reset" : {
+            "$ref" : "#/components/headers/RateLimit-Reset"
+          },
+          "X-Trace-Id" : {
+            "$ref" : "#/components/headers/X-Trace-Id"
+          }
+        }
+      },
+      "IdempotencyKeyInUse" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "A request with the same `Idempotency-Key` is still running (`urn:problem:idempotency-key-in-use`)",
+        "headers" : {
+          "RateLimit-Limit" : {
+            "$ref" : "#/components/headers/RateLimit-Limit"
+          },
+          "RateLimit-Remaining" : {
+            "$ref" : "#/components/headers/RateLimit-Remaining"
+          },
+          "RateLimit-Reset" : {
+            "$ref" : "#/components/headers/RateLimit-Reset"
+          },
+          "X-Trace-Id" : {
+            "$ref" : "#/components/headers/X-Trace-Id"
+          }
+        }
+      },
+      "IdempotencyKeyReused" : {
+        "content" : {
+          "application/problem+json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description" : "The `Idempotency-Key` was used for a request with another path or body (`urn:problem:idempotency-key-reused`)",
         "headers" : {
           "RateLimit-Limit" : {
             "$ref" : "#/components/headers/RateLimit-Limit"
@@ -4213,6 +4948,21 @@
         },
         "required" : [ "content", "page" ]
       },
+      "PagedModelSecurityEventResponse" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SecurityEventResponse"
+            }
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "required" : [ "content", "page" ]
+      },
       "PagedModelUserResponse" : {
         "type" : "object",
         "properties" : {
@@ -4260,7 +5010,7 @@
           "related" : {
             "type" : "object",
             "additionalProperties" : { },
-            "description" : "Data kept by other features, one entry per section; currently `sessions`, the user's active sessions, and `notes`"
+            "description" : "Data kept by other features, one entry per section; currently `sessions` (the user's active sessions), `socialAccounts`, `emailPreferences`, `notes` and `securityEvents` (the user's audit trail)"
           }
         },
         "required" : [ "exportedAt", "profile", "related" ]
@@ -4297,7 +5047,7 @@
           "type" : {
             "type" : "string",
             "format" : "uri",
-            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted or demoted, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete their own account through the admin endpoint\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
+            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
             "example" : "urn:problem:validation-failed"
           }
         },
@@ -4336,6 +5086,25 @@
           }
         },
         "required" : [ "email" ]
+      },
+      "SecurityEventResponse" : {
+        "type" : "object",
+        "properties" : {
+          "actorId" : {
+            "type" : "string"
+          },
+          "clientIp" : {
+            "type" : "string"
+          },
+          "event" : {
+            "type" : "string"
+          },
+          "occurredAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "event", "occurredAt" ]
       },
       "SessionResponse" : {
         "type" : "object",
@@ -4504,9 +5273,17 @@
           "mfaEnabled" : {
             "type" : "boolean"
           },
+          "pendingEmail" : {
+            "type" : "string",
+            "format" : "email"
+          },
           "role" : {
             "type" : "string",
             "enum" : [ "USER", "ADMIN", "OWNER" ]
+          },
+          "suspendedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           },
           "updatedAt" : {
             "type" : "string",

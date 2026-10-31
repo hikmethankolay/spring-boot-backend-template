@@ -90,7 +90,8 @@ public class MfaController {
             operationId = "confirmTotp",
             summary = "Turn on two-factor authentication",
             description = "Checks the password and a code from the app and turns two-factor authentication on. "
-                    + "Returns ten single-use recovery codes; they cannot be shown again.")
+                    + "Returns ten single-use recovery codes; they cannot be shown again."
+                    + " Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(
             responseCode = "200",
             description = "Two-factor authentication is on",
@@ -102,6 +103,10 @@ public class MfaController {
     @ApiResponse(
             responseCode = "409",
             description = CONFLICT,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public RecoveryCodesResponse confirm(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ConfirmTotpRequest request) {

@@ -11,9 +11,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
+import com.hikmethankolay.template.mail.EmailOutbox;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -25,6 +27,9 @@ class SessionRevocationIntegrationTest extends IntegrationTest {
 
     @Autowired
     private CapturingMailSender mail;
+
+    @Autowired
+    private EmailOutbox outbox;
 
     @Autowired
     private UserRepository users;
@@ -74,6 +79,8 @@ class SessionRevocationIntegrationTest extends IntegrationTest {
                         .content(json("""
                                 {"email":"%s@example.com"}""", username)))
                 .andExpect(status().isAccepted());
+        // Reset emails are left to the outbox poller.
+        outbox.sendDue(Instant.now());
         String resetToken = CapturingMailSender.token(
                 mail.latest(username + "@example.com", "Reset your password").orElseThrow());
         mockMvc.perform(post("/api/v1/auth/password-reset/confirm")

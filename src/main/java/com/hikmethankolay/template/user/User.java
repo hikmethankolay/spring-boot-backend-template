@@ -62,6 +62,12 @@ public class User {
     @Column(name = "totp_last_step", nullable = false)
     private long totpLastStep;
 
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
+
+    @Column(name = "pending_email", length = 254)
+    private String pendingEmail;
+
     /** Constructor required by JPA. */
     protected User() {}
 
@@ -204,6 +210,42 @@ public class User {
     /** Ends every session of the user: refresh tokens issued under the current version stop working. */
     public void endSessions() {
         sessionVersion++;
+    }
+
+    /**
+     * Returns the new email address waiting for its confirmation link to be opened.
+     *
+     * @return the address, or {@code null} if no change is pending
+     */
+    public String getPendingEmail() {
+        return pendingEmail;
+    }
+
+    /**
+     * Sets or clears the new email address waiting for confirmation.
+     *
+     * @param pendingEmail the normalised address, or {@code null}
+     */
+    public void setPendingEmail(String pendingEmail) {
+        this.pendingEmail = pendingEmail;
+    }
+
+    /**
+     * Returns when an administrator suspended the account.
+     *
+     * @return the time, or {@code null} if the account is active
+     */
+    public Instant getSuspendedAt() {
+        return suspendedAt;
+    }
+
+    /**
+     * Suspends or reactivates the account. Suspending does not end the sessions; the caller does.
+     *
+     * @param suspendedAt when it was suspended, or {@code null} to reactivate it
+     */
+    public void setSuspendedAt(Instant suspendedAt) {
+        this.suspendedAt = suspendedAt;
     }
 
     /**

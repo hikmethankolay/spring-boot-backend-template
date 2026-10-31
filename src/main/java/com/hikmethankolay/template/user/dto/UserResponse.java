@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -16,6 +17,8 @@ import java.time.Instant;
  * @param mfaEnabled    whether logins need a code from an authenticator app
  * @param createdAt     creation time (ISO-8601, UTC)
  * @param updatedAt     time of the last update (ISO-8601, UTC)
+ * @param suspendedAt   when an administrator suspended the account (ISO-8601, UTC); absent while it is active
+ * @param pendingEmail  a new address waiting for the link sent to it to be opened; absent if none
  */
 @Schema(
         requiredProperties = {"id", "username", "email", "role", "emailVerified", "mfaEnabled", "createdAt", "updatedAt"
@@ -28,7 +31,11 @@ public record UserResponse(
         boolean emailVerified,
         boolean mfaEnabled,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Instant suspendedAt,
+
+        @JsonInclude(JsonInclude.Include.NON_NULL) @Schema(format = "email")
+        String pendingEmail) {
 
     /**
      * Maps an entity to its public representation.
@@ -45,6 +52,8 @@ public record UserResponse(
                 user.isEmailVerified(),
                 user.isTotpEnabled(),
                 user.getCreatedAt(),
-                user.getUpdatedAt());
+                user.getUpdatedAt(),
+                user.getSuspendedAt(),
+                user.getPendingEmail());
     }
 }

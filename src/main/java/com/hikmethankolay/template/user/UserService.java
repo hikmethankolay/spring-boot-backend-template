@@ -7,12 +7,14 @@ import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SortAllowList;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.security.LoginAttemptService;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
 import com.hikmethankolay.template.user.dto.UpdateProfileRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
 import com.hikmethankolay.template.user.validation.BreachedPasswordValidator;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.cache.annotation.CacheEvict;
@@ -67,6 +69,8 @@ public class UserService {
 
     private final SecurityMailer securityMailer;
 
+    private final LoginAttemptService loginAttempts;
+
     /**
      * Creates the service.
      *
@@ -76,6 +80,7 @@ public class UserService {
      * @param events            publishes user events
      * @param audit             records security events
      * @param securityMailer    tells users about password and email changes
+     * @param loginAttempts     counts wrong confirmation passwords as failed logins
      */
     public UserService(
             UserRepository userRepository,
@@ -83,13 +88,15 @@ public class UserService {
             BreachedPasswordValidator breachedPasswords,
             ApplicationEventPublisher events,
             AuditLog audit,
-            SecurityMailer securityMailer) {
+            SecurityMailer securityMailer,
+            LoginAttemptService loginAttempts) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.breachedPasswords = breachedPasswords;
         this.events = events;
         this.audit = audit;
         this.securityMailer = securityMailer;
+        this.loginAttempts = loginAttempts;
     }
 
     /**
@@ -217,7 +224,7 @@ public class UserService {
      *
      * @param id       user id
      * @param password the password the user entered, may be {@code null}
-     * @throws ApiException 400 if the password is missing or wrong, 404 if the user does not exist
+     * @throws ApiException 400 if the password is missing or wrong, 404 if the user does not exist, 429 if failed passwords locked the IP or account
      */
     @Transactional(readOnly = true)
     public void confirmPassword(long id, String password) {
@@ -225,29 +232,61 @@ public class UserService {
     }
 
     /**
-     * Updates the username and/or email of a user; {@code null} fields are left unchanged. The
-     * email is where password resets go, so changing it needs the current password, like a
-     * password change does.
+     * Updates the username and/or email of a user; {@code null} fields are left unchanged. The email is where password
+     * resets go, so changing it needs the current password, like a password change does, and takes effect only once
+     * the link sent to the new address is opened ({@link #applyPendingEmail}): until then the new address is
+     * {@code pendingEmail} and the old one stays in use. Sending the current address again cancels a pending change.
      *
      * @param id      user id
      * @param request the changes
      * @return the updated user
-     * @throws ApiException 400 if the email changes without the correct current password,
-     *                      404 if the user does not exist, 409 if the new username or email is taken
+     * @throws ApiException 400 if the email changes without the correct current password, 404 if the user does not
+     *                      exist, 409 if the new username or email is taken, 429 if failed passwords locked the IP or
+     *                      account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public UserResponse updateProfile(long id, UpdateProfileRequest request) {
         User user = findUser(id);
-        if (request.email() != null && !normalizeEmail(request.email()).equals(user.getEmail())) {
+        String email = request.email() == null ? null : normalizeEmail(request.email());
+        if (email != null && !email.equals(user.getEmail())) {
             confirmPassword(user, request.currentPassword());
+            ensureEmailAvailable(email);
+            user.setPendingEmail(email);
+            audit.record(AuditEvent.EMAIL_CHANGE_REQUESTED, id);
+            events.publishEvent(new EmailChangeRequested(id));
+        } else if (email != null) {
+            user.setPendingEmail(null);
         }
-        String oldEmail = user.getEmail();
-        applyIdentityChanges(user, request.username(), request.email());
-        if (!user.getEmail().equals(oldEmail)) {
-            securityMailer.emailChanged(oldEmail);
-        }
+        applyIdentityChanges(user, request.username(), null);
         return UserResponse.from(userRepository.saveAndFlush(user));
+    }
+
+    /**
+     * Replaces a user's email with the pending one, after the link sent to it was opened. The address is verified
+     * by that, and the old one is told about the change.
+     *
+     * @param id user id
+     * @return {@code false} if no change is pending (it was cancelled), and nothing changed
+     * @throws ApiException 404 if the user does not exist, 409 if another account took the address meanwhile
+     */
+    @Transactional
+    @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
+    public boolean applyPendingEmail(long id) {
+        User user = findUser(id);
+        String pending = user.getPendingEmail();
+        if (pending == null) {
+            return false;
+        }
+        ensureEmailAvailable(pending);
+        String oldEmail = user.getEmail();
+        user.setEmail(pending);
+        user.setEmailVerified(true);
+        user.setPendingEmail(null);
+        audit.record(AuditEvent.EMAIL_CHANGED, id);
+        securityMailer.emailChanged(oldEmail);
+        userRepository.saveAndFlush(user);
+        return true;
     }
 
     /**
@@ -257,13 +296,13 @@ public class UserService {
      * @param id      user id
      * @param request current and new password
      * @throws ApiException 404 if the user does not exist, 400 if the current password is wrong or the
-     *                      new one is too short or breached
+     *                      new one is too short or breached, 429 if failed passwords locked the IP or account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public void changePassword(long id, ChangePasswordRequest request) {
         User user = findUser(id);
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+        if (!passwordMatches(user, request.currentPassword())) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
         }
         user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.newPassword()));
@@ -286,7 +325,7 @@ public class UserService {
      * @return the updated user
      * @throws ApiException 400 if a role change is not confirmed with the requester's current password or
      *                      the new password is too short or breached, 403 if the change needs the owner, 404 if the user does not exist, 409 if the
-     *                      new username or email is taken or the change would assign or remove the OWNER role
+     *                      new username or email is taken or the change would assign or remove the OWNER role, 429 if failed passwords locked the IP or account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
@@ -336,6 +375,72 @@ public class UserService {
     }
 
     /**
+     * Suspends a user: they cannot log in and every session ends at once, but their data is kept, unlike a deletion.
+     * Suspending a suspended user changes nothing. The same users can be suspended as deleted: administrators suspend
+     * regular users, the owner also administrators, and nobody the owner or their own account.
+     *
+     * @param id          id of the user to suspend
+     * @param requesterId id of the administrator making the request
+     * @return the suspended user
+     * @throws ApiException 400 if the requester suspends their own account, 403 if the user is an administrator and
+     *                      the requester is not the owner, 404 if the user does not exist, 409 if the user is the owner
+     */
+    @Transactional
+    @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
+    public UserResponse suspend(long id, long requesterId) {
+        User user = findSuspendable(id, requesterId);
+        if (user.getSuspendedAt() == null) {
+            user.setSuspendedAt(Instant.now());
+            audit.record(AuditEvent.USER_SUSPENDED, id);
+            endSessions(user);
+        }
+        return UserResponse.from(userRepository.saveAndFlush(user));
+    }
+
+    /**
+     * Lifts a user's suspension, so they can log in again. Reactivating an active user changes nothing.
+     *
+     * @param id          id of the user to reactivate
+     * @param requesterId id of the administrator making the request
+     * @return the reactivated user
+     * @throws ApiException 400 if the requester reactivates their own account, 403 if the user is an administrator and
+     *                      the requester is not the owner, 404 if the user does not exist, 409 if the user is the owner
+     */
+    @Transactional
+    @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
+    public UserResponse unsuspend(long id, long requesterId) {
+        User user = findSuspendable(id, requesterId);
+        if (user.getSuspendedAt() != null) {
+            user.setSuspendedAt(null);
+            audit.record(AuditEvent.USER_UNSUSPENDED, id);
+        }
+        return UserResponse.from(userRepository.saveAndFlush(user));
+    }
+
+    /**
+     * Loads a user whose suspension the requester may change.
+     *
+     * @param id          the user
+     * @param requesterId the administrator making the request
+     * @return the user
+     * @throws ApiException 400 for the requester's own account, 403 for an administrator unless the requester is the
+     *                      owner, 404 if the user does not exist, 409 for the owner
+     */
+    private User findSuspendable(long id, long requesterId) {
+        if (id == requesterId) {
+            throw ApiException.badRequest(ProblemType.OWN_ACCOUNT, "You cannot suspend your own account.");
+        }
+        User user = findUser(id);
+        if (user.getRole() == Role.OWNER) {
+            throw ApiException.conflict(ProblemType.OWNER_PROTECTED, "The owner account cannot be suspended.");
+        }
+        if (user.getRole() == Role.ADMIN) {
+            requireOwner(requesterId, "Only the owner can suspend administrators.");
+        }
+        return user;
+    }
+
+    /**
      * Deletes a user. Administrators delete regular users; deleting an administrator needs the owner,
      * confirmed with the owner's current password. Nobody can delete the owner.
      *
@@ -344,7 +449,7 @@ public class UserService {
      * @param confirmation the requester's current password; needed only to delete an administrator
      * @throws ApiException 400 if an administrator tries to delete their own account or the password is
      *                      missing or wrong, 403 if the user is an administrator and the requester is not
-     *                      the owner, 404 if the user does not exist, 409 if the user is the owner
+     *                      the owner, 404 if the user does not exist, 409 if the user is the owner, 429 if failed passwords locked the IP or account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
@@ -372,13 +477,13 @@ public class UserService {
      * @param id      the caller's user id
      * @param request the current password
      * @throws ApiException 400 if the password is wrong, 404 if the user does not exist,
-     *                      409 if the user is the owner
+     *                      409 if the user is the owner, 429 if failed passwords locked the IP or account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public void deleteOwnAccount(long id, DeleteAccountRequest request) {
         User user = findUser(id);
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (!passwordMatches(user, request.password())) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Password is incorrect.");
         }
         if (user.getRole() == Role.OWNER) {
@@ -458,11 +563,26 @@ public class UserService {
      * @throws ApiException 400 if the password is missing or wrong
      */
     private void confirmPassword(User user, String password) {
-        if (password == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (password == null || !passwordMatches(user, password)) {
             throw ApiException.badRequest(
                     ProblemType.WRONG_PASSWORD,
                     "Confirm this change with your current password; it is missing or incorrect.");
         }
+    }
+
+    /**
+     * Compares a password a user entered again with theirs. Wrong ones count as failed logins, so a stolen access
+     * token cannot be used to guess the password here instead of at login.
+     *
+     * @param user     the user
+     * @param password the password they entered
+     * @return {@code true} if it is right
+     * @throws ApiException 429 if the IP or account is locked after failed attempts, 503 if the counters cannot be
+     *                      checked
+     */
+    private boolean passwordMatches(User user, String password) {
+        return loginAttempts.checkReentered(
+                user.getId(), () -> passwordEncoder.matches(password, user.getPasswordHash()));
     }
 
     /**
@@ -496,8 +616,9 @@ public class UserService {
             if (!normalizedEmail.equals(user.getEmail())) {
                 ensureEmailAvailable(normalizedEmail);
                 user.setEmail(normalizedEmail);
-                // A new address must be confirmed again.
+                // A new address must be confirmed again, and replaces a change the user had pending.
                 user.setEmailVerified(false);
+                user.setPendingEmail(null);
                 events.publishEvent(new EmailVerificationRequired(user.getId()));
             }
         }

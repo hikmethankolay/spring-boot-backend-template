@@ -118,7 +118,8 @@ public class MfaService {
      * @param code            the code shown by the app
      * @return the recovery codes, which are not stored in readable form and cannot be shown again
      * @throws ApiException 409 if it is already on or no enrollment is pending, 400 if the password or the code
-     *                      is wrong
+     *                      is wrong, 429 if failed passwords locked the IP or account, 503 if the failed-login counters
+     *                      cannot be checked
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#userId")
@@ -130,7 +131,9 @@ public class MfaService {
         if (user.getTotpSecret() == null) {
             throw ApiException.conflict(ProblemType.TOTP_NOT_ENABLED, "Start the enrollment first.");
         }
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+        // Wrong passwords count as failed logins, so a stolen access token cannot be used to guess the password here.
+        if (!loginAttempts.checkReentered(
+                userId, () -> passwordEncoder.matches(currentPassword, user.getPasswordHash()))) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
         }
         OptionalLong step =

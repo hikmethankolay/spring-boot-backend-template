@@ -1,8 +1,11 @@
 package com.hikmethankolay.template.account;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -10,13 +13,15 @@ import org.springframework.data.jpa.repository.Query;
 public interface AccountTokenRepository extends JpaRepository<AccountToken, Long> {
 
     /**
-     * Finds a token by its hash and purpose.
+     * Finds a token by its hash and purpose and locks it until the transaction ends. A second request redeeming the
+     * same token waits, then finds it deleted, so a token is used once even by concurrent requests.
      *
      * @param tokenHash hex SHA-256 of the token
-     * @param type      required purpose
+     * @param types     the purposes it may have
      * @return the token, if it exists
      */
-    Optional<AccountToken> findByTokenHashAndType(String tokenHash, AccountTokenType type);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<AccountToken> findByTokenHashAndTypeIn(String tokenHash, Collection<AccountTokenType> types);
 
     /**
      * Tells whether a token of a user for one purpose was created after the given time.

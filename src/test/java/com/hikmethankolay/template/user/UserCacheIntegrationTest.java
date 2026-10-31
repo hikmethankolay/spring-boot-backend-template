@@ -65,6 +65,12 @@ class UserCacheIntegrationTest extends IntegrationTest {
 
         assertThat(usersCache().get(id)).isNull();
         mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.pendingEmail").value("updated-" + username + "@example.com"));
+
+        // Confirming the new address changes the user again.
+        confirmEmail("updated-" + username + "@example.com");
+        assertThat(usersCache().get(id)).isNull();
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
                 .andExpect(jsonPath("$.email").value("updated-" + username + "@example.com"));
     }
 

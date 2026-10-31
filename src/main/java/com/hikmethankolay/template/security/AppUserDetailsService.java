@@ -61,6 +61,7 @@ class AppUserDetailsService implements UserDetailsService, UserDetailsPasswordSe
                 newPassword,
                 details.role(),
                 details.emailVerified(),
-                details.sessionVersion());
+                details.sessionVersion(),
+                details.suspended());
     }
 }

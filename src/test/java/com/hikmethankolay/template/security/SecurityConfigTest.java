@@ -38,8 +38,9 @@ class SecurityConfigTest {
         assertThat(cors).isNotNull();
         assertThat(cors.getAllowedOrigins()).containsExactly("http://localhost:3000");
         assertThat(cors.getAllowedMethods()).containsExactly("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
-        assertThat(cors.getAllowedHeaders()).containsExactly("Authorization", "Content-Type");
-        assertThat(cors.getExposedHeaders()).contains("X-Trace-Id", "Retry-After", "RateLimit-Remaining");
+        assertThat(cors.getAllowedHeaders()).containsExactly("Authorization", "Content-Type", "Idempotency-Key");
+        assertThat(cors.getExposedHeaders())
+                .contains("X-Trace-Id", "Retry-After", "RateLimit-Remaining", "Idempotent-Replayed");
         assertThat(cors.getAllowCredentials()).isTrue();
         assertThat(cors.getMaxAge()).isEqualTo(3600L);
     }
@@ -103,7 +104,8 @@ class SecurityConfigTest {
                 "{bcrypt}" + new BCryptPasswordEncoder().encode("Secret#123-passphrase"),
                 Role.USER,
                 true,
-                0);
+                0,
+                false);
         AtomicReference<String> upgraded = new AtomicReference<>();
         AuthenticationManager manager = config.authenticationManager(username -> user, encoder, (details, hash) -> {
             upgraded.set(hash);
@@ -131,7 +133,7 @@ class SecurityConfigTest {
                 return encoded.equals(encode(raw));
             }
         };
-        AppUserDetails user = new AppUserDetails(1L, "alice", "plain:Secret#123-passphrase", Role.USER, true, 0);
+        AppUserDetails user = new AppUserDetails(1L, "alice", "plain:Secret#123-passphrase", Role.USER, true, 0, false);
         AuthenticationManager manager =
                 config.authenticationManager(username -> user, plain, (details, hash) -> details);
 

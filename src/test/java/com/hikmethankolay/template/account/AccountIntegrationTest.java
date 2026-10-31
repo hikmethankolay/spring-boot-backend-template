@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -11,11 +12,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
+import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.mail.EmailOutbox;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class AccountIntegrationTest extends IntegrationTest {
 
@@ -25,14 +36,25 @@ class AccountIntegrationTest extends IntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private AccountService accounts;
+
+    @Autowired
+    private EmailOutbox outbox;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     private SimpleMailMessage latestMail(String username, String subjectPart) {
         return mail.latest(username + "@example.com", subjectPart)
                 .orElseThrow(() -> new AssertionError("No '" + subjectPart + "' email for " + username));
     }
 
+    /** Posts and then runs the outbox, which sends the emails anonymous requests leave to it. */
     private void postJson(String path, String body, int expectedStatus) throws Exception {
         mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().is(expectedStatus));
+        outbox.sendDue(Instant.now());
     }
 
     @Test
@@ -115,10 +137,16 @@ class AccountIntegrationTest extends IntegrationTest {
 
     @Test
     void resendReachesOnlyAnUnconfirmedAddressAndRespectsTheCooldown() throws Exception {
+        // Sign-ups are verified when the account is created; an address an administrator set is not.
         String username = uniqueUsername();
-        String token = registerAndLogin(username);
+        long id = register(username);
         String newAddress = "moved-" + username + "@example.com";
-        changeEmail(token, newAddress);
+        mockMvc.perform(patch("/api/v1/users/{id}", id)
+                        .with(bearer(login(ADMIN_USERNAME, ADMIN_PASSWORD)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"email":"%s"}""", newAddress)))
+                .andExpect(status().isOk());
         SimpleMailMessage first = mail.latest(newAddress, "Confirm your email").orElseThrow();
 
         // Within the cooldown nothing is sent and the first link still works later.
@@ -186,6 +214,71 @@ class AccountIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void theResetEmailIsLeftToTheOutboxSoKnownAddressesAreNotSlower() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+
+        mockMvc.perform(post("/api/v1/auth/password-reset")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"email":"%s@example.com"}""", username)))
+                .andExpect(status().isAccepted());
+        // Not sent from the request: the SMTP round trip would tell which addresses have accounts.
+        assertThat(mail.latest(username + "@example.com", "Reset your password"))
+                .isEmpty();
+
+        outbox.sendDue(Instant.now());
+        assertThat(mail.latest(username + "@example.com", "Reset your password"))
+                .isPresent();
+    }
+
+    @Test
+    void aResetLinkWorksOnceEvenForConcurrentRequests() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        postJson("/api/v1/auth/password-reset", json("""
+                {"email":"%s@example.com"}""", username), 202);
+        String token = CapturingMailSender.token(latestMail(username, "Reset your password"));
+
+        CountDownLatch firstUsedIt = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        CompletableFuture<Void> first = CompletableFuture.runAsync(() -> transaction.executeWithoutResult(status -> {
+            accounts.resetPassword(token, "First#4567-passphrase");
+            firstUsedIt.countDown();
+            await(commit);
+        }));
+        assertThat(firstUsedIt.await(10, TimeUnit.SECONDS)).isTrue();
+        CompletableFuture<Void> second =
+                CompletableFuture.runAsync(() -> accounts.resetPassword(token, "Second#4567-passphrase"));
+        // The second request must wait for the first to commit instead of using the token too.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .until(() -> jdbc.queryForObject(
+                                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'"
+                                        + " AND query ILIKE '%account_tokens%'",
+                                Integer.class)
+                        > 0);
+        commit.countDown();
+        first.get(10, TimeUnit.SECONDS);
+
+        assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
+                .hasCauseInstanceOf(ApiException.class)
+                .cause()
+                .hasMessageContaining("invalid");
+        login(username, "First#4567-passphrase");
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    @Test
     void expiredResetLinkIsRejected() throws Exception {
         String username = uniqueUsername();
         long userId = register(username);
@@ -225,8 +318,9 @@ class AccountIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void changingEmailRequiresVerificationAgain() throws Exception {
+    void aNewEmailReplacesTheOldOneOnlyOnceTheLinkSentToItIsOpened() throws Exception {
         String username = uniqueUsername();
+        String oldAddress = username + "@example.com";
         String token = registerAndLogin(username);
 
         String newAddress = "moved-" + username + "@example.com";
@@ -236,9 +330,70 @@ class AccountIntegrationTest extends IntegrationTest {
                         .content(json("""
                                 {"email":"%s","currentPassword":"%s"}""", newAddress, PASSWORD)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.emailVerified").value(false));
+                .andExpect(jsonPath("$.email").value(oldAddress))
+                .andExpect(jsonPath("$.emailVerified").value(true))
+                .andExpect(jsonPath("$.pendingEmail").value(newAddress));
+        // Until then the old address is the account's: it logs in and gets the password resets.
+        login(oldAddress, PASSWORD);
 
-        assertThat(mail.latest(newAddress, "Confirm your email")).isPresent();
+        confirmEmail(newAddress);
+
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.email").value(newAddress))
+                .andExpect(jsonPath("$.emailVerified").value(true))
+                .andExpect(jsonPath("$.pendingEmail").doesNotExist());
+        login(newAddress, PASSWORD);
+    }
+
+    @Test
+    void resendAlsoReachesAnAddressAnEmailChangeIsWaitingFor() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        String newAddress = "moved-" + username + "@example.com";
+        changeEmail(token, newAddress);
+        SimpleMailMessage first = mail.latest(newAddress, "Confirm your email").orElseThrow();
+
+        // Within the cooldown nothing is sent.
+        postJson("/api/v1/auth/verify-email/resend", json("""
+                {"email":"%s"}""", newAddress), 202);
+        assertThat(mail.latest(newAddress, "Confirm your email")).containsSame(first);
+        // After it, a new link replaces the lost one.
+        jdbc.update(
+                "UPDATE account_tokens SET created_at = now() - interval '2 minutes' "
+                        + "WHERE user_id = (SELECT id FROM users WHERE username = ?)",
+                username);
+        postJson("/api/v1/auth/verify-email/resend", json("""
+                {"email":"%s"}""", newAddress), 202);
+        SimpleMailMessage second = mail.latest(newAddress, "Confirm your email").orElseThrow();
+        assertThat(second).isNotSameAs(first);
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", CapturingMailSender.token(first)), 400);
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", CapturingMailSender.token(second)), 204);
+
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.email").value(newAddress));
+    }
+
+    @Test
+    void sendingTheCurrentEmailAgainCancelsAPendingChange() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        changeEmail(token, "moved-" + username + "@example.com");
+        String link = CapturingMailSender.token(mail.latest("moved-" + username + "@example.com", "Confirm your email")
+                .orElseThrow());
+
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"email":"%s@example.com"}""", username)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingEmail").doesNotExist());
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", link), 400);
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.email").value(username + "@example.com"));
     }
 
     @Test
@@ -251,6 +406,7 @@ class AccountIntegrationTest extends IntegrationTest {
                         {"email":"stolen-%s@example.com","currentPassword":"Wrong#123"}""", username)}) {
             mockMvc.perform(patch("/api/v1/users/me")
                             .with(bearer(token))
+                            .with(fromIp("10.0.20.5"))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
                     .andExpect(status().isBadRequest())
@@ -268,16 +424,18 @@ class AccountIntegrationTest extends IntegrationTest {
                 {"email":"%s@example.com"}""", username), 202);
         String resetToken = CapturingMailSender.token(latestMail(username, "Reset your password"));
         changeEmail(token, "moved-" + username + "@example.com");
-        String verificationToken =
+        String firstLink =
                 CapturingMailSender.token(mail.latest("moved-" + username + "@example.com", "Confirm your email")
                         .orElseThrow());
 
+        // A newer change replaces the link of the first.
         changeEmail(token, "moved-again-" + username + "@example.com");
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", firstLink), 400);
+        confirmEmail("moved-again-" + username + "@example.com");
 
         postJson("/api/v1/auth/password-reset/confirm", json("""
                 {"token":"%s","newPassword":"Reset#4567-passphrase"}""", resetToken), 400);
-        postJson("/api/v1/auth/verify-email", json("""
-                {"token":"%s"}""", verificationToken), 400);
     }
 
     private void changeEmail(String token, String address) throws Exception {

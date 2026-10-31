@@ -17,6 +17,12 @@ public enum AuditEvent {
     /** A user confirmed their email address. */
     EMAIL_VERIFIED("user.email_verified", Level.INFO),
 
+    /** A user asked to change their email address; a confirmation link went to the new one. */
+    EMAIL_CHANGE_REQUESTED("user.email_change_requested", Level.INFO),
+
+    /** A user opened the link sent to their new address, which replaced the old one. */
+    EMAIL_CHANGED("user.email_changed", Level.WARN),
+
     /** Correct credentials; a session was started. */
     LOGIN_SUCCEEDED("auth.login_succeeded", Level.INFO),
 
@@ -28,6 +34,9 @@ public enum AuditEvent {
 
     /** Correct credentials, but the email address is not verified yet. */
     LOGIN_UNVERIFIED("auth.login_unverified", Level.WARN),
+
+    /** Correct credentials, but an administrator suspended the account. */
+    LOGIN_SUSPENDED("auth.login_suspended", Level.WARN),
 
     /** A session was ended by the user. */
     LOGOUT("auth.logout", Level.INFO),
@@ -61,6 +70,12 @@ public enum AuditEvent {
 
     /** An administrator deleted a user. */
     USER_DELETED_BY_ADMIN("admin.user_deleted", Level.WARN),
+
+    /** An administrator suspended a user; their sessions ended. */
+    USER_SUSPENDED("admin.user_suspended", Level.WARN),
+
+    /** An administrator lifted a user's suspension. */
+    USER_UNSUSPENDED("admin.user_unsuspended", Level.INFO),
 
     /** A user deleted their own account. */
     ACCOUNT_DELETED("user.account_deleted", Level.INFO),

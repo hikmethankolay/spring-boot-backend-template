@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -76,9 +75,8 @@ public class BroadcastController {
      * Records a broadcast and queues it, in the background, for every user in its audience who did not turn its
      * category off.
      *
-     * @param jwt         the owner's token
-     * @param request     the broadcast, with the owner's current password
-     * @param httpRequest the HTTP request, for the client address the failed-password lockout counts by
+     * @param jwt     the owner's token
+     * @param request the broadcast, with the owner's current password
      * @return the broadcast id and the number of recipients expected
      */
     @PostMapping
@@ -108,10 +106,8 @@ public class BroadcastController {
             description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public BroadcastResult sendBroadcast(
-            @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody BroadcastRequest request,
-            HttpServletRequest httpRequest) {
-        return broadcasts.send(TokenService.userId(jwt), httpRequest.getRemoteAddr(), request);
+            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody BroadcastRequest request) {
+        return broadcasts.send(TokenService.userId(jwt), request);
     }
 
     /**

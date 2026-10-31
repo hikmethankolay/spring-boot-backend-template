@@ -66,6 +66,15 @@ public class AccountToken {
     }
 
     /**
+     * Returns what the token is for.
+     *
+     * @return the purpose
+     */
+    public AccountTokenType getType() {
+        return type;
+    }
+
+    /**
      * Tells whether the token has expired.
      *
      * @param now the current time

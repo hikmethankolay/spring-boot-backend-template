@@ -1,10 +1,12 @@
 package com.hikmethankolay.template.security;
 
+import com.hikmethankolay.template.common.IdempotencyFilter;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.config.OpenApiConfig;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
@@ -98,7 +100,7 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
                 new SecurityRequirement().addList(BEARER_SCHEME), new SecurityRequirement().addList(COOKIE_SCHEME));
 
         openApi.getPaths()
-                .forEach((path, item) -> item.readOperations().forEach(operation -> {
+                .forEach((path, item) -> item.readOperationsMap().forEach((method, operation) -> {
                     if (REFRESH_COOKIE_PATHS.contains(path)) {
                         operation.addParametersItem(new Parameter()
                                 .in("cookie")
@@ -115,8 +117,30 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
                         operation
                                 .getResponses()
                                 .putIfAbsent("401", OpenApiConfig.responseRef(OpenApiConfig.UNAUTHORIZED));
+                        if (method == PathItem.HttpMethod.POST) {
+                            addIdempotencyKey(operation);
+                        }
                     }
                 }));
+    }
+
+    /**
+     * Documents the optional {@code Idempotency-Key} header of signed-in {@code POST} requests and its error
+     * responses (see {@link IdempotencyFilter}).
+     *
+     * @param operation a signed-in POST operation
+     */
+    private static void addIdempotencyKey(Operation operation) {
+        operation.addParametersItem(new Parameter()
+                .in("header")
+                .name(IdempotencyFilter.HEADER)
+                .required(false)
+                .description("Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 "
+                        + "hours gets the first response again, with `" + IdempotencyFilter.REPLAYED_HEADER
+                        + ": true`, instead of running twice. Responses with a 5xx status are not kept.")
+                .schema(new StringSchema().maxLength(255)));
+        operation.getResponses().putIfAbsent("409", OpenApiConfig.responseRef(OpenApiConfig.IDEMPOTENCY_KEY_IN_USE));
+        operation.getResponses().putIfAbsent("422", OpenApiConfig.responseRef(OpenApiConfig.IDEMPOTENCY_KEY_REUSED));
     }
 
     /**

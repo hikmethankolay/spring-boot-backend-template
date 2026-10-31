@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.RequestBuilder;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 class MfaIntegrationTest extends IntegrationTest {
 
@@ -99,7 +100,8 @@ class MfaIntegrationTest extends IntegrationTest {
         long step = Totp.step(Instant.now().getEpochSecond());
 
         // A stolen token alone cannot put an authenticator on the account.
-        mockMvc.perform(confirmRequest(token, "Wrong#123", Totp.code(secret, step)))
+        mockMvc.perform(confirmRequest(token, "Wrong#123", Totp.code(secret, step))
+                        .with(fromIp("10.0.20.1")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:wrong-password"));
         mockMvc.perform(confirmRequest(token, PASSWORD, wrongCode(secret, step)))
@@ -222,7 +224,7 @@ class MfaIntegrationTest extends IntegrationTest {
                         {"mfaToken":"%s","code":"%s"}""", mfaToken, code));
     }
 
-    private static RequestBuilder confirmRequest(String token, String password, String code) {
+    private static MockHttpServletRequestBuilder confirmRequest(String token, String password, String code) {
         return post(TOTP + "/confirm")
                 .with(bearer(token))
                 .contentType(MediaType.APPLICATION_JSON)

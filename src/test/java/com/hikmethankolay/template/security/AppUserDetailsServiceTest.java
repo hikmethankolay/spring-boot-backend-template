@@ -43,12 +43,12 @@ class AppUserDetailsServiceTest {
     /** The upgraded hash replaces the one the login was checked against, and the returned user carries it. */
     @Test
     void updatePasswordStoresTheNewHashIfTheOldOneIsUnchanged() {
-        AppUserDetails user = new AppUserDetails(5L, "alice", "{bcrypt}old", Role.USER, true, 3);
+        AppUserDetails user = new AppUserDetails(5L, "alice", "{bcrypt}old", Role.USER, true, 3, false);
 
         UserDetails upgraded = service.updatePassword(user, "{argon2}new");
 
         verify(users).upgradePasswordHash(5L, "{bcrypt}old", "{argon2}new");
-        assertThat(upgraded).isEqualTo(new AppUserDetails(5L, "alice", "{argon2}new", Role.USER, true, 3));
+        assertThat(upgraded).isEqualTo(new AppUserDetails(5L, "alice", "{argon2}new", Role.USER, true, 3, false));
     }
 
     /** An unknown identifier is reported as not found. */

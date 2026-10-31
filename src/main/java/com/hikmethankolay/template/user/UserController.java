@@ -52,12 +52,19 @@ import org.springframework.web.bind.annotation.RestController;
  *   <tr><td>GET</td><td>/{id}</td><td>ADMIN or the user</td><td>200</td></tr>
  *   <tr><td>PATCH</td><td>/{id}</td><td>ADMIN</td><td>200</td></tr>
  *   <tr><td>DELETE</td><td>/{id}</td><td>ADMIN</td><td>204</td></tr>
+ *   <tr><td>PUT</td><td>/{id}/suspension</td><td>ADMIN</td><td>200</td></tr>
+ *   <tr><td>DELETE</td><td>/{id}/suspension</td><td>ADMIN</td><td>200</td></tr>
  * </table>
  */
 @RestController
 @RequestMapping("/api/v1/users")
 @Tag(name = "Users")
 public class UserController {
+
+    private static final String SUSPEND_OWN_ACCOUNT = "The caller's own account";
+
+    private static final String SUSPEND_NEEDS_OWNER =
+            "Not an administrator, or the user is an administrator and the " + "caller is not the owner";
 
     private final UserService userService;
 
@@ -101,9 +108,12 @@ public class UserController {
     @Operation(
             operationId = "updateCurrentUser",
             summary = "Update the current user's profile",
-            description = "Changes the username and/or email; omitted fields stay unchanged. Changing the email needs "
-                    + "`currentPassword`. A new email address is marked unverified and a verification email is sent to "
-                    + "it; links sent to the old address stop working.")
+            description =
+                    "Changes the username and/or email; omitted fields stay unchanged. Changing the email needs "
+                            + "`currentPassword` and is not immediate: the new address is returned as `pendingEmail` "
+                            + "and gets a link (to `/verify-email`, like a verification link); once it is opened, it "
+                            + "replaces `email` and the old address is told. Sending the current email again cancels "
+                            + "the change. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(
             responseCode = "200",
             description = "The updated user",
@@ -116,6 +126,10 @@ public class UserController {
     @ApiResponse(
             responseCode = "409",
             description = "Username or email already taken",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public UserResponse updateMe(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateProfileRequest request) {
         return userService.updateProfile(TokenService.userId(jwt), request);
@@ -132,11 +146,16 @@ public class UserController {
     @Operation(
             operationId = "changeCurrentUserPassword",
             summary = "Change the current user's password",
-            description = "Ends every session of the user, including the current one: log in again afterwards.")
+            description = "Ends every session of the user, including the current one: log in again afterwards."
+                    + " Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(responseCode = "204", description = "Password changed; every session has ended")
     @ApiResponse(
             responseCode = "400",
             description = "Invalid input (see `errors`), or the current password is wrong",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public void changeMyPassword(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(TokenService.userId(jwt), request);
@@ -154,7 +173,8 @@ public class UserController {
     @Operation(
             operationId = "deleteCurrentUser",
             summary = "Delete the current user's account",
-            description = "Needs the current password. Deletes the user's data and ends every session.")
+            description = "Needs the current password. Deletes the user's data and ends every session."
+                    + " Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(responseCode = "204", description = "Account and data deleted; every session has ended")
     @ApiResponse(
             responseCode = "400",
@@ -163,6 +183,10 @@ public class UserController {
     @ApiResponse(
             responseCode = "409",
             description = "The owner account cannot be deleted",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public void deleteMe(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody DeleteAccountRequest request) {
         userService.deleteOwnAccount(TokenService.userId(jwt), request);
@@ -247,7 +271,8 @@ public class UserController {
             description = "Administrators update regular users. Changing a role, or changing an administrator or "
                     + "the owner, needs the owner; a role change also needs the owner's `currentPassword`. The owner "
                     + "cannot be demoted and the OWNER role cannot be assigned. A new password or role ends every "
-                    + "session of that user, so it applies immediately. A new email address is marked unverified.")
+                    + "session of that user, so it applies immediately. A new email address is marked unverified."
+                    + " Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(
             responseCode = "400",
             description =
@@ -265,11 +290,86 @@ public class UserController {
             responseCode = "409",
             description = "Username or email already taken, or the change would assign or " + "remove the OWNER role",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public UserResponse update(
             @PathVariable long id,
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody AdminUpdateUserRequest request) {
         return userService.update(id, TokenService.userId(jwt), request);
+    }
+
+    /**
+     * Suspends a user: they cannot log in and their sessions end, but their data is kept.
+     *
+     * @param id  user id
+     * @param jwt the caller's token
+     * @return the suspended user
+     */
+    @PutMapping("/{id}/suspension")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            operationId = "suspendUser",
+            summary = "Suspend a user (admin)",
+            description =
+                    "Ends every session of the user at once and refuses their logins with `403 account-suspended` "
+                            + "until the suspension is lifted; their data is kept. Administrators suspend regular users, the "
+                            + "owner also administrators; nobody suspends the owner or their own account. Suspending a "
+                            + "suspended user changes nothing.")
+    @ApiResponse(
+            responseCode = "200",
+            description = "The suspended user, with `suspendedAt` set",
+            content = @Content(schema = @Schema(implementation = UserResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = SUSPEND_OWN_ACCOUNT,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "403",
+            description = SUSPEND_NEEDS_OWNER,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "The owner cannot be suspended",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public UserResponse suspend(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
+        return userService.suspend(id, TokenService.userId(jwt));
+    }
+
+    /**
+     * Lifts a user's suspension.
+     *
+     * @param id  user id
+     * @param jwt the caller's token
+     * @return the reactivated user
+     */
+    @DeleteMapping("/{id}/suspension")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            operationId = "unsuspendUser",
+            summary = "Lift a user's suspension (admin)",
+            description = "The user can log in again. The same rules as for suspending apply. Reactivating an active "
+                    + "user changes nothing.")
+    @ApiResponse(
+            responseCode = "200",
+            description = "The reactivated user, with `suspendedAt` empty",
+            content = @Content(schema = @Schema(implementation = UserResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = SUSPEND_OWN_ACCOUNT,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "403",
+            description = SUSPEND_NEEDS_OWNER,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "The owner cannot be suspended",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public UserResponse unsuspend(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
+        return userService.unsuspend(id, TokenService.userId(jwt));
     }
 
     /**
@@ -286,8 +386,9 @@ public class UserController {
     @Operation(
             operationId = "deleteUser",
             summary = "Delete a user (admin)",
-            description = "Administrators delete regular users. Deleting an administrator needs the owner and a body "
-                    + "with the owner's current `password`. The owner cannot be deleted.")
+            description =
+                    "Administrators delete regular users. Deleting an administrator needs the owner and a body "
+                            + "with the owner's current `password`. The owner cannot be deleted. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).")
     @ApiResponse(responseCode = "204", description = "User and data deleted; every session of the user has ended")
     @ApiResponse(
             responseCode = "400",
@@ -301,6 +402,10 @@ public class UserController {
     @ApiResponse(
             responseCode = "409",
             description = "The owner account cannot be deleted",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public void delete(
             @PathVariable long id,

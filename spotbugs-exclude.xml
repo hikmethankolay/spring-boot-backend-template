@@ -86,6 +86,15 @@
         <Bug pattern="SERVLET_HEADER_USER_AGENT"/>
         <Class name="com.hikmethankolay.template.auth.KnownDevices"/>
     </Match>
+    <!--
+      IdempotencyFilter only hashes the Idempotency-Key header (into the Redis key) and the query string (into the
+      request's fingerprint); neither is used otherwise. The Location it sets on a replay is the one the application
+      itself answered the first request with, read back from Redis, not anything the client sent.
+    -->
+    <Match>
+        <Bug pattern="SERVLET_HEADER,SERVLET_QUERY_STRING,UNVALIDATED_REDIRECT"/>
+        <Class name="com.hikmethankolay.template.common.IdempotencyFilter"/>
+    </Match>
     <!-- HttpSecurity.build() declares "throws Exception", so the filter chain beans must too. -->
     <Match>
         <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
@@ -103,6 +112,7 @@
             <Class name="com.hikmethankolay.template.auth.MfaChallengeService"/>
             <Class name="com.hikmethankolay.template.social.SocialProfileClient"/>
             <Class name="com.hikmethankolay.template.common.GlobalExceptionHandler"/>
+            <Class name="com.hikmethankolay.template.common.IdempotencyFilter"/>
             <Class name="com.hikmethankolay.template.mail.EmailOutbox"/>
             <Class name="com.hikmethankolay.template.mail.BroadcastService"/>
             <Class name="com.hikmethankolay.template.security.LoginAttemptService"/>
