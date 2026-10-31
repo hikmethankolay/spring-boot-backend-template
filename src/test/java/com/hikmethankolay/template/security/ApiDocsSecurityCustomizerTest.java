@@ -10,6 +10,7 @@ import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.responses.ApiResponses;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.method.HandlerMethod;
@@ -47,6 +48,33 @@ class ApiDocsSecurityCustomizerTest {
         customizer.customise(openApi);
 
         assertThat(openApi.getComponents()).isSameAs(components);
+    }
+
+    /** Only signed-in POSTs the filter covers document Idempotency-Key and its errors; two-factor enrollment does not. */
+    @Test
+    void signedInPostsDocumentTheIdempotencyKey() {
+        Operation createNote = operation();
+        Operation listNotes = operation();
+        Operation enroll = operation();
+        Operation login = operation();
+        OpenAPI openApi = new OpenAPI()
+                .paths(new Paths()
+                        .addPathItem(
+                                "/api/v1/notes", new PathItem().post(createNote).get(listNotes))
+                        .addPathItem("/api/v1/users/me/mfa/totp", new PathItem().post(enroll))
+                        .addPathItem("/api/v1/auth/login", new PathItem().post(login)));
+
+        customizer.customise(openApi);
+
+        assertThat(createNote.getParameters())
+                .singleElement()
+                .extracting(Parameter::getIn, Parameter::getName)
+                .containsExactly("header", "Idempotency-Key");
+        assertThat(createNote.getResponses()).containsKeys("409", "422");
+        for (Operation uncovered : List.of(listNotes, enroll, login)) {
+            assertThat(uncovered.getParameters()).isNull();
+            assertThat(uncovered.getResponses()).doesNotContainKey("422");
+        }
     }
 
     /** Only refresh and logout document the refresh token cookie. */

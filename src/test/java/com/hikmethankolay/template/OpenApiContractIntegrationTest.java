@@ -119,6 +119,18 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void idempotencyKeyIsDocumentedOnlyWhereTheFilterHonoursIt() throws Exception {
+        String notes = "$.paths['/api/v1/notes'].";
+        spec().andExpect(jsonPath(notes + "post.parameters[*].name", hasItem("Idempotency-Key")))
+                .andExpect(jsonPath(notes + "post.responses", hasKey("422")))
+                // Not on reads, anonymous posts, or the two-factor endpoints whose answers hold secrets.
+                .andExpect(jsonPath(notes + "get.parameters[*].name", not(hasItem("Idempotency-Key"))))
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post", not(hasKey("parameters"))))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/mfa/totp'].post", not(hasKey("parameters"))))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/mfa/totp'].post.responses", not(hasKey("422"))));
+    }
+
+    @Test
     void paginationUsesSeparateParametersWithALimit() throws Exception {
         spec().andExpect(jsonPath(USERS + "'].get.parameters[*].name", containsInAnyOrder("page", "size", "sort")))
                 .andExpect(jsonPath(USERS + "'].get.parameters[?(@.name == 'size')].schema.maximum", hasItem(100)))

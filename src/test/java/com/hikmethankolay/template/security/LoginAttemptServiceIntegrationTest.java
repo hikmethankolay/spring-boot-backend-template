@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hikmethankolay.template.IntegrationTest;
 import java.util.Collections;
@@ -25,6 +26,21 @@ class LoginAttemptServiceIntegrationTest extends IntegrationTest {
 
     private static String uniqueKey(String type) {
         return type + ":" + UUID.randomUUID();
+    }
+
+    @Test
+    void aPasswordConfirmationThatCannotBeCheckedIsNotAFailedAttempt() {
+        long userId = Math.abs(UUID.randomUUID().getMostSignificantBits());
+
+        // More failures than the IP (3) and the account (5) allow, had they counted.
+        for (int attempt = 0; attempt < 6; attempt++) {
+            assertThatThrownBy(() -> service.checkReentered(userId, () -> {
+                        throw new IllegalStateException("database down");
+                    }))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        assertThat(service.checkReentered(userId, () -> true)).isTrue();
     }
 
     @Test
