@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [4.2.1] - 2026-10-31
+
 ### Security
 
 - A pending email change survived the owner taking the account back: someone with the password could ask to move
@@ -458,7 +460,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.1...HEAD
+[4.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.0.2...v4.0.3
