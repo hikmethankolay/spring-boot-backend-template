@@ -2,11 +2,9 @@ package com.hikmethankolay.template.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +26,7 @@ import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -155,14 +154,15 @@ class IdempotencyFilterTest {
                 new MockHttpServletResponse(),
                 (req, res) -> ((HttpServletResponse) res).setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value()));
 
-        verify(hashes, never()).putAll(anyString(), anyMap());
+        verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
         verify(redis).delete(anyString());
     }
 
     @Test
     void aResponseThatCannotBeKeptReleasesTheKey() throws Exception {
         when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-        doThrow(new RedisConnectionFailureException("down")).when(hashes).putAll(anyString(), anyMap());
+        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+                .thenThrow(new RedisConnectionFailureException("down"));
 
         filter.doFilter(
                 request(),
@@ -179,12 +179,15 @@ class IdempotencyFilterTest {
         when(values.setIfAbsent(anyString(), fingerprint.capture(), any(Duration.class)))
                 .thenReturn(true);
         Map<Object, Object> kept = new HashMap<>();
-        doAnswer(invocation -> {
-                    kept.putAll(invocation.getArgument(1));
-                    return null;
-                })
-                .when(hashes)
-                .putAll(anyString(), anyMap());
+        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+                .thenAnswer(invocation -> {
+                    // ARGV: TTL, fingerprint, then the hash's field/value pairs.
+                    Object[] args = (Object[]) invocation.getRawArguments()[2];
+                    for (int i = 2; i < args.length; i += 2) {
+                        kept.put(args[i], args[i + 1]);
+                    }
+                    return 1L;
+                });
         filter.doFilter(
                 request(),
                 new MockHttpServletResponse(),

@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.common;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hikmethankolay.template.IntegrationTest;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +43,25 @@ class IdempotencyIntegrationTest extends IntegrationTest {
                 .andExpect(jsonPath("$.id").value(id));
         mockMvc.perform(get("/api/v1/notes").with(bearer(token)))
                 .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    @Test
+    void aKeptResponseExpiresWithItsKey() throws Exception {
+        String username = uniqueUsername();
+        long userId = register(username);
+        String token = login(username, PASSWORD);
+        String key = UUID.randomUUID().toString();
+        String claimKey = "spring-boot-template:idempotency:{" + userId + "}:" + SecureTokens.hash(key);
+
+        createNote(token, key, "Groceries").andExpect(status().isCreated());
+
+        // Redis runs with noeviction: both keys the filter keeps must carry the 24-hour TTL.
+        for (String stored : List.of(claimKey, claimKey + ":response")) {
+            assertThat(redis.getExpire(stored))
+                    .isBetween(
+                            Duration.ofHours(23).toSeconds(),
+                            Duration.ofHours(24).toSeconds());
+        }
     }
 
     @Test

@@ -6,6 +6,12 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Fixed
+
+- A response kept for an `Idempotency-Key` could stay in Redis forever: it was written, given its 24-hour TTL and
+  its key extended in three separate calls, so a Redis error or a stopped instance in between left a key without a
+  TTL, which Redis never evicts under `noeviction`. The three now run as one script.
+
 ## [4.2.2] - 2026-10-31
 
 ### Fixed

@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -28,6 +29,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.PathContainer;
@@ -80,6 +82,16 @@ public class IdempotencyFilter extends OncePerRequestFilter {
 
     /** How long a key stays claimed by a request that has not answered, e.g. because its instance stopped. */
     private static final Duration IN_PROGRESS_TTL = Duration.ofMinutes(1);
+
+    /**
+     * Keeps the response and extends the claim in one step, so a failure half-way cannot leave a response without a
+     * TTL (Redis runs with {@code noeviction}). ARGV: TTL in ms, fingerprint, then the hash's field/value pairs.
+     */
+    private static final RedisScript<Long> STORE = RedisScript.of("""
+            redis.call('HSET', KEYS[2], unpack(ARGV, 3))
+            redis.call('PEXPIRE', KEYS[2], ARGV[1])
+            redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[1])
+            return 1""", Long.class);
 
     private static final int MAX_KEY_LENGTH = 255;
 
@@ -264,10 +276,13 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         if (recorded.getHeader(HttpHeaders.LOCATION) != null) {
             fields.put("location", recorded.getHeader(HttpHeaders.LOCATION));
         }
+        List<String> args = new ArrayList<>(List.of(Long.toString(TTL.toMillis()), fingerprint));
+        fields.forEach((field, value) -> {
+            args.add(field);
+            args.add(value);
+        });
         try {
-            redis.opsForHash().putAll(responseKey, fields);
-            redis.expire(responseKey, TTL);
-            redis.opsForValue().set(claimKey, fingerprint, TTL);
+            redis.execute(STORE, List.of(claimKey, responseKey), args.toArray());
             return true;
         } catch (DataAccessException ex) {
             log.warn("Could not keep the response for its Idempotency-Key: {}", ex.getMessage());
