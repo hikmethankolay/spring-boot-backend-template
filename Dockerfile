@@ -3,7 +3,7 @@
 # --- Build stage: compile, extract the layered jar and list the JDK modules it needs ---
 # Runs on the build machine's platform: the jar is the same for every target architecture.
 # Base images are pinned by digest for reproducible builds; Dependabot proposes updates.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk@sha256:2d5d5e9b533342a565907c84f47a2ec298c40cde7b13a3ca85d4950fa456a641 AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS build
 WORKDIR /workspace
 
 COPY .mvn .mvn
@@ -24,7 +24,7 @@ RUN jdeps --ignore-missing-deps --multi-release 25 --print-module-deps --recursi
 
 # --- JRE stage: a Java runtime with only those modules ---
 # Runs on the target platform, because jlink copies that platform's native libraries.
-FROM eclipse-temurin:25-jdk@sha256:2d5d5e9b533342a565907c84f47a2ec298c40cde7b13a3ca85d4950fa456a641 AS jre
+FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jre
 COPY --from=build /workspace/modules.txt /modules.txt
 RUN jlink --add-modules "$(cat /modules.txt)" --strip-debug --no-man-pages --no-header-files --compress=zip-6 \
       --output /jre
