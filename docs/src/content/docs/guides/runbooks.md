@@ -174,11 +174,10 @@ The key encrypts the two-factor secrets in the database and signs unsubscribe li
 forge unsubscribe links, which can only turn off optional emails. Together with a copy of the database it reveals
 every authenticator secret, so the second factor of enrolled users is gone (their passwords still protect them).
 
-Key rotation for this setting is being added in a separate change. With it, rotate as for the JWT key: add the new
-key first in the list, keep the old one until every stored secret has been re-encrypted, then remove the old key.
-Without it, replacing the key breaks every enrolled authenticator and every unsubscribe link already sent; enrolled
-users log in with a recovery code and enroll again ([details](../security/#two-factor-authentication)). Either way,
-if the database leaked too, re-encrypting is not enough: the secrets themselves are known, so ask enrolled users to
+Rotate it as in [Rotating MFA_ENCRYPTION_KEY](#rotating-mfa_encryption_key): the new key first, the old one kept
+while stored secrets move to the new key on their next use. If only the key leaked, drop the old key once you accept
+that users who have not logged in with their authenticator since will need a recovery code and must enroll again.
+If the database leaked too, re-encrypting is not enough: the secrets themselves are known, so ask enrolled users to
 turn two-factor authentication off and on again for a new secret.
 
 ## Logs

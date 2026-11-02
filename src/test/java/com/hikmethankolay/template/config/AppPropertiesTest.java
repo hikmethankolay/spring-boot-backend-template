@@ -165,7 +165,7 @@ class AppPropertiesTest {
         assertThat(validator.validate(new AppProperties.Login(3, 5, Duration.ofMinutes(-1))))
                 .singleElement()
                 .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("lockDuration"));
-        assertThat(validator.validate(new AppProperties.Mfa(VARIED, Duration.ZERO)))
+        assertThat(validator.validate(new AppProperties.Mfa(List.of(VARIED), Duration.ZERO)))
                 .singleElement()
                 .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("challengeTtl"));
         assertThat(validator.validate(new AppProperties.Account(true, Duration.ofHours(24), Duration.ZERO, false)))

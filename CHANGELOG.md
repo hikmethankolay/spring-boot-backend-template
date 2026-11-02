@@ -6,6 +6,57 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- `DELETE /api/v1/users/me/sessions` signs out every session except the current one: their refresh tokens stop
+  working and their access tokens are rejected at once (`auth.other_sessions_revoked`).
+- `POST /api/v1/users/me/mfa/totp/recovery-codes` replaces all recovery codes with ten new ones, shown once. It needs
+  the password and an authenticator code, counts failures as failed logins and sends a security alert.
+- `GET /api/v1/users/me/social-accounts` lists the linked GitHub and Google accounts, and
+  `DELETE /api/v1/users/me/social-accounts/{id}` unlinks one after the password, with an audit event and a security
+  alert (`urn:problem:social-account-not-found` for unknown ids).
+- `GET /api/v1/users` filters: `q` (case-insensitive part of the username or email, `%` and `_` matched literally, at
+  most 254 characters), `role` and `suspended`.
+- Optimistic concurrency over HTTP: `GET /api/v1/notes/{id}` and `GET /api/v1/users/me` return a strong `ETag` (the
+  row version) and answer `If-None-Match` with `304`; `PUT /api/v1/notes/{id}` and `PATCH /api/v1/users/me` accept
+  `If-Match` and refuse an outdated one with `412` `urn:problem:precondition-failed`. Requests without `If-Match`
+  behave as before.
+- `MFA_ENCRYPTION_KEY` takes a comma-separated list, like `JWT_SECRET`: the first key encrypts two-factor secrets
+  and signs unsubscribe links, every key decrypts and verifies, and a secret under an older key moves to the first
+  on its next use. See "Rotating MFA_ENCRYPTION_KEY" in the Security guide.
+- Creating the owner account from `ADMIN_*` at startup is audited as `admin.owner_bootstrapped`.
+- The prod profile logs a startup warning for each weakened setting: a remote database without
+  `sslmode=verify-full`/`verify-ca`, Redis without a password or, when remote, without TLS, `COOKIE_SECURE=false`,
+  `SWAGGER_ENABLED=true`, `RATE_LIMIT_ENABLED=false`, `REQUIRE_VERIFIED_EMAIL=false`, `MAIL_STARTTLS_REQUIRED=false`
+  and `FLYWAY_ENABLED=true`. The app still starts.
+- `security_fail_open_total{control}` counts requests the rate limit, token revocation, sign-up link reuse check and
+  sign-up email cooldown let through while Redis was unavailable, with a `SecurityControlFailingOpen` alert;
+  `client_address_not_public_total` (prod) warns once when a proxy hides client addresses (Production guide,
+  "Client IP behind a proxy"); and a `ContainerOOMKilled` alert (needs kube-state-metrics).
+- Runbooks for leaked secrets (database, JWT key, SMTP, OAuth, `MFA_ENCRYPTION_KEY`) and a point-in-time restore
+  drill.
+
+### Changed
+
+- **Database (V18, V19):** emails given up after `MAIL_MAX_ATTEMPTS` stay in `email_outbox` as dead letters
+  (`failed_at`) for `MAIL_DEAD_LETTER_RETENTION` (default 7 days) instead of being deleted, and can be queued again
+  (Runbooks, EmailsDropped). Broadcasts record their progress (`last_user_id`); a broadcast unfinished at upgrade
+  time is closed as partial. The schema now enforces what the application always did: emails in lower case and
+  usernames without `@`. Existing mixed-case emails are lowered unless another account has the lower-case address,
+  which stops the migration (find them with `SELECT lower(email), count(*) FROM users GROUP BY 1 HAVING count(*) > 1`).
+  The outbox poll and a user's security events are read from matching indexes. Both migrations lock the tables
+  they change while they run.
+- `GET /api/v1/users/me` reads the database instead of the user cache, so its `ETag` is never stale.
+- A `408`, `409` or `429` answer to a request with an `Idempotency-Key` is no longer replayed for 24 hours: a retry
+  with the same key runs again.
+- Startup now refuses zero or negative token and session lifetimes, `LOGIN_LOCK_DURATION`, `MFA_CHALLENGE_TTL`,
+  rate limit windows and mail durations, `JWT_REMEMBER_ME_MAX_SESSION_TTL` shorter than `JWT_REMEMBER_ME_TTL`, a blank
+  `MAIL_APP_NAME` and a non-positive `MAIL_BROADCAST_BATCH_SIZE`. The `app.mail.*` settings read with `@Value` are now
+  validated with the others (same names and defaults).
+- A new broadcast is refused while any broadcast is unfinished; one stalled for five minutes is resumed from the last
+  user it queued instead of blocking new ones for an hour.
+- Java: `AppProperties.Mfa.encryptionKey()` returns a `List<String>`; a key containing a comma is now split.
+
 ### Fixed
 
 - A response kept for an `Idempotency-Key` could stay in Redis forever: it was written, given its 24-hour TTL and
@@ -36,6 +87,16 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
   from the tag, so signatures still name `release.yml@refs/tags/v<version>` and existing `ClusterImagePolicy`
   rules keep working. Stable tags pushed by hand are refused; pre-release tags still are released from a push.
   Tags `v4.2.2` and earlier keep their old digest; deploy those from `main`.
+- An exception other than `MailException` while sending an email rolled the attempt back, so the same email was
+  retried first forever; it now counts as a failed attempt.
+- A broadcast cut off by a crash or shutdown stayed unfinished and was never resumed, and an error could skip marking
+  it finished.
+- Validation problems also list class-level and cross-field errors (with an empty `field`), and invalid query or path
+  parameters get `urn:problem:validation-failed` instead of Spring's generic answer.
+- The guides now match the code on the ArchUnit rules, every frontend page emails link to, the dependencies on
+  `mail`, `urn:problem:own-account` and `REQUIRE_VERIFIED_EMAIL`, and document the trade-offs of per-account lockout,
+  concurrent refreshes, the user cache, audit events kept after account deletion and revocations lost while Redis is
+  down (ADR 2).
 
 ### Security
 
