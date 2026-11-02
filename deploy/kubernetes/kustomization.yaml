@@ -17,8 +17,8 @@ resources:
   - networkpolicy.yaml
 images:
   # A pinned release, so every apply deploys the same, signed image. scripts/release.sh bumps newTag; the release
-  # workflow's pin-digest job then commits the digest of the published image. With both, the pods run
-  # name:tag@digest, so a moved tag cannot change what runs. migrate-job.yaml is kept on the same image.
+  # workflow's pin-and-tag job then commits the digest of the published image and tags that commit. With both, the
+  # pods run name:tag@digest, so a moved tag cannot change what runs. migrate-job.yaml is kept on the same image.
   - name: ghcr.io/hikmethankolay/spring-boot-backend-template
     newTag: "4.2.2"
     digest: sha256:5c06f7b2d3ad1730e537b8e2f912d3e9a05aba03d868cf7ae0bf33d4745ad149

@@ -28,8 +28,14 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
   test's sign-ups always failed. It now uses `host.docker.internal`.
 - The guides said `account/` could be deleted on its own; `auth/` calls it for sign-up. They also suggested
   migration numbers the template already uses, and `SECURITY.md` named 4.0 as the supported version.
-- The production guide now says to deploy from `main` after the digest is pinned, never from a release tag: the
-  tagged commit still pins the previous release's image digest, which wins over the tag.
+- A release tag pinned the previous release's image: `scripts/release.sh` tagged the release commit before the image
+  existed, and the digest was committed to `main` only afterwards, so deploying from `v4.2.2` ran the 4.2.1 image
+  under the 4.2.2 name (the digest wins over the tag). The release workflow now makes the tag itself, on the commit
+  that pins the published digest. `scripts/release.sh` pushes only the release commit and starts the workflow on
+  `main` (with the GitHub CLI, `gh`, or by hand); the workflow tests, builds, pins, tags, then signs and releases
+  from the tag, so signatures still name `release.yml@refs/tags/v<version>` and existing `ClusterImagePolicy`
+  rules keep working. Stable tags pushed by hand are refused; pre-release tags still are released from a push.
+  Tags `v4.2.2` and earlier keep their old digest; deploy those from `main`.
 
 ### Security
 

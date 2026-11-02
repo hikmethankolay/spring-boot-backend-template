@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Makes the release commit and tag from main, then pushes both after asking. The pushed tag starts the release
-# workflow, which publishes and signs the image and then pins its digest in deploy/kubernetes on main.
+# Makes the release commit on main, then, after asking, pushes it and starts the release workflow on main with the
+# version. The workflow publishes the image, commits its digest to deploy/kubernetes, tags that commit v<version> and
+# signs and releases from the tag, so the tag always pins the image it names. Starting the workflow needs the GitHub
+# CLI (gh); without it, the script prints what to run or click.
 # Usage: scripts/release.sh <version>      e.g. scripts/release.sh 4.1.0
 #
 # The release commit moves the [Unreleased] notes of CHANGELOG.md under the new version, sets the image tag in
@@ -55,14 +57,20 @@ require_jdk
 
 git add -A
 git commit -q -m "chore: release $version"
-git tag -a "$tag" -m "$tag"
 git --no-pager show --stat --format='%h %s' HEAD
 
-read -r -p "Push main and $tag to origin? This publishes the release. [y/N] " answer
+# No tag here: the workflow tags the commit that pins the published image's digest.
+start="gh workflow run release.yml --ref main -f version=$version"
+read -r -p "Push main to origin and start the release of $version? This publishes the release. [y/N] " answer
 if [[ "$answer" == [yY] ]]; then
-  git push --atomic origin main "$tag"
-  info "Pushed. The release workflow pins the image digest on main when it is done; pull afterwards."
+  git push origin main
+  if command -v gh >/dev/null 2>&1 && $start; then
+    info "Release workflow started. It tags $tag on main once the image is published; pull afterwards."
+  else
+    info "Start the release with: $start"
+    info "(or Actions > Release > Run workflow on main with version $version). Do not push $tag yourself."
+  fi
 else
-  info "Not pushed. Push with: git push --atomic origin main $tag"
-  info "Or undo with: git tag -d $tag && git reset --hard HEAD~1"
+  info "Not pushed. Push with: git push origin main, then start the release with: $start"
+  info "Or undo with: git reset --hard HEAD~1"
 fi

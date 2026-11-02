@@ -142,7 +142,7 @@ Each script exists as `scripts/<name>.sh` and `scripts\<name>.bat`.
 | `docs` / `site` | Java reference (Javadoc) / the documentation website |
 | `client` | A TypeScript client for your frontend from the OpenAPI document, or with `--generator` one in another language |
 | `rename-project` | Rename the Maven coordinates, app name and Java package, and point the repository links to your repository |
-| `release` | Release commit and tag for a version (`scripts/release.sh 4.1.0`), pushed after asking |
+| `release` | Release commit for a version (`scripts/release.sh 4.1.0`); after asking, pushes it and starts the release workflow, which tags it |
 
 ## Start your own project
 

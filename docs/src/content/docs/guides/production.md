@@ -149,23 +149,28 @@ For an existing database migrated by `app` itself, transfer the tables to `app_o
 
 1. Write the release notes under `[Unreleased]` in `CHANGELOG.md`, then run `scripts/release.sh <version>`
    (`scripts\release.bat` on Windows) on an up-to-date `main`. It moves the notes under the version, sets `newTag` in
-   `kustomization.yaml` and the image tag of `migrate-job.yaml`, updates the version in the guides' examples, commits,
-   tags, and pushes after asking.
-2. The pushed tag starts the release workflow. Once it has published and signed the image, its `pin-digest` job
-   commits the image digest to `kustomization.yaml` and `migrate-job.yaml` on `main`
-   (`chore(deploy): pin the <version> image digest`). Pull it; until then the manifests still pin the previous digest.
-   Deploy from `main` at or after that commit, never from the release tag or its source archive: the tagged commit
-   is made before the image exists, so it keeps the previous release's digest for good, and as the digest wins over
-   the tag, it would run the previous image under the new version's name.
+   `kustomization.yaml` and the image tag of `migrate-job.yaml`, updates the version in the guides' examples and
+   commits. After asking, it pushes `main` and starts the release workflow on it with the version (with the GitHub
+   CLI, `gh`; otherwise it prints the command, or use *Actions > Release > Run workflow*). It makes no tag.
+2. The workflow tests and publishes the image, then its `pin-and-tag` job commits the image digest to
+   `kustomization.yaml` and `migrate-job.yaml` on `main` (`chore(deploy): pin the <version> image digest`), tags
+   that commit `v<version>`, and starts the workflow again on the tag, which signs the image and creates the GitHub
+   release. The tag therefore always pins the image it names; deploy from it, or pull `main`.
 3. Run the migration Job, then `kubectl apply -k deploy/kubernetes`.
+
+The image is built from `src/`, `pom.xml` and the Maven wrapper only (`.dockerignore`), so the pin commit, which
+changes `deploy/` alone, describes exactly the source of the image. Signing runs on the tag, so signatures still name
+`release.yml@refs/tags/v<version>`. Pre-releases (`v2.1.0-rc.1`) are tagged and pushed by hand; their run builds,
+signs and releases without pinning. Pushing a stable tag by hand fails the workflow: release with `scripts/release.sh`.
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/release-pipeline-light.svg" width="720" height="832" alt="scripts/release.sh checks and stamps the release, then commits, tags and pushes atomically; the tag runs test, then release (multi-arch image, SBOM, cosign signing, GitHub release), then pin-digest and SLSA provenance in parallel, and pages.yml; an operator then runs the migrate Job and kubectl apply -k." />
   <img class="light:sl-hidden" src="../../diagrams/release-pipeline-dark.svg" width="720" height="832" alt="scripts/release.sh checks and stamps the release, then commits, tags and pushes atomically; the tag runs test, then release (multi-arch image, SBOM, cosign signing, GitHub release), then pin-digest and SLSA provenance in parallel, and pages.yml; an operator then runs the migrate Job and kubectl apply -k." />
 </figure>
 
-`pin-digest` pushes with the workflow's token. If `main` is protected, allow GitHub Actions to push to it, or set the
-digest by hand from the release workflow's log.
+`pin-and-tag` pushes the pin commit and the tag with the workflow's token. If `main` or `v*` tags are protected, allow
+GitHub Actions to push them. It refuses to tag when `main` moved past the release commit while the image was built:
+don't push to `main` during a release.
 
 PostgreSQL, Redis and SMTP are expected to be managed services or deployed separately.
 

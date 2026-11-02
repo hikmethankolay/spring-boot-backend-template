@@ -1,12 +1,22 @@
 name: Release
 
-# Pushing a tag like v2.1.0 tests the code, publishes the Docker image to GitHub Container Registry
-# (ghcr.io/<owner>/<repo>:2.1.0 and :latest) for linux/amd64 and linux/arm64 with an SBOM and
-# build provenance, signs it with Sigstore cosign (keyless) and creates a GitHub release with the
-# signed SBOM and its SLSA provenance. Then it pins the image digest in deploy/kubernetes on main.
-# scripts/release.sh makes the release commit and pushes the tag.
+# A stable release runs twice, so that its tag lands on a commit that already pins the published image:
+# 1. scripts/release.sh pushes the release commit to main and starts this workflow there with the version. It tests
+#    the code, publishes the Docker image to GitHub Container Registry (ghcr.io/<owner>/<repo>:2.1.0, :2.1 and
+#    :latest) for linux/amd64 and linux/arm64 with an SBOM and build provenance, commits the image digest to
+#    deploy/kubernetes, tags that commit v2.1.0 and starts this workflow again on the tag.
+# 2. On the tag it signs the image with Sigstore cosign (keyless) and creates a GitHub release with the signed SBOM
+#    and its SLSA provenance. Signing runs on the tag, so the signature names release.yml@refs/tags/v2.1.0, which is
+#    what the verify commands and the ClusterImagePolicy check.
+# A pre-release tag such as v2.1.0-rc.1, pushed by hand, is built, signed and released in one run, with no pin.
 # Actions are pinned to commit SHAs (the SLSA generator to a tag, see below); Dependabot keeps them up to date.
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release from main, such as 2.1.0 (scripts/release.sh sets it). Empty on a tag.
+        required: false
+        default: ''
   push:
     tags: ['v*']
 
@@ -16,7 +26,53 @@ permissions:
   contents: read
 
 jobs:
+  # What this run does: "build" a stable release from main, "publish" it from the tag the build made, or build and
+  # publish a "prerelease" tag pushed by hand.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          case "$EVENT:$GITHUB_REF" in
+            workflow_dispatch:refs/heads/main)
+              version="$INPUT_VERSION"
+              [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "The version must look like 2.1.0, not '$version'."
+              grep -Eq "^ *newTag: \"${version//./\\.}\"$" deploy/kubernetes/kustomization.yaml \
+                || fail "deploy/kubernetes is not at $version; make the release commit with scripts/release.sh."
+              grep -q "^## \[$version\]" CHANGELOG.md || fail "CHANGELOG.md has no [$version] section."
+              if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+                fail "Tag v$version already exists."
+              fi
+              mode=build ;;
+            workflow_dispatch:refs/tags/v*)
+              version="${GITHUB_REF_NAME#v}"
+              mode=publish ;;
+            push:refs/tags/v*-*)
+              version="${GITHUB_REF_NAME#v}"
+              mode=prerelease ;;
+            push:refs/tags/v*)
+              fail "Release stable versions with scripts/release.sh; the workflow makes their tag." ;;
+            *)
+              fail "Run this workflow on main with a version, or let it run on the tag it makes." ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: plan
+    if: needs.plan.outputs.mode != 'publish'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -33,20 +89,19 @@ jobs:
       - name: Test
         run: ./mvnw -B verify
 
-  release:
-    needs: test
+  # Skipped on a publish run, because test is.
+  build:
+    needs: [plan, test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
       packages: write
-      # OIDC token for keyless cosign signing.
-      id-token: write
     outputs:
-      # Release assets the provenance job attests, as base64 "sha256  name" lines.
-      hashes: ${{ steps.assets.outputs.hashes }}
-      # The pushed image index, which pin-digest records in deploy/kubernetes.
+      # The pushed image index, which pin-and-tag records in deploy/kubernetes.
       digest: ${{ steps.build.outputs.digest }}
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -56,9 +111,9 @@ jobs:
           java-version: '25'
           cache: maven
 
-      # The image build packages the pom's version, so the jar reports the release (v2.1.0 -> 2.1.0), not a snapshot.
-      - name: Set version from tag
-        run: ./mvnw -B -q versions:set -DnewVersion="${GITHUB_REF_NAME#v}" -DgenerateBackupPoms=false
+      # The image build packages the pom's version, so the jar reports the release (2.1.0), not a snapshot.
+      - name: Set version
+        run: ./mvnw -B -q versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
@@ -70,13 +125,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The version comes from the plan, not the ref: a stable release is built on main, before its tag exists.
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=v${{ needs.plan.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.plan.outputs.version }}
 
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -91,19 +147,120 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # Pins the published digest in deploy/kubernetes on main, tags that commit and starts the publish run on the tag.
+  # The image is built only from src/, pom.xml and the Maven wrapper (.dockerignore), so the pin commit, which changes
+  # deploy/ alone, describes exactly the source the image was built from.
+  pin-and-tag:
+    needs: [plan, build]
+    if: needs.plan.outputs.mode == 'build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      # To start this workflow on the new tag: a tag pushed with GITHUB_TOKEN starts no workflow by itself.
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: main
+
+      - name: Pin the digest, tag and start the publish run
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "::error::main moved past the release commit while the image was built; the tag would not match it."
+            exit 1
+          fi
+          escaped="${VERSION//./\\.}"
+          sed -i -E "s/^( *digest: )sha256:[0-9a-f]{64}$/\1$DIGEST/" deploy/kubernetes/kustomization.yaml
+          sed -i -E "s/(image: [^:]+:$escaped@)sha256:[0-9a-f]{64}/\1$DIGEST/" deploy/kubernetes/migrate-job.yaml
+          if git diff --quiet; then
+            echo "::error::Nothing to pin: deploy/kubernetes does not reference $VERSION by digest."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam "chore(deploy): pin the $VERSION image digest"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push --atomic origin main "v$VERSION"
+          gh workflow run release.yml --ref "v$VERSION"
+
+  publish:
+    needs: [plan, build]
+    # build is skipped on a publish run, so this job decides for itself rather than waiting for build's success.
+    if: >-
+      !cancelled() && needs.plan.result == 'success' &&
+      (needs.plan.outputs.mode == 'publish' ||
+       (needs.plan.outputs.mode == 'prerelease' && needs.build.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+      # OIDC token for keyless cosign signing.
+      id-token: write
+      # To start pages.yml, which a tag pushed with GITHUB_TOKEN does not start.
+      actions: write
+    outputs:
+      # Release assets the provenance job attests, as base64 "sha256  name" lines.
+      hashes: ${{ steps.assets.outputs.hashes }}
+    env:
+      MODE: ${{ needs.plan.outputs.mode }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The tag's commit and its parent, the release commit the image was built from.
+          fetch-depth: 2
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A pre-release signs what its own build pushed. A stable release signs the digest its tag pins, after checking
+      # that the tag is the pin commit (only deploy/kubernetes changed since the release commit) and that the
+      # registry's version tag points to that same image.
+      - name: Image to sign
+        id: image
+        env:
+          BUILT: ${{ needs.build.outputs.digest }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          if [[ "$MODE" == prerelease ]]; then
+            digest="$BUILT"
+          else
+            grep -Eq "^ *newTag: \"${VERSION//./\\.}\"$" deploy/kubernetes/kustomization.yaml \
+              || fail "The tag does not pin $VERSION in deploy/kubernetes."
+            digest="$(sed -n -E 's/^ *digest: (sha256:[0-9a-f]{64})$/\1/p' deploy/kubernetes/kustomization.yaml)"
+            [[ -n "$digest" ]] || fail "The tag pins no digest."
+            other="$(git diff --name-only HEAD^ HEAD | grep -v '^deploy/kubernetes/' || true)"
+            [[ -z "$other" ]] || fail "The tagged commit changes more than deploy/kubernetes: $other"
+            pushed="$(docker buildx imagetools inspect "ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION" \
+              --format '{{ json .Manifest }}' | jq -r .digest)"
+            [[ "$pushed" == "$digest" ]] || fail "ghcr.io tag $VERSION is $pushed, but the tag pins $digest."
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       # Installs cosign 3, which signs in the Sigstore bundle format (stored as an OCI referrer of the image).
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       # Signs the image digest (all tags point to it); verify with the command in the Production guide.
       - name: Sign image
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.image.outputs.digest }}
         run: cosign sign --yes "ghcr.io/${GITHUB_REPOSITORY,,}@${DIGEST}"
 
       # Proves the published image verifies with the same command users run (Production guide).
       - name: Verify signature and provenance
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}@${DIGEST}"
           cosign verify "$image" \
@@ -127,50 +284,23 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag \
             sbom.spdx.json sbom.spdx.json.sigstore.json
 
-  # Pins the published digest in deploy/kubernetes on main, so the manifests deploy exactly the signed image (Production
-  # guide, Releasing to Kubernetes). Skipped for pre-releases, and when main's manifests are at another version.
-  pin-digest:
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          ref: main
-
-      - name: Pin the digest on main
+      # A pre-release tag was pushed by hand and started pages.yml itself.
+      - name: Publish the documentation site
+        if: env.MODE == 'publish'
         env:
-          DIGEST: ${{ needs.release.outputs.digest }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          escaped="${version//./\\.}"
-          if ! grep -Eq "^ *newTag: \"$escaped\"$" deploy/kubernetes/kustomization.yaml; then
-            echo "::notice::deploy/kubernetes on main is not at $version; digest not pinned."
-            exit 0
-          fi
-          sed -i -E "s/^( *digest: )sha256:[0-9a-f]{64}$/\1$DIGEST/" deploy/kubernetes/kustomization.yaml
-          sed -i -E "s/(image: [^:]+:$escaped@)sha256:[0-9a-f]{64}/\1$DIGEST/" deploy/kubernetes/migrate-job.yaml
-          if git diff --quiet; then
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -qam "chore(deploy): pin the $version image digest"
-          git push origin main
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --ref "$GITHUB_REF_NAME"
 
   # SLSA level 3 provenance for the release assets, attached as sbom.spdx.json.intoto.jsonl.
   # The generator must be referenced by tag (not SHA) so slsa-verifier can check the builder.
   provenance:
-    needs: release
+    needs: publish
     permissions:
       actions: read
       contents: write
       id-token: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
-      base64-subjects: ${{ needs.release.outputs.hashes }}
+      base64-subjects: ${{ needs.publish.outputs.hashes }}
       provenance-name: sbom.spdx.json.intoto.jsonl
       upload-assets: true

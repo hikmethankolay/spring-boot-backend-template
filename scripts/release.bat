@@ -1,5 +1,5 @@
 @echo off
-rem Makes the release commit and tag from main, then pushes both after asking (see scripts/release.sh).
+rem Makes the release commit on main, then pushes it and starts the release workflow after asking (see scripts/release.sh).
 rem Runs scripts/release.sh with Git Bash, which ships with Git for Windows.
 rem Usage: scripts\release.bat <version>      e.g. scripts\release.bat 4.1.0
 setlocal
