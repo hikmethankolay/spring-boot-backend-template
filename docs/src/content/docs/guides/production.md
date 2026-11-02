@@ -234,7 +234,8 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
 - [ ] Generate a long random `JWT_SECRET` and store it in your secret manager.
 - [ ] Generate a separate random `MFA_ENCRYPTION_KEY`, store it in your secret manager (not with the database
       backups) and back it up: losing it breaks every user's two-factor authentication.
-- [ ] Back up PostgreSQL (point-in-time recovery) and test a restore.
+- [ ] Back up PostgreSQL (point-in-time recovery) and test a restore (see the
+      [restore drill](../runbooks/#restore-drill)).
 - [ ] Deploy only signed images: pin the digest, and install the Sigstore policy-controller with
       `deploy/kubernetes/policy/` (or check with `cosign verify` before each deployment).
 - [ ] Run migrations with the schema owner's role (`migrate-job.yaml`) and the app with a role that may only read and

@@ -12,6 +12,10 @@ default). Keys look like `spring-boot-template:users::42`, so several applicatio
   type information, so cached data cannot be used for deserialization attacks.
 - **Eviction after commit.** The cache manager is transaction-aware, so a rolled-back update never leaves stale data
   behind.
+- **Short stale reads.** A read that misses the cache can load a user, lose the race with an update that commits and
+  evicts the entry, and then store the old profile. That entry is served until it expires, so a profile can be stale
+  for at most `CACHE_TTL` after a concurrent update. Authorization does not read the cache: roles, suspensions and
+  session versions come from the database.
 - **Fallback.** If Redis is unreachable, the error is logged and the request goes to the database. Redis is left out of
   `/actuator/health`, so a cache outage doesn't mark the app `DOWN`.
 

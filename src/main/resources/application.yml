@@ -211,7 +211,8 @@ app:
     # How long the audit_events table keeps events (at least 90 days, which the database enforces).
     retention: ${AUDIT_RETENTION:365d}
   account:
-    # true in the prod profile: unverified users cannot log in.
+    # true in the prod profile: a user whose changed email address is not yet confirmed cannot log in.
+    # Sign-ups are always confirmed by their link, whatever this says.
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:false}
     verification-token-ttl: 24h
     password-reset-token-ttl: 1h
@@ -220,7 +221,8 @@ app:
     pwned-check-enabled: ${PWNED_CHECK_ENABLED:false}
   mail:
     from: ${MAIL_FROM:no-reply@example.com}
-    # Frontend that handles /verify-email?token=... and /reset-password?token=... links.
+    # Frontend that handles the links in emails: /sign-up?token=..., /verify-email?token=...,
+    # /reset-password?token=..., /unsubscribe?token=... and /settings/emails.
     link-base-url: ${MAIL_LINK_BASE_URL:http://localhost:3000}
     # Public URL of this API: the List-Unsubscribe header of optional emails points to its /api/v1/mail/unsubscribe.
     unsubscribe-base-url: ${MAIL_UNSUBSCRIBE_BASE_URL:http://localhost:8080}

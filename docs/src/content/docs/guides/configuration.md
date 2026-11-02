@@ -42,7 +42,7 @@ defaults marked *prod: must change* below.
 | `PWNED_CHECK_ENABLED` | `false` | Also check new passwords against Have I Been Pwned ([details](../security/#passwords)) |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` | `localhost`, `1025`, `no-reply@example.com` | Outgoing mail (Mailpit by default). Set `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` for a real SMTP server (*prod: Mailpit's `localhost:1025` and `example.com` senders are refused*) |
 | `MAIL_STARTTLS_REQUIRED` | `true` (*prod only*) | The prod profile refuses to send without STARTTLS on port 587; port 465 with implicit TLS (`SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`) also works. Set `false` only for a relay without TLS. Other profiles use STARTTLS when the server offers it. See [Production](../production/#mail-encryption) |
-| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Frontend that handles `/sign-up?token=…`, `/verify-email?token=…` and `/reset-password?token=…` (*prod: must change*) |
+| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Frontend that handles `/sign-up?token=…`, `/verify-email?token=…`, `/reset-password?token=…`, `/unsubscribe?token=…` and `/settings/emails` (*prod: must change*) |
 | `MAIL_UNSUBSCRIBE_BASE_URL` | `http://localhost:8080` | Public URL of this API: the one-click `List-Unsubscribe` header of optional emails points to its `/api/v1/mail/unsubscribe`, which mailbox providers call directly (*prod: must change*) |
 | `MAIL_APP_NAME` | `spring.application.name` | Name shown at the top and bottom of every email |
 | `MAIL_SECURITY_ALERTS_ENABLED` / `MAIL_NEW_LOGIN_ALERT_ENABLED` | `true` / `true` | Security alert emails ([list](../email-templates/#security-alerts)); the second turns only the new-sign-in alert off |

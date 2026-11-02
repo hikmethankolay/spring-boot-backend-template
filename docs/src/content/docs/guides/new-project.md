@@ -55,8 +55,8 @@ login with GitHub and Google (`social/`) are also called from `auth/`, so they t
 removed on its own. Both change the API, so clients and `scripts/client.sh` output must follow.
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/package-dependencies-light.svg" width="720" height="544" alt="auth depends on account, mfa, social and the user and security core; account, mfa, social and note depend on that core; account also uses mail; every package uses audit, common and config; only auth imports mfa and social." />
-  <img class="light:sl-hidden" src="../../diagrams/package-dependencies-dark.svg" width="720" height="544" alt="auth depends on account, mfa, social and the user and security core; account, mfa, social and note depend on that core; account also uses mail; every package uses audit, common and config; only auth imports mfa and social." />
+  <img class="dark:sl-hidden" src="../../diagrams/package-dependencies-light.svg" width="720" height="544" alt="auth depends on account, mfa, social and the core of user, security and mail, which import each other; account, mfa, social and note depend on that core; every package uses audit, common and config; only auth imports mfa and social." />
+  <img class="light:sl-hidden" src="../../diagrams/package-dependencies-dark.svg" width="720" height="544" alt="auth depends on account, mfa, social and the core of user, security and mail, which import each other; account, mfa, social and note depend on that core; every package uses audit, common and config; only auth imports mfa and social." />
 </figure>
 
 Leave `V7__two_factor_and_social_login.sql` as it is; it has run in every existing database. Drop the tables in a new
@@ -154,6 +154,8 @@ first entry of its changelog) in your own README.
 
 - a controller uses a repository or a JPA entity directly
 - anything depends on a controller
+- a class in `audit` or `common` depends on a feature package (`account`, `auth`, `mail`, `mfa`, `note`, `security`,
+  `social`, `user`): every feature uses them, so they must not use a feature back
 - a class uses field injection, `System.out` or `java.util.logging`
 
 `scripts/docs.sh` fails when a public, protected or package-private class, method or field has no Javadoc comment.

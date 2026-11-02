@@ -145,8 +145,11 @@ Each refresh token can be exchanged **once**. Every token issued from one login 
 session). If an already exchanged token is presented again, someone has copied it: the whole session is revoked,
 including its access tokens, both parties must log in again, and an `auth.refresh_token_reused` audit event is written.
 
-Two requests refreshing the same token at the same time (for example two browser tabs) look the same as reuse. Let
-one tab refresh and share the result, for example with a `BroadcastChannel` or a lock.
+Two requests refreshing the same token at the same time (for example two browser tabs, or a client that retries a
+refresh whose answer it did not receive) look the same as reuse and end the session. This is deliberate: a grace
+window in which the old token still works would also let a thief who replays it quickly go unnoticed. Clients must
+serialise refreshes: let one tab refresh and share the result, for example with a `BroadcastChannel` or a lock, and
+do not retry a refresh automatically with the same token.
 
 ## Revocation
 
@@ -350,7 +353,11 @@ and IP are deleted with the session: at logout, when it is ended, or when it exp
 When you add a feature that stores user data, implement `PersonalDataProvider` and reference `users(id)` with
 `ON DELETE CASCADE`, see [Using the template](../new-project/).
 
-Audit log entries keep the user id after deletion. Decide how long you retain them and state it in your privacy policy.
+Audit events outlive the account: the `audit_events` rows of a deleted user keep its user id, client IP and `details`
+(for example `identifierHash`, the login method or a session id), and administrators can still read them, until
+`AUDIT_RETENTION` removes them (365 days by default, at least 90). The `audit` log lines in your log storage keep
+them as long as you store the logs. That is personal data: check that your legal basis covers keeping it after an
+erasure request, state the period in your privacy policy, and lower `AUDIT_RETENTION` if a year is more than you need.
 
 ## Brute-force protection
 
@@ -378,6 +385,12 @@ their username: its IP is blocked long before the account. Locking an account ta
 `LOGIN_ACCOUNT_MAX_ATTEMPTS / LOGIN_MAX_ATTEMPTS` IPs within the lock duration, and the account limit still caps
 distributed guessing against one account. Lower `LOGIN_ACCOUNT_MAX_ATTEMPTS` if you prefer stricter protection over
 availability for targeted users.
+
+The other side of this trade-off is the one every per-account lockout has: with the defaults, an attacker with about
+10 IPs (100 / 10) who knows a username can lock its user out for `LOGIN_LOCK_DURATION` (1 hour) after the last
+failure, and do it again afterwards. Raising `LOGIN_ACCOUNT_MAX_ATTEMPTS` or shortening `LOGIN_LOCK_DURATION` makes
+that harder and allows more guesses; blocking the sources at the ingress ends it (see the
+[LoginFailureSpike runbook](../runbooks/#loginfailurespike)).
 
 ## Rate limiting
 
