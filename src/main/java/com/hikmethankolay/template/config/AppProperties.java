@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Duration;
 import java.util.List;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -43,6 +44,9 @@ public record AppProperties(
         @Valid @NotNull Mfa mfa,
         @Valid @NotNull SocialLogin socialLogin) {
 
+    /** Message of the {@code @DurationMin} checks that keep a lifetime or window from being zero or negative. */
+    static final String POSITIVE = "must be a positive duration";
+
     /**
      * JWT settings.
      *
@@ -74,11 +78,21 @@ public record AppProperties(
             List<String> privateKey,
             @NotBlank String issuer,
             @NotBlank String audience,
-            @NotNull Duration accessTokenTtl,
-            @NotNull Duration refreshTokenTtl,
-            @NotNull Duration rememberMeTtl,
-            @NotNull Duration maxSessionTtl,
-            @NotNull Duration rememberMeMaxSessionTtl) {
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration accessTokenTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration refreshTokenTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration rememberMeTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration maxSessionTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration rememberMeMaxSessionTtl) {
 
         /**
          * Requires the keys of the selected algorithm.
@@ -89,6 +103,20 @@ public record AppProperties(
         public boolean isKeyConfigured() {
             List<String> keys = algorithm == Algorithm.RS256 ? privateKey : secret;
             return keys != null && !keys.isEmpty();
+        }
+
+        /**
+         * Requires "remember me" sessions to be allowed to last at least as long as their inactivity limit.
+         *
+         * @return {@code false} if {@code rememberMeMaxSessionTtl} is shorter than {@code rememberMeTtl}
+         */
+        @AssertTrue(
+                message = "rememberMeMaxSessionTtl must not be shorter than rememberMeTtl "
+                        + "(JWT_REMEMBER_ME_MAX_SESSION_TTL, JWT_REMEMBER_ME_TTL)")
+        public boolean isRememberMeMaxSessionLongEnough() {
+            return rememberMeTtl == null
+                    || rememberMeMaxSessionTtl == null
+                    || rememberMeMaxSessionTtl.compareTo(rememberMeTtl) >= 0;
         }
 
         /**
@@ -177,7 +205,9 @@ public record AppProperties(
     public record Login(
             @Positive int maxAttempts,
             @Positive int accountMaxAttempts,
-            @NotNull Duration lockDuration) {}
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration lockDuration) {}
 
     /**
      * Per-client-IP rate limit for all API requests (Actuator is exempt).
@@ -209,7 +239,9 @@ public record AppProperties(
         public record Route(
                 @NotBlank String path,
                 @Positive int requests,
-                @NotNull Duration window) {}
+                // The rate limit counts whole milliseconds: a shorter window would divide by zero.
+                @NotNull @DurationMin(millis = 1, message = POSITIVE)
+                Duration window) {}
     }
 
     /**
@@ -224,8 +256,13 @@ public record AppProperties(
      */
     public record Account(
             boolean requireVerifiedEmail,
-            @NotNull Duration verificationTokenTtl,
-            @NotNull Duration passwordResetTokenTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration verificationTokenTtl,
+
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration passwordResetTokenTtl,
+
             boolean pwnedCheckEnabled) {}
 
     /**
@@ -278,7 +315,8 @@ public record AppProperties(
             @NotBlank @Size(min = 32, message = "must be at least 32 characters (MFA_ENCRYPTION_KEY)")
             String encryptionKey,
 
-            @NotNull Duration challengeTtl) {
+            @NotNull @DurationMin(nanos = 1, message = POSITIVE)
+            Duration challengeTtl) {
 
         /**
          * Rejects placeholder keys such as a repeated character.

@@ -19,6 +19,15 @@ Start the app with `SPRING_PROFILES_ACTIVE=prod` to switch to:
   `DB_PASSWORD` is the local `app`, while `MAIL_HOST`/`MAIL_PORT` are the local Mailpit (`localhost:1025`), or while
   `MAIL_FROM` is an `example.com`, `example.net` or `example.org` address. Without the mail checks, verification
   emails would never arrive and nobody could finish signing up. The error names every variable to set.
+- startup warnings (the app still starts) for settings that are legal but weaken it: a `DB_URL` to another machine
+  without `sslmode=verify-full` or `verify-ca` (the driver's default, `prefer`, checks no certificate and may fall
+  back to plain text), an empty `REDIS_PASSWORD`, `REDIS_SSL_ENABLED=false` for a Redis on another machine,
+  `COOKIE_SECURE=false`, `SWAGGER_ENABLED=true`, `RATE_LIMIT_ENABLED=false`, `REQUIRE_VERIFIED_EMAIL=false`,
+  `MAIL_STARTTLS_REQUIRED=false` and `FLYWAY_ENABLED=true` (the app's role then owns the schema and could drop the
+  trigger that keeps `audit_events` append-only; see [Database roles](#database-roles)). Search the log for
+  `Production setting:`.
+- a warning, logged once, when requests come from a private address: see
+  [Client IP behind a proxy](#client-ip-behind-a-proxy)
 
 Each setting can still be overridden with its environment variable.
 
@@ -190,6 +199,32 @@ Each instance opens up to `DB_POOL_SIZE` connections (10). Keep *maximum replica
 server's `max_connections`, or put PgBouncer in front of it. Every connection has `statement_timeout` (30 s) and
 `idle_in_transaction_session_timeout` (60 s), so a runaway query or a forgotten transaction cannot exhaust the pool.
 
+### Client IP behind a proxy
+
+The rate limit, the login lockout and the audit log key on the client's IP address. Behind a load balancer or
+ingress, the app only sees the client's address if every hop passes it on; otherwise all users share the proxy's
+address, one user's failed logins lock everyone out and the audit log shows only the proxy. In the `prod` profile
+the app counts requests from private, loopback and link-local addresses as `client_address_not_public_total` and
+logs a warning for the first one.
+
+1. **Load balancer to ingress controller:** keep the client's address on the way in. On Kubernetes, set
+   `externalTrafficPolicy: Local` on the ingress controller's `LoadBalancer` Service (the default, `Cluster`, replaces
+   the source address with a node's), or turn on the PROXY protocol at both the cloud load balancer and the controller
+   (`use-proxy-protocol: "true"` in the ingress-nginx ConfigMap).
+2. **Ingress controller to app:** the controller adds the client's address to `X-Forwarded-For`. Set
+   `FORWARD_HEADERS_STRATEGY=native` (`server.forward-headers-strategy`, already set in `deploy/kubernetes`), so
+   Tomcat takes the client address from that header.
+3. **Trusted proxies:** Tomcat reads `X-Forwarded-For` only from a proxy matching
+   `server.tomcat.remoteip.internal-proxies`, a regular expression that matches the private, loopback and link-local
+   ranges by default, and uses the rightmost entry that is not such a proxy. If your ingress reaches the app from a
+   public address, or you want to trust only the ingress pods' range, set it, e.g.
+   `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES='10\.42\.\d{1,3}\.\d{1,3}'`. Never set it empty (that trusts every
+   sender), and keep the API port reachable only from the proxy (the NetworkPolicy does this), since anything that
+   can reach it from a trusted range can claim any client address.
+
+Calls from other services on the private network also count as non-public; the counter then only says that such
+calls happen.
+
 ### Mail encryption
 
 The prod profile sends mail only over TLS, so neither the emails (with their reset links) nor the SMTP password cross
@@ -227,7 +262,11 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
 - [ ] Use an SMTP server (`MAIL_HOST`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) over TLS on 465 or 587 (see
       [Mail encryption](#mail-encryption)) and a sender of your own domain (`MAIL_FROM`).
 - [ ] Use a Redis with a password and TLS (`REDIS_PASSWORD`, `REDIS_SSL_ENABLED=true`).
-- [ ] Behind a proxy, set `FORWARD_HEADERS_STRATEGY=native` and allow only the proxy to reach the API port.
+- [ ] Reach a remote PostgreSQL over verified TLS: add `?sslmode=verify-full` to `DB_URL` (with the server's CA in
+      `sslrootcert`).
+- [ ] Behind a proxy, set `FORWARD_HEADERS_STRATEGY=native`, keep the client's address up to the ingress and allow
+      only the proxy to reach the API port (see [Client IP behind a proxy](#client-ip-behind-a-proxy)).
+- [ ] Check the startup log for `Production setting:` warnings.
 - [ ] Keep port `8081` internal and scrape metrics there.
 - [ ] Load `ops/prometheus/alerts.yml` and route the alerts to someone.
 - [ ] Ship the `audit` logger to long-term storage.
@@ -244,8 +283,9 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
 
 - **Fail-open on Redis outages.** The cache, rate limit and access-token revocation keep the API available when
   Redis is down, at the cost of briefly disabling those protections; new logins fail with `503` until it is back.
-  Refresh tokens live in PostgreSQL and are unaffected. Run Redis with high availability, or change the handlers to
-  fail closed.
+  Refresh tokens live in PostgreSQL and are unaffected. Each fail-open is counted in `security_fail_open_total` and
+  raises the `SecurityControlFailingOpen` alert. Run Redis with high availability, or change the handlers to fail
+  closed.
 - **Redis memory.** Redis holds security state, so it runs with `noeviction`. Size it for your traffic; every key has
   a TTL.
 - **Access tokens after logout of other sessions.** Revoking a session deletes its refresh token immediately; its

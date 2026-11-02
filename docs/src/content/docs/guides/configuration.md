@@ -9,13 +9,15 @@ can use the same variable to load another file, e.g. `DOTENV_PATH=staging.env ja
 lists the common variables, and `scripts/setup.sh` creates `.env` from it with generated secrets.
 
 The `app.*` settings are bound to a validated record (`AppProperties`), so a missing or invalid value such as a short
-`JWT_SECRET` stops the application at startup with a clear message. The `prod` profile also refuses the local
-defaults marked *prod: must change* below.
+`JWT_SECRET` or a lifetime of `0s` stops the application at startup with a clear message. The token and session
+lifetimes, `LOGIN_LOCK_DURATION`, `MFA_CHALLENGE_TTL` and the rate limit route windows must be positive, and `JWT_REMEMBER_ME_MAX_SESSION_TTL` must not be shorter than `JWT_REMEMBER_ME_TTL`.
+The `prod` profile also refuses the local defaults marked *prod: must change* below, and logs a warning for each
+protection turned off (see [Production](../production/#the-prod-profile)).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SPRING_PROFILES_ACTIVE` | *(none)* | `prod` for production defaults, see [Production](../production/) |
-| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | `jdbc:postgresql://localhost:5432/app`, `app`, `app` | Database connection (*prod: must change* `DB_PASSWORD`) |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | `jdbc:postgresql://localhost:5432/app`, `app`, `app` | Database connection (*prod: must change* `DB_PASSWORD`); add `?sslmode=verify-full` for a database on another machine, or the prod profile warns |
 | `DB_NAME` / `DB_PORT` | `app` / `5432` | Database name and host port of the local `db` container (compose only; the app uses `DB_URL`) |
 | `DB_POOL_SIZE` / `DB_CONNECTION_TIMEOUT_MS` | `10` / `5000` | Connections per instance; how long a request waits for one |
 | `DB_STATEMENT_TIMEOUT` / `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `30s` / `60s` | PostgreSQL cancels longer queries and idle transactions (`0` disables) |
@@ -54,7 +56,8 @@ defaults marked *prod: must change* below.
 | `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` | *(none)* | OTLP collector, e.g. `http://otel-collector:4318/v1/traces` |
 | `OTLP_METRICS_EXPORT_ENABLED` / `MANAGEMENT_OTLP_METRICS_EXPORT_URL` | `false` / `http://localhost:4318/v1/metrics` | Also push metrics to an OTLP collector (Prometheus scraping works either way) |
 | `MANAGEMENT_PORT` | *(same port; `8081` in prod)* | Actuator port in the prod profile |
-| `FORWARD_HEADERS_STRATEGY` | `none` | `native` behind a trusted proxy, so the real client IP is used (`framework` trusts the client-supplied leftmost entry) |
+| `FORWARD_HEADERS_STRATEGY` | `none` | `native` behind a trusted proxy, so the real client IP is used (`framework` trusts the client-supplied leftmost entry); see [Client IP behind a proxy](../production/#client-ip-behind-a-proxy) |
+| `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` | private, loopback and link-local ranges | Regular expression of the proxy addresses whose `X-Forwarded-For` Tomcat trusts with `native`; never empty |
 | `SWAGGER_ENABLED` | `true` (`false` in prod) | Swagger UI and API docs |
 | `PORT` | `8080` | HTTP port |
 

@@ -1,6 +1,8 @@
 package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.config.AppProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -53,6 +55,8 @@ public class SignUpTokens {
 
     private final String usedKeyPrefix;
 
+    private final Counter failOpen;
+
     /**
      * Creates the component.
      *
@@ -61,16 +65,19 @@ public class SignUpTokens {
      * @param properties      issuer, algorithm and link lifetime
      * @param redis           remembers used tokens
      * @param applicationName prefix of the Redis keys
+     * @param meterRegistry   registry for the fail-open counter
      */
     SignUpTokens(
             JwtEncoder encoder,
             JwtKeys keys,
             AppProperties properties,
             StringRedisTemplate redis,
-            @Value("${spring.application.name}") String applicationName) {
+            @Value("${spring.application.name}") String applicationName,
+            MeterRegistry meterRegistry) {
         this.encoder = encoder;
         this.redis = redis;
         this.usedKeyPrefix = applicationName + ":sign-up-used:";
+        this.failOpen = FailOpen.counter(meterRegistry, "sign-up-link-reuse");
         this.jwt = properties.jwt();
         this.ttl = properties.account().verificationTokenTtl();
         this.decoder = keys.decoder();
@@ -121,6 +128,7 @@ public class SignUpTokens {
                 log.warn(
                         "Could not record a used sign-up link: {}",
                         ex.getClass().getSimpleName());
+                failOpen.increment();
             }
         });
     }
@@ -139,6 +147,7 @@ public class SignUpTokens {
         } catch (DataAccessException ex) {
             log.warn(
                     "Could not check for a used sign-up link: {}", ex.getClass().getSimpleName());
+            failOpen.increment();
             return false;
         }
     }

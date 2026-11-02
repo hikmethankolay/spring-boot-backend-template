@@ -122,6 +122,16 @@ groups:
           summary: "A user's role was changed"
           description: "An administrator changed a role. Confirm it was intended (see the 'audit' log)."
 
+      # Redis did not answer and a protection let the request through (ADR 2): rate limit, token revocation, sign-up
+      # link reuse or the sign-up email cooldown. The counters exist from startup, so the first failure is seen too.
+      - alert: SecurityControlFailingOpen
+        expr: sum by (application, control) (increase(security_fail_open_total[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Security control {{ $labels.control }} fails open"
+          description: "{{ $labels.application }} let requests through {{ $labels.control }} unchecked because Redis did not answer. See the WarningLogSpike runbook (Redis unreachable)."
+
   - name: logs
     rules:
       # Log-based alerts from the logback_events_total counter (every log line, by level).
@@ -195,3 +205,15 @@ groups:
         annotations:
           summary: "Heap usage above 90%"
           description: "{{ $labels.instance }} uses {{ $value | humanizePercentage }} of its heap. Raise the container memory limit."
+
+      # Needs kube-state-metrics. The JVM exits on OutOfMemoryError by itself; an OOM kill means the container's
+      # memory limit is too small for the heap plus native memory (metaspace, thread stacks, direct buffers).
+      - alert: ContainerOOMKilled
+        expr: |
+          max by (namespace, pod, container) (kube_pod_container_status_last_terminated_reason{reason="OOMKilled", container="app"})
+            and on (namespace, pod, container) increase(kube_pod_container_status_restarts_total{container="app"}[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.pod }} was OOM-killed"
+          description: "The kernel killed container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} for exceeding its memory limit in the last 15 minutes."
