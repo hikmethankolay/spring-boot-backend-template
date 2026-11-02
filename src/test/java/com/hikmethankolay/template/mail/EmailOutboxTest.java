@@ -33,7 +33,8 @@ class EmailOutboxTest {
 
     private final OutboxEmail email = new OutboxEmail("a@acme.test", "Subject", "Body");
 
-    private final Instant start = Instant.parse("2026-11-02T12:00:00Z");
+    // The email is due from its creation (the real clock), so a fixed instant would stop being due once it passed.
+    private final Instant start = email.getNextAttemptAt();
 
     private EmailOutbox outbox;
 
