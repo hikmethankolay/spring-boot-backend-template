@@ -42,6 +42,16 @@ else
   info "(stored in .env; change it after the first login)"
 fi
 
+# Also fills in a .env created before webhooks existed, which has no WEBHOOK_ENCRYPTION_KEY yet.
+if ! grep -q '^WEBHOOK_ENCRYPTION_KEY=.' .env; then
+  if grep -q '^WEBHOOK_ENCRYPTION_KEY=' .env; then
+    sed_inplace "s|^WEBHOOK_ENCRYPTION_KEY=.*|WEBHOOK_ENCRYPTION_KEY=$(random_secret 48)|" .env
+  else
+    printf '\nWEBHOOK_ENCRYPTION_KEY=%s\n' "$(random_secret 48)" >> .env
+  fi
+  info "Generated WEBHOOK_ENCRYPTION_KEY"
+fi
+
 chmod +x mvnw scripts/*.sh
 
 if [[ "$jdk" == false ]]; then

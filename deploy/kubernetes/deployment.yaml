@@ -90,7 +90,8 @@ spec:
               mountPath: /etc/app/secrets
               readOnly: true
       volumes:
-        # DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, SPRING_MAIL_USERNAME,
+        # DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, WEBHOOK_ENCRYPTION_KEY,
+        # SPRING_MAIL_USERNAME,
         # SPRING_MAIL_PASSWORD, and optionally ADMIN_USERNAME/ADMIN_EMAIL/ADMIN_PASSWORD and the
         # GITHUB_/GOOGLE_CLIENT_ID and _CLIENT_SECRET of social login.
         - name: secrets

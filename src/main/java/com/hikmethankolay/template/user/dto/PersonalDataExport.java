@@ -20,6 +20,6 @@ public record PersonalDataExport(
 
         @Schema(
                 description = "Data kept by other features, one entry per section; currently `sessions` (the "
-                        + "user's active sessions), `socialAccounts`, `emailPreferences`, `notes` and `securityEvents` "
+                        + "user's active sessions), `accessTokens`, `socialAccounts`, `emailPreferences`, `notes` and `securityEvents` "
                         + "(the user's audit trail)")
         Map<String, Object> related) {}

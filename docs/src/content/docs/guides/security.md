@@ -70,6 +70,46 @@ once. Ending the current session works like logging out. Another user's session 
 The client IP is `request.getRemoteAddr()`: behind a proxy, set `FORWARD_HEADERS_STRATEGY` (see
 [Rate limiting](#rate-limiting)), or every session shows the proxy's address.
 
+### Personal access tokens
+
+Scripts, CLIs, cron jobs and integrations cannot log in interactively or refresh a 15-minute JWT. They use a personal
+access token instead: a long-lived API key a user creates for one purpose and revokes when done
+([ADR 10](../../adr/0010-personal-access-tokens/)).
+
+```bash
+# Create one (needs a signed-in session and the password); the token is shown only in this response.
+curl -s -X POST localhost:8080/api/v1/users/me/access-tokens -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"backup script","scope":"READ","expiresInDays":90,"currentPassword":"..."}'
+# {"token":"pat_…","details":{"id":7,"name":"backup script","scope":"READ",...}}
+
+# Use it like any bearer token.
+curl -s localhost:8080/api/v1/notes -H "Authorization: Bearer pat_…"
+```
+
+- **Format and storage.** `pat_` plus 43 random characters (256 bits). Only its SHA-256 is stored, like refresh
+  tokens; the prefix lets secret scanners spot a leaked one.
+- **What it acts as.** The token's user with their *current* role, read from the database on every request, capped by
+  `ACCESS_TOKENS_MAX_ROLE`; so an owner's token can call the owner endpoints unless the deployment lowers the cap. A
+  `READ` token may only send `GET`, `HEAD` and `OPTIONS`; `ACCESS_TOKENS_ALLOW_WRITE=false` makes every token
+  read-only.
+- **What it can never do.** Account self-service under `/api/v1/users/me/**` (password, two-factor, sessions, linked
+  accounts, email preferences, data export and the tokens themselves) answers `403` to a token: a leaked token cannot
+  take the account over or mint more tokens. Only `GET /api/v1/users/me` is open, so a script can tell whose token it
+  holds.
+- **Lifetime.** Every token expires (`expiresInDays`, at most `ACCESS_TOKENS_MAX_LIFETIME`). Revoking one with
+  `DELETE /api/v1/users/me/access-tokens/{id}` takes effect on the next request. Everything that ends a user's
+  sessions (password change or reset, role change, suspension, deletion) deletes all their tokens too.
+- **Oversight.** Creating a token needs the password (wrong ones count towards the [login lockout](#brute-force-protection)),
+  emails the user a security alert and is audited (`auth.access_token_created`, `auth.access_token_revoked`,
+  `auth.access_tokens_revoked`). `last_used_at` is updated at most once a minute; the data export lists the tokens
+  without their values.
+
+Under the hood `SecurityConfig.jwtDecoder` is wrapped by `AccessTokenDecoder`: a `pat_` bearer value is looked up in
+`access_tokens` and turned into a `Jwt` with the same `sub` and `roles` claims as a login, so controllers keep reading
+the caller with `@AuthenticationPrincipal Jwt` whichever credential was sent. `AccessTokenPolicy` adds the path and
+scope rules above to the authenticated filter chain.
+
 ## Signing keys
 
 `JWT_ALGORITHM` picks how access tokens are signed:

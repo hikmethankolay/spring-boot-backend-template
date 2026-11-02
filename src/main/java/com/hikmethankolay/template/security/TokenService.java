@@ -17,7 +17,8 @@ import org.springframework.stereotype.Service;
  * Issues signed JWTs and reads the application's custom claims.
  *
  * <p>Token validation is not done here but by Spring Security's resource server
- * (see {@link SecurityConfig#jwtDecoder(JwtKeys, AppProperties, TokenRevocationService)}).</p>
+ * (see {@link SecurityConfig#jwtDecoder(JwtKeys, AppProperties, TokenRevocationService,
+ * com.hikmethankolay.template.token.AccessTokenService)}).</p>
  */
 @Service
 public class TokenService {

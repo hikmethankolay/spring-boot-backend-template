@@ -71,6 +71,8 @@ is generally available and the tests pass, and is recorded in the
 |------|--------------|
 | Sign-up and login | Email-first sign-up, login by username or email, "remember me", JWT access tokens (HS256 or RS256 with a JWK Set) and rotating refresh tokens with reuse detection, HttpOnly cookies or Bearer tokens |
 | Account security | Two-factor authentication (TOTP) with recovery codes, GitHub and Google login with PKCE, session list with remote logout, every session ended on a password change, brute-force lockout per IP and account (also for password confirmations), breached-password check, a security activity page from the audit log |
+| API access for scripts | Personal access tokens (`pat_…`): scoped read/write, expiring, revocable, hashed at rest, acting with the user's role up to a deployment-set cap, never allowed to change the account itself |
+| Webhooks | Signed (Standard Webhooks) event delivery to user endpoints through an outbox, retries with backoff, delivery log, secret rotation, automatic turn-off of dead receivers, SSRF guard on every connection; `WebhookEvents.publish` for your own events |
 | Account flows | Email verification, password reset, email change that waits for the link sent to the new address, account deletion and a personal data export (GDPR/KVKK) |
 | Roles | `USER`, `ADMIN` and a single `OWNER`; role changes and administrator management need the owner and their password; administrators suspend and reactivate accounts |
 | Email | HTML templates with a plain-text twin and a shared layout, a transactional outbox with retries, snapshot tests of every template |

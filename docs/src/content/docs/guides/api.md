@@ -105,6 +105,9 @@ push and type-checks it, but check the generator you choose against your own bui
 | `GET` | `/api/v1/users/me/sessions` | authenticated | `200` active sessions, `current` marks this one |
 | `DELETE` | `/api/v1/users/me/sessions` | authenticated | `204`; every other session is logged out at once, this one stays |
 | `DELETE` | `/api/v1/users/me/sessions/{id}` | authenticated | `204`; that device is logged out at once |
+| `GET` | `/api/v1/users/me/access-tokens` | authenticated | `200` unexpired [personal access tokens](../security/#personal-access-tokens), never their values |
+| `POST` | `/api/v1/users/me/access-tokens` | authenticated + password | `201` `{token, details}`; the `pat_…` token is shown only this once |
+| `DELETE` | `/api/v1/users/me/access-tokens/{id}` | authenticated | `204`; the token stops working at once |
 | `GET` | `/api/v1/users/me/social-accounts` | authenticated | `200` linked GitHub/Google accounts: `id`, `provider`, `linkedAt` |
 | `DELETE` | `/api/v1/users/me/social-accounts/{id}` | authenticated + password | `204`; that provider account can no longer sign in |
 | `GET` | `/api/v1/users?q=alice&role=USER&suspended=false&page=0&size=20&sort=createdAt,desc` | admin | `200` page; every filter is optional ([filters](#pagination)) |
@@ -112,6 +115,12 @@ push and type-checks it, but check the generator you choose against your own bui
 | `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; administrators: owner; role changes and deleting an administrator: owner + password | `200` / `204` |
 | `PUT` / `DELETE` | `/api/v1/users/{id}/suspension` | admin; administrators: owner | `200`; suspends (ends the sessions, refuses logins) / reactivates |
 | `GET` | `/api/v1/users/{id}/security-events` | admin or that user | `200` page of the user's audit events, also of deleted users |
+| `GET` / `POST` | `/api/v1/webhooks` | authenticated (also access tokens) | `200` own [webhook endpoints](../webhooks/) / `201` `{secret, endpoint}`, the `whsec_` secret shown once |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/webhooks/{id}` | the endpoint's owner | `200` / `200` / `204`; `PATCH {"enabled": true}` turns it back on |
+| `POST` | `/api/v1/webhooks/{id}/secret` | the endpoint's owner | `200` new secret; the old one signs for 24 more hours |
+| `POST` | `/api/v1/webhooks/{id}/test` | the endpoint's owner | `202` queues a `webhook.test` event |
+| `GET` | `/api/v1/webhooks/{id}/deliveries` | the endpoint's owner | `200` page of deliveries with attempts and last answer |
+| `POST` | `/api/v1/webhooks/{id}/deliveries/{deliveryId}/retry` | the endpoint's owner | `202`; sent again with the same `webhook-id` |
 | `GET` / `POST` | `/api/v1/notes` | authenticated (own notes only) | `200` page / `201` + `Location` |
 | `GET` / `PUT` / `DELETE` | `/api/v1/notes/{id}` | the note's owner | `200` + `ETag` / `200` + `ETag` / `204`; `PUT` takes `If-Match` |
 | `GET` / `PUT` | `/api/v1/users/me/email-preferences` | authenticated | `200` optional email categories; `PUT` takes `{"product-updates": false}` |

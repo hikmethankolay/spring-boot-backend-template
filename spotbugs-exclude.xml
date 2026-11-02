@@ -81,6 +81,14 @@
         <Class name="com.hikmethankolay.template.config.ProductionSettingsCheck"/>
     </Match>
     <!--
+      WebhookAddressPolicy compares the URI scheme case-insensitively; java.net.URI only accepts ASCII letters, digits,
+      '+', '-' and '.' there (RFC 3986), so no Unicode case mapping can turn another scheme into http or https.
+    -->
+    <Match>
+        <Bug pattern="IMPROPER_UNICODE"/>
+        <Class name="com.hikmethankolay.template.webhook.WebhookAddressPolicy"/>
+    </Match>
+    <!--
       The User-Agent of a refresh is stored only to show it in the session list (cut to 255 characters); no decision
       depends on it.
     -->

@@ -2474,7 +2474,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -2690,7 +2690,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -2780,6 +2780,281 @@
         "tags" : [ "Users" ]
       }
     },
+    "/api/v1/users/me/access-tokens" : {
+      "get" : {
+        "description" : "Unexpired tokens, newest first. The token values are never shown again after creation.",
+        "operationId" : "listAccessTokens",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/AccessTokenResponse"
+                  }
+                }
+              }
+            },
+            "description" : "The tokens",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List your access tokens",
+        "tags" : [ "Access tokens" ]
+      },
+      "post" : {
+        "description" : "Returns a token for `Authorization: Bearer pat_...`, shown only in this response. It acts as you, with your role (capped by the server's `app.access-tokens.max-role`) and the chosen scope, until it expires, you revoke it or your sessions end (password change, role change, suspension). You get an email about it.",
+        "operationId" : "createAccessToken",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateAccessTokenRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CreatedAccessTokenResponse"
+                }
+              }
+            },
+            "description" : "Token created",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The password is wrong or the lifetime is longer than the server allows",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Access tokens are turned off on this server",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You already have the most tokens allowed",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Create an access token",
+        "tags" : [ "Access tokens" ]
+      }
+    },
+    "/api/v1/users/me/access-tokens/{id}" : {
+      "delete" : {
+        "description" : "The token stops working at once.",
+        "operationId" : "revokeAccessToken",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "The token is revoked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no access token with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Revoke an access token",
+        "tags" : [ "Access tokens" ]
+      }
+    },
     "/api/v1/users/me/email-preferences" : {
       "get" : {
         "operationId" : "listEmailPreferences",
@@ -2813,6 +3088,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -2904,7 +3182,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -2959,6 +3237,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -3036,7 +3317,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -3133,7 +3414,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -3242,7 +3523,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -3375,7 +3656,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "409" : {
             "content" : {
@@ -3501,7 +3782,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -3613,6 +3894,9 @@
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
           },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -3655,7 +3939,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -3705,6 +3989,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -3760,7 +4047,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "404" : {
             "content" : {
@@ -3836,6 +4123,9 @@
           },
           "401" : {
             "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/Forbidden"
           },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
@@ -3922,7 +4212,7 @@
             "$ref" : "#/components/responses/Unauthorized"
           },
           "403" : {
-            "$ref" : "#/components/responses/CrossSiteRequest"
+            "$ref" : "#/components/responses/Forbidden"
           },
           "404" : {
             "content" : {
@@ -4734,6 +5024,968 @@
         "summary" : "Suspend a user (admin)",
         "tags" : [ "Users" ]
       }
+    },
+    "/api/v1/webhooks" : {
+      "get" : {
+        "operationId" : "listWebhooks",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/WebhookResponse"
+                  }
+                }
+              }
+            },
+            "description" : "The endpoints",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List your webhook endpoints",
+        "tags" : [ "Webhooks" ]
+      },
+      "post" : {
+        "description" : "Events are POSTed to the URL as JSON `{type, timestamp, data}`, signed per Standard Webhooks (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers). The `whsec_` secret is shown only in this response. Application-wide events such as `user.registered` need the role set by `app.webhooks.admin-events-min-role`.",
+        "operationId" : "createWebhook",
+        "parameters" : [ {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WebhookRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookSecretResponse"
+                }
+              }
+            },
+            "description" : "Endpoint registered",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Webhooks are turned off on this server, or an event needs a higher role",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You already have the most endpoints allowed",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Register a webhook endpoint",
+        "tags" : [ "Webhooks" ]
+      }
+    },
+    "/api/v1/webhooks/{id}" : {
+      "delete" : {
+        "operationId" : "deleteWebhook",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "The endpoint and its deliveries are deleted",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Delete a webhook endpoint",
+        "tags" : [ "Webhooks" ]
+      },
+      "get" : {
+        "operationId" : "getWebhook",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookResponse"
+                }
+              }
+            },
+            "description" : "The endpoint",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Get a webhook endpoint",
+        "tags" : [ "Webhooks" ]
+      },
+      "patch" : {
+        "description" : "Fields left out keep their value. `enabled: false` gives up the pending deliveries; `enabled: true` turns an endpoint the server turned off back on.",
+        "operationId" : "updateWebhook",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WebhookUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookResponse"
+                }
+              }
+            },
+            "description" : "The changed endpoint",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Webhooks are turned off on this server, or an event needs a higher role",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Change a webhook endpoint",
+        "tags" : [ "Webhooks" ]
+      }
+    },
+    "/api/v1/webhooks/{id}/deliveries" : {
+      "get" : {
+        "description" : "Recent events sent or being sent to this endpoint, with their attempts and the last answer. Finished deliveries are kept for `app.webhooks.delivery-retention`.",
+        "operationId" : "listWebhookDeliveries",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "description" : "Zero-based page index (0..N)",
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 0,
+            "minimum" : 0
+          }
+        }, {
+          "description" : "The size of the page to be returned",
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "default" : 20,
+            "maximum" : 100,
+            "minimum" : 1
+          }
+        }, {
+          "description" : "Sort order as `property,asc` or `property,desc`; repeat the parameter to sort by several properties. Allowed properties: id, createdAt. Any other property is rejected with 400.",
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "array",
+            "default" : [ "id,DESC" ],
+            "items" : {
+              "type" : "string",
+              "pattern" : "^(id|createdAt)(,(asc|desc|ASC|DESC))?$"
+            }
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PagedModelWebhookDeliveryResponse"
+                }
+              }
+            },
+            "description" : "One page of deliveries",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List an endpoint's deliveries",
+        "tags" : [ "Webhooks" ]
+      }
+    },
+    "/api/v1/webhooks/{id}/deliveries/{deliveryId}/retry" : {
+      "post" : {
+        "description" : "Queues the same message (same `webhook-id`) with a fresh set of attempts.",
+        "operationId" : "retryWebhookDelivery",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "deliveryId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookDeliveryResponse"
+                }
+              }
+            },
+            "description" : "Delivery queued",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Webhooks are turned off on this server",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no such endpoint, or it has no such delivery",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The endpoint is turned off",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Send a delivery again",
+        "tags" : [ "Webhooks" ]
+      }
+    },
+    "/api/v1/webhooks/{id}/secret" : {
+      "post" : {
+        "description" : "Returns a new `whsec_` secret, shown only now. For 24 hours each message carries a signature from the old and the new secret, so receivers can switch without dropping messages.",
+        "operationId" : "rotateWebhookSecret",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookSecretResponse"
+                }
+              }
+            },
+            "description" : "The new secret",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "409" : {
+            "$ref" : "#/components/responses/IdempotencyKeyInUse"
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Rotate a webhook signing secret",
+        "tags" : [ "Webhooks" ]
+      }
+    },
+    "/api/v1/webhooks/{id}/test" : {
+      "post" : {
+        "description" : "Queues a `webhook.test` event for this endpoint; follow it in the delivery log.",
+        "operationId" : "testWebhook",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "description" : "Any unique value, e.g. a UUID, up to 255 characters. A retry with the same key within 24 hours gets the first response again, with `Idempotent-Replayed: true`, instead of running twice. Responses with a 5xx status are not kept.",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WebhookDeliveryResponse"
+                }
+              }
+            },
+            "description" : "Test event queued",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "$ref" : "#/components/responses/BadRequest"
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Webhooks are turned off on this server",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no webhook endpoint with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "The endpoint is turned off",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "422" : {
+            "$ref" : "#/components/responses/IdempotencyKeyReused"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Send a test event",
+        "tags" : [ "Webhooks" ]
+      }
     }
   },
   "components" : {
@@ -5004,6 +6256,35 @@
       }
     },
     "schemas" : {
+      "AccessTokenResponse" : {
+        "type" : "object",
+        "properties" : {
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "lastUsedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "scope" : {
+            "type" : "string",
+            "enum" : [ "READ", "WRITE" ]
+          }
+        },
+        "required" : [ "createdAt", "expiresAt", "id", "name", "scope" ]
+      },
       "AdminUpdateUserRequest" : {
         "type" : "object",
         "properties" : {
@@ -5231,6 +6512,48 @@
           }
         },
         "required" : [ "code", "currentPassword" ]
+      },
+      "CreateAccessTokenRequest" : {
+        "type" : "object",
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string",
+            "format" : "password",
+            "maxLength" : 128,
+            "minLength" : 0,
+            "writeOnly" : true
+          },
+          "expiresInDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "example" : 90,
+            "maximum" : 3650,
+            "minimum" : 1
+          },
+          "name" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "scope" : {
+            "type" : "string",
+            "enum" : [ "READ", "WRITE" ]
+          }
+        },
+        "required" : [ "currentPassword", "name", "scope" ]
+      },
+      "CreatedAccessTokenResponse" : {
+        "type" : "object",
+        "properties" : {
+          "details" : {
+            "$ref" : "#/components/schemas/AccessTokenResponse"
+          },
+          "token" : {
+            "type" : "string",
+            "example" : "pat_8xJ2kQ..."
+          }
+        },
+        "required" : [ "details", "token" ]
       },
       "DeleteAccountRequest" : {
         "type" : "object",
@@ -5464,6 +6787,21 @@
         },
         "required" : [ "content", "page" ]
       },
+      "PagedModelWebhookDeliveryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/WebhookDeliveryResponse"
+            }
+          },
+          "page" : {
+            "$ref" : "#/components/schemas/PageMetadata"
+          }
+        },
+        "required" : [ "content", "page" ]
+      },
       "PasswordResetRequest" : {
         "type" : "object",
         "properties" : {
@@ -5496,7 +6834,7 @@
           "related" : {
             "type" : "object",
             "additionalProperties" : { },
-            "description" : "Data kept by other features, one entry per section; currently `sessions` (the user's active sessions), `socialAccounts`, `emailPreferences`, `notes` and `securityEvents` (the user's audit trail)"
+            "description" : "Data kept by other features, one entry per section; currently `sessions` (the user's active sessions), `accessTokens`, `socialAccounts`, `emailPreferences`, `notes` and `securityEvents` (the user's audit trail)"
           }
         },
         "required" : [ "exportedAt", "profile", "related" ]
@@ -5533,7 +6871,7 @@
           "type" : {
             "type" : "string",
             "format" : "uri",
-            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:social-account-not-found`: The caller has no linked provider account with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:precondition-failed`: The `If-Match` header does not match the resource's current `ETag`: it changed since it was read; reload it and retry\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
+            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:social-account-not-found`: The caller has no linked provider account with this id\n- `urn:problem:access-token-not-found`: The caller has no access token with this id\n- `urn:problem:access-token-lifetime-too-long`: The requested lifetime is longer than this server allows\n- `urn:problem:access-token-limit-reached`: Revoke an access token before creating another\n- `urn:problem:webhook-not-found`: The caller has no webhook endpoint with this id\n- `urn:problem:webhook-delivery-not-found`: The webhook endpoint has no delivery with this id\n- `urn:problem:webhook-url-invalid`: The webhook URL is invalid or points to a non-public address\n- `urn:problem:webhook-event-type-invalid`: There is no webhook event type with this name\n- `urn:problem:webhook-event-not-allowed`: The caller's role cannot receive this webhook event\n- `urn:problem:webhook-limit-reached`: Delete a webhook endpoint before registering another\n- `urn:problem:webhook-endpoint-disabled`: The webhook endpoint is turned off\n- `urn:problem:webhooks-disabled`: Webhooks are turned off on this server\n- `urn:problem:access-tokens-disabled`: Personal access tokens are turned off on this server\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:precondition-failed`: The `If-Match` header does not match the resource's current `ETag`: it changed since it was read; reload it and retry\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
             "example" : "urn:problem:validation-failed"
           }
         },
@@ -5828,6 +7166,151 @@
           }
         },
         "required" : [ "createdAt", "email", "emailVerified", "id", "mfaEnabled", "role", "updatedAt", "username" ]
+      },
+      "WebhookDeliveryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "attempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "messageId" : {
+            "type" : "string"
+          },
+          "nextAttemptAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "responseStatus" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "attempts", "createdAt", "eventType", "id", "messageId", "status" ]
+      },
+      "WebhookRequest" : {
+        "type" : "object",
+        "properties" : {
+          "description" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
+          "eventTypes" : {
+            "type" : "array",
+            "example" : [ "note.created" ],
+            "items" : {
+              "type" : "string",
+              "minLength" : 1
+            },
+            "maxItems" : 50,
+            "minItems" : 0
+          },
+          "url" : {
+            "type" : "string",
+            "example" : "https://example.com/webhooks",
+            "maxLength" : 2048,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "eventTypes", "url" ]
+      },
+      "WebhookResponse" : {
+        "type" : "object",
+        "properties" : {
+          "consecutiveFailures" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "disabledReason" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "eventTypes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "consecutiveFailures", "createdAt", "enabled", "eventTypes", "id", "url" ]
+      },
+      "WebhookSecretResponse" : {
+        "type" : "object",
+        "properties" : {
+          "endpoint" : {
+            "$ref" : "#/components/schemas/WebhookResponse"
+          },
+          "secret" : {
+            "type" : "string",
+            "example" : "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
+          }
+        },
+        "required" : [ "endpoint", "secret" ]
+      },
+      "WebhookUpdateRequest" : {
+        "type" : "object",
+        "properties" : {
+          "description" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "eventTypes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "minLength" : 1
+            },
+            "maxItems" : 50,
+            "minItems" : 1
+          },
+          "url" : {
+            "type" : "string",
+            "maxLength" : 2048,
+            "minLength" : 0
+          }
+        }
       }
     },
     "securitySchemes" : {

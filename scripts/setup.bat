@@ -31,6 +31,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 if errorlevel 1 exit /b 1
 
 :compile
+rem Also fills in a .env created before webhooks existed, which has no WEBHOOK_ENCRYPTION_KEY yet.
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$c = @(Get-Content .env);" ^
+  "if (-not ($c -match '^WEBHOOK_ENCRYPTION_KEY=.+')) {" ^
+  "  $b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);" ^
+  "  $k = [Convert]::ToBase64String($b) -replace '[+/=]','';" ^
+  "  @($c | Where-Object { $_ -notmatch '^WEBHOOK_ENCRYPTION_KEY=' }) + ('WEBHOOK_ENCRYPTION_KEY=' + $k) | Set-Content -Encoding ascii .env;" ^
+  "  Write-Host '==> Generated WEBHOOK_ENCRYPTION_KEY' }"
+if errorlevel 1 exit /b 1
 if "%JDK%"=="false" (
   echo ==^> Done. Next: scripts\docker.bat up to build and start everything in containers, then scripts\smoke.bat.
   exit /b 0

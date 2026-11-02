@@ -6,7 +6,10 @@ import com.hikmethankolay.template.common.SortAllowList;
 import com.hikmethankolay.template.common.Versioned;
 import com.hikmethankolay.template.note.dto.NoteRequest;
 import com.hikmethankolay.template.note.dto.NoteResponse;
+import com.hikmethankolay.template.webhook.WebhookEventType;
+import com.hikmethankolay.template.webhook.WebhookEvents;
 import java.util.List;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,13 +30,17 @@ public class NoteService {
 
     private final NoteRepository notes;
 
+    private final WebhookEvents webhookEvents;
+
     /**
      * Creates the service.
      *
-     * @param notes note data access
+     * @param notes         note data access
+     * @param webhookEvents publishes note events to the user's webhook endpoints
      */
-    public NoteService(NoteRepository notes) {
+    public NoteService(NoteRepository notes, WebhookEvents webhookEvents) {
         this.notes = notes;
+        this.webhookEvents = webhookEvents;
     }
 
     /**
@@ -69,7 +76,10 @@ public class NoteService {
      */
     @Transactional
     public NoteResponse create(long userId, NoteRequest request) {
-        return NoteResponse.from(notes.save(new Note(userId, request.title(), request.body())));
+        Note note = notes.save(new Note(userId, request.title(), request.body()));
+        // Thin payload: receivers fetch the note through the API, so it never travels to a stale endpoint.
+        webhookEvents.publish(WebhookEventType.NOTE_CREATED, userId, Map.of("id", note.getId()));
+        return NoteResponse.from(note);
     }
 
     /**
@@ -88,7 +98,9 @@ public class NoteService {
         Versioned.checkIfMatch(ifMatch, note.getVersion());
         note.update(request.title(), request.body());
         // Flushed here so updatedAt, the new version and a concurrent-update conflict (409) are in this response.
-        return versioned(notes.saveAndFlush(note));
+        Versioned<NoteResponse> updated = versioned(notes.saveAndFlush(note));
+        webhookEvents.publish(WebhookEventType.NOTE_UPDATED, userId, Map.of("id", id));
+        return updated;
     }
 
     /**
@@ -101,6 +113,7 @@ public class NoteService {
     @Transactional
     public void delete(long userId, long id) {
         notes.delete(findNote(userId, id));
+        webhookEvents.publish(WebhookEventType.NOTE_DELETED, userId, Map.of("id", id));
     }
 
     /**

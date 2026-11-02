@@ -3,6 +3,7 @@ package com.hikmethankolay.template.security;
 import com.hikmethankolay.template.common.IdempotencyFilter;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.config.OpenApiConfig;
+import com.hikmethankolay.template.token.AccessTokenPolicy;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
@@ -55,6 +56,9 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
     private final String cookieName;
 
     private final String refreshCookieName;
+
+    private static final PathPattern ACCOUNT_SELF_SERVICE =
+            PathPatternParser.defaultInstance.parse(AccessTokenPolicy.ACCOUNT_SELF_SERVICE_PATHS);
 
     private final List<PathPattern> publicPaths = Arrays.stream(SecurityConfig.PUBLIC_PATHS)
             .map(PathPatternParser.defaultInstance::parse)
@@ -117,6 +121,14 @@ public class ApiDocsSecurityCustomizer implements OpenApiCustomizer, OperationCu
                         operation
                                 .getResponses()
                                 .putIfAbsent("401", OpenApiConfig.responseRef(OpenApiConfig.UNAUTHORIZED));
+                        boolean ownProfile =
+                                method == PathItem.HttpMethod.GET && AccessTokenPolicy.OWN_PROFILE_PATH.equals(path);
+                        if (!ownProfile && ACCOUNT_SELF_SERVICE.matches(PathContainer.parsePath(path))) {
+                            // AccessTokenPolicy refuses personal access tokens here.
+                            operation
+                                    .getResponses()
+                                    .putIfAbsent("403", OpenApiConfig.responseRef(OpenApiConfig.FORBIDDEN));
+                        }
                         if (method == PathItem.HttpMethod.POST && IdempotencyFilter.covers(path)) {
                             addIdempotencyKey(operation);
                         }

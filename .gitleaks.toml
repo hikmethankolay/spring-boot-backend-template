@@ -15,4 +15,8 @@ regexes = [
   # The JWT secret and MFA key of the test profile (application-test.yml).
   '''^test-secret-that-is-at-least-32-characters-long$''',
   '''^test-mfa-key-that-is-at-least-32-characters$''',
+  # The webhook encryption key of the test profile (application-test.yml).
+  '''^test-webhook-encryption-key-0123456789abcdef$''',
+  # The Standard Webhooks test vector secret (WebhookSignerTest; also the OpenAPI example of a signing secret).
+  '''^(whsec_)?MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw$''',
 ]

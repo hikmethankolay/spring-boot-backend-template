@@ -180,6 +180,14 @@ that users who have not logged in with their authenticator since will need a rec
 If the database leaked too, re-encrypting is not enough: the secrets themselves are known, so ask enrolled users to
 turn two-factor authentication off and on again for a new secret.
 
+### WEBHOOK_ENCRYPTION_KEY
+
+The key encrypts the webhook signing secrets. Together with a copy of the database it lets someone forge webhook
+messages that receivers accept. Deploy `WEBHOOK_ENCRYPTION_KEY=<new>,<old>`, then ask endpoint owners to rotate their
+secrets (`POST /api/v1/webhooks/{id}/secret`, which stores the new secret under the new key) and drop the old key.
+An endpoint whose secret still needs the dropped key is turned off with a reason saying so; rotating its secret and
+turning it on again recovers it.
+
 ## Logs
 
 ### ErrorLogs
@@ -288,8 +296,8 @@ any change to the backup setup:
    SELECT count(*) FROM users;                 -- close to production
    ```
 
-4. Check that `MFA_ENCRYPTION_KEY` can be fetched from the secret manager: it is kept out of the backups, and
-   without it the restored two-factor secrets cannot be decrypted.
+4. Check that `MFA_ENCRYPTION_KEY` and `WEBHOOK_ENCRYPTION_KEY` can be fetched from the secret manager: they are kept
+   out of the backups, and without them the restored two-factor and webhook signing secrets cannot be decrypted.
 5. Record how long the restore took and how much data it lost (target time against the last WAL archived), then
    delete the instance: it holds personal data.
 

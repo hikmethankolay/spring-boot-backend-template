@@ -9,6 +9,17 @@ app:
     requests-per-minute: 5000
     # The route limits would throttle the suite; RateLimitIntegrationTest sets its own.
     routes: []
+  webhooks:
+    encryption-key: test-webhook-encryption-key-0123456789abcdef
+    # The tests' receiver listens on 127.0.0.1; WebhookAddressPolicyTest checks the production refusal.
+    allow-private-addresses: true
+    # Tests call WebhookDispatcher.deliverDue() themselves.
+    poll-interval: 1h
+    connect-timeout: 2s
+    response-timeout: 2s
+    # Small, so the retry and turn-off tests reach the limits in a few steps.
+    max-attempts: 3
+    disable-after-failures: 5
   mail:
     # Tests call EmailOutbox.sendDue() themselves; a background retry would race with them.
     outbox-poll-interval: 1h

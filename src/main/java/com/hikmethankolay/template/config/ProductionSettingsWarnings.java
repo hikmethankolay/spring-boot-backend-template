@@ -37,6 +37,8 @@ class ProductionSettingsWarnings {
      * @param swaggerUi        {@code springdoc.swagger-ui.enabled}
      * @param startTlsRequired {@code spring.mail.properties[mail.smtp.starttls.required]}
      * @param flyway           {@code spring.flyway.enabled}
+     * @param webhooksPrivate  {@code app.webhooks.allow-private-addresses}
+     * @param webhooksHttps    {@code app.webhooks.require-https}
      */
     ProductionSettingsWarnings(
             AppProperties properties,
@@ -47,7 +49,10 @@ class ProductionSettingsWarnings {
             @Value("${springdoc.api-docs.enabled:true}") boolean apiDocs,
             @Value("${springdoc.swagger-ui.enabled:true}") boolean swaggerUi,
             @Value("${spring.mail.properties[mail.smtp.starttls.required]:false}") boolean startTlsRequired,
-            @Value("${spring.flyway.enabled:true}") boolean flyway) {
+            @Value("${spring.flyway.enabled:true}") boolean flyway,
+            @Value("${app.webhooks.allow-private-addresses:false}") boolean webhooksPrivate,
+            @Value("${app.webhooks.require-https:true}") boolean webhooksHttps) {
+        webhookWarnings(webhooksPrivate, webhooksHttps).forEach(warning -> log.warn("Production setting: {}", warning));
         // shortcut: reads the host/password/ssl properties only; a spring.data.redis.url, Sentinel or Cluster setup is
         // judged by them too. Read DataRedisConnectionDetails if those become common.
         for (String warning : warnings(
@@ -119,6 +124,26 @@ class ProductionSettingsWarnings {
         if (flyway) {
             warnings.add("FLYWAY_ENABLED is true: the app's database role owns the schema, so a compromised app could"
                     + " drop tables or the trigger that keeps audit_events append-only; migrate with a separate role");
+        }
+        return warnings;
+    }
+
+    /**
+     * Lists the weakened webhook settings.
+     *
+     * @param allowPrivateAddresses whether webhooks may be delivered to internal addresses
+     * @param requireHttps          whether endpoint URLs must use HTTPS
+     * @return one message per weakened setting; empty when there is none
+     */
+    static List<String> webhookWarnings(boolean allowPrivateAddresses, boolean requireHttps) {
+        List<String> warnings = new ArrayList<>();
+        if (allowPrivateAddresses) {
+            warnings.add("WEBHOOKS_ALLOW_PRIVATE_ADDRESSES is true: users can make the server send requests to"
+                    + " internal services and cloud metadata (SSRF)");
+        }
+        if (!requireHttps) {
+            warnings.add("WEBHOOKS_REQUIRE_HTTPS is false: webhook payloads and signatures may cross the network in"
+                    + " plain text");
         }
         return warnings;
     }

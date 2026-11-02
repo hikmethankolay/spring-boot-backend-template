@@ -50,7 +50,8 @@ runs as the non-root user `10001` and exposes `8080` for the API and `8081` for 
 ```bash
 docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=prod \
   -e DB_URL=... -e DB_USERNAME=... -e DB_PASSWORD=... \
-  -e REDIS_HOST=... -e REDIS_PASSWORD=... -e JWT_SECRET=... -e MFA_ENCRYPTION_KEY=... -e MAIL_HOST=... \
+  -e REDIS_HOST=... -e REDIS_PASSWORD=... -e JWT_SECRET=... -e MFA_ENCRYPTION_KEY=... -e WEBHOOK_ENCRYPTION_KEY=... \
+  -e MAIL_HOST=... \
   -e CORS_ALLOWED_ORIGINS=https://app.example.com -e MAIL_LINK_BASE_URL=https://app.example.com \
   ghcr.io/hikmethankolay/spring-boot-backend-template:latest
 ```
@@ -279,6 +280,8 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
 - [ ] Generate a separate random `MFA_ENCRYPTION_KEY`, store it in your secret manager (not with the database
       backups) and back it up: losing it breaks every user's two-factor authentication. To rotate it, list the new
       key before the old one (see the Security guide).
+- [ ] Generate another random `WEBHOOK_ENCRYPTION_KEY` (not the same as `MFA_ENCRYPTION_KEY`) and keep it like that
+      one; losing it turns every webhook endpoint off until its owner rotates the secret. Rotate it the same way.
 - [ ] Back up PostgreSQL (point-in-time recovery) and test a restore (see the
       [restore drill](../runbooks/#restore-drill)).
 - [ ] Deploy only signed images: pin the digest, and install the Sigstore policy-controller with
