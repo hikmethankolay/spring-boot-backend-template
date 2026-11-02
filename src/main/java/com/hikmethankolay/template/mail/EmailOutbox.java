@@ -258,6 +258,9 @@ public class EmailOutbox {
                 try {
                     newTransaction.executeWithoutResult(
                             status -> outbox.lockById(id).ifPresent(email -> send(email, Instant.now())));
+                } catch (RuntimeException ex) {
+                    // The caller's transaction already committed, so it must not fail; sendDue retries the row.
+                    log.warn("Immediate send of email {} failed, leaving it to the outbox: {}", id, ex.getClass().getSimpleName());
                 } finally {
                     immediateSend.release();
                 }

@@ -2,6 +2,7 @@ package com.hikmethankolay.template.common;
 
 import java.util.List;
 import java.util.Set;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
@@ -32,17 +33,23 @@ public final class SortAllowList {
      * Checks every sort property of a request.
      *
      * @param pageable the requested page
-     * @return the same page request, for chaining
+     * @return the page request, ending with {@code id} so rows with equal sort values keep a stable order across
+     *         pages
      * @throws ApiException 400 naming the rejected property and the allowed ones
      */
     public Pageable check(Pageable pageable) {
-        for (Sort.Order order : pageable.getSort()) {
+        Sort sort = pageable.getSort();
+        for (Sort.Order order : sort) {
             if (!allowed.contains(order.getProperty())) {
                 throw ApiException.badRequest(
                         ProblemType.INVALID_SORT,
                         "Cannot sort by '" + order.getProperty() + "'. Allowed properties: " + description + ".");
             }
         }
-        return pageable;
+        // Without a unique last key, LIMIT/OFFSET may repeat or skip rows that tie on the requested sort.
+        if (pageable.isUnpaged() || sort.getOrderFor("id") != null) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort.and(Sort.by("id")));
     }
 }

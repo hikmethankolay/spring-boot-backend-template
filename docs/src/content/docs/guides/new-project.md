@@ -37,7 +37,7 @@ description: Turn the template into your own project.
     `src/main/resources/mail/` and queuing `MailRenderer.render(...)` with `EmailOutbox.enqueue`
     ([Email templates](../email-templates/)). A new security-relevant action also tells its user with a
     `SecurityMailer` alert, queued in the same transaction.
-11. Delete the features you don't need (for example `account/`), along with their tests. Two-factor authentication
+11. Delete the features you don't need (for example the `note/` example), along with their tests. Two-factor authentication
     and social login are wired into the login flow; see [Removing them](#removing-two-factor-authentication-or-social-login).
 12. Rewrite the README for your project, set the copyright holder in `LICENSE`, and enable *Private vulnerability
     reporting* in the repository's security settings. With your first release, set `newTag` in
@@ -50,7 +50,7 @@ description: Turn the template into your own project.
 
 ## Removing two-factor authentication or social login
 
-`note/` and `account/` are self-contained: delete the package and its tests. Two-factor authentication (`mfa/`) and
+`note/` is self-contained: delete the package and its tests. Keep `account/`: `auth/` calls it for sign-up. Two-factor authentication (`mfa/`) and
 login with GitHub and Google (`social/`) are also called from `auth/`, so they take a few more steps. Either can be
 removed on its own. Both change the API, so clients and `scripts/client.sh` output must follow.
 
@@ -60,7 +60,7 @@ removed on its own. Both change the API, so clients and `scripts/client.sh` outp
 </figure>
 
 Leave `V7__two_factor_and_social_login.sql` as it is; it has run in every existing database. Drop the tables in a new
-migration instead (`V13`, or `V14` for the second feature you remove). Back up first: for two-factor authentication,
+migration instead, with the next free version number. Back up first: for two-factor authentication,
 this turns it off for every enrolled user for good.
 
 ### Social login

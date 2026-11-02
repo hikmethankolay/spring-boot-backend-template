@@ -30,6 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Self-service sign-up, email verification and password reset.
@@ -206,14 +208,34 @@ public class AccountService {
      * @return {@code true} if no sign-up email went to the address within the cooldown
      */
     private boolean firstSignUpEmailInCooldown(String address) {
+        String key = signUpCooldownPrefix + SecureTokens.hash(address);
         try {
-            return Boolean.TRUE.equals(redis.opsForValue()
-                    .setIfAbsent(signUpCooldownPrefix + SecureTokens.hash(address), "1", RESEND_COOLDOWN));
+            boolean claimed = Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key, "1", RESEND_COOLDOWN));
+            if (claimed && TransactionSynchronizationManager.isSynchronizationActive()) {
+                // A rolled-back sign-up queued no email, so a retry within the cooldown must not be swallowed.
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) {
+                            releaseSignUpCooldown(key);
+                        }
+                    }
+                });
+            }
+            return claimed;
         } catch (DataAccessException ex) {
             log.warn(
                     "Sign-up email cooldown unavailable, sending anyway: {}",
                     ex.getClass().getSimpleName());
             return true;
+        }
+    }
+
+    private void releaseSignUpCooldown(String key) {
+        try {
+            redis.delete(key);
+        } catch (DataAccessException ex) {
+            log.warn("Could not release the sign-up email cooldown: {}", ex.getClass().getSimpleName());
         }
     }
 

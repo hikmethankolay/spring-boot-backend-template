@@ -88,7 +88,7 @@ architectures (`linux/amd64`, `linux/arm64`) share one tag; `docker pull` and `p
 [`deploy/kubernetes`](https://github.com/hikmethankolay/spring-boot-backend-template/tree/main/deploy/kubernetes) is a
 Kustomize base:
 
-- **Deployment:** two replicas, rolling updates without downtime, and startup, liveness and readiness probes on the
+- **Deployment:** at least two replicas (the autoscaler sets the count), rolling updates without downtime, and startup, liveness and readiness probes on the
   management port. A `preStop` pause plus graceful shutdown keeps in-flight requests from failing, and
   `terminationGracePeriodSeconds: 70` covers the pause (10 s), graceful shutdown (30 s) and the task executor's wait
   for a broadcast being queued (25 s); raise it if you lengthen any of them. The image runs the JVM with
@@ -154,6 +154,9 @@ For an existing database migrated by `app` itself, transfer the tables to `app_o
 2. The pushed tag starts the release workflow. Once it has published and signed the image, its `pin-digest` job
    commits the image digest to `kustomization.yaml` and `migrate-job.yaml` on `main`
    (`chore(deploy): pin the <version> image digest`). Pull it; until then the manifests still pin the previous digest.
+   Deploy from `main` at or after that commit, never from the release tag or its source archive: the tagged commit
+   is made before the image exists, so it keeps the previous release's digest for good, and as the digest wins over
+   the tag, it would run the previous image under the new version's name.
 3. Run the migration Job, then `kubectl apply -k deploy/kubernetes`.
 
 <figure>

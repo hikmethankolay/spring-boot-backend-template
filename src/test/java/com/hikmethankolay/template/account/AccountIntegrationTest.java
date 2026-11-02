@@ -59,6 +59,20 @@ class AccountIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void aRolledBackSignUpDoesNotHoldTheCooldown() {
+        String address = uniqueUsername() + "@example.com";
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            accounts.signUp(address);
+            status.setRollbackOnly();
+        });
+
+        // The rolled-back attempt queued nothing, so the retry within the cooldown still sends the link.
+        accounts.signUp(address);
+        outbox.sendDue(Instant.now());
+        assertThat(mail.latest(address, "Finish creating your account")).isPresent();
+    }
+
+    @Test
     void aSignUpLinkCreatesTheAccountOnce() throws Exception {
         String username = uniqueUsername();
         String address = username + "@example.com";

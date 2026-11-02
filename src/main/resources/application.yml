@@ -9,6 +9,11 @@ spring:
       shutdown:
         await-termination: true
         await-termination-period: 25s
+    scheduling:
+      # An email being sent when the app stops finishes instead of being interrupted and sent again after restart.
+      shutdown:
+        await-termination: true
+        await-termination-period: 25s
   config:
     # Optional .env file in the working directory; DOTENV_PATH points elsewhere (tests disable it).
     # Optional secrets as files, one per variable (e.g. a Kubernetes Secret mounted at /etc/app/secrets): files keep

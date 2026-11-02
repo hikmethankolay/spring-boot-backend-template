@@ -11,6 +11,30 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - A response kept for an `Idempotency-Key` could stay in Redis forever: it was written, given its 24-hour TTL and
   its key extended in three separate calls, so a Redis error or a stopped instance in between left a key without a
   TTL, which Redis never evicts under `noeviction`. The three now run as one script.
+- Paging a list sorted by a column with equal values (a note title, a user role) could show a row twice and skip
+  another, because `LIMIT`/`OFFSET` has no order among ties. `SortAllowList` now ends every sort with `id`.
+- A sign-up that failed after claiming its one-minute email cooldown (a database error) kept the cooldown, so a
+  retry within the minute answered 202 and sent nothing. The cooldown is now released when the transaction does
+  not commit.
+- An error while sending an email right after its transaction committed (no free database connection) answered
+  500 to a request whose changes were saved. It is now logged and the outbox sends the email on its next run.
+- The scheduler now waits up to 25 seconds for a running job, such as an email being sent, when the app stops,
+  instead of interrupting it and sending the email again after the restart.
+- `ProductionSettingsCheck` let a placeholder `MAIL_FROM` through when it had a display name
+  (`Acme <no-reply@example.com>`).
+- The Kubernetes Deployment set `replicas: 2` next to the autoscaler, so every `kubectl apply` scaled the pods back
+  to two. The autoscaler now owns the count.
+- `scripts\load-test.bat` pointed k6 at Mailpit on `localhost`, which inside the container is the container, so the
+  test's sign-ups always failed. It now uses `host.docker.internal`.
+- The guides said `account/` could be deleted on its own; `auth/` calls it for sign-up. They also suggested
+  migration numbers the template already uses, and `SECURITY.md` named 4.0 as the supported version.
+- The production guide now says to deploy from `main` after the digest is pinned, never from a release tag: the
+  tagged commit still pins the previous release's image digest, which wins over the tag.
+
+### Security
+
+- A login with an unknown identifier, often a password typed into the wrong field, used the identifier as part of
+  a Redis key for its lockout counter. The key now holds a hash of it, like the audit log already did.
 
 ## [4.2.2] - 2026-10-31
 

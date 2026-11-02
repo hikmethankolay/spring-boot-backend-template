@@ -21,6 +21,8 @@ if not defined CONTAINER (
 
 set "BASE_URL=%~1"
 if "%BASE_URL%"=="" set "BASE_URL=http://host.docker.internal:8080"
+rem The container is not on the host network, so localhost would be the container itself.
+if not defined MAILPIT_URL set "MAILPIT_URL=http://host.docker.internal:8025"
 if exist ".env" (
   if not defined ADMIN_USERNAME for /f "tokens=1,* delims==" %%a in ('findstr /b "ADMIN_USERNAME=" .env') do set "ADMIN_USERNAME=%%b"
   if not defined ADMIN_PASSWORD for /f "tokens=1,* delims==" %%a in ('findstr /b "ADMIN_PASSWORD=" .env') do set "ADMIN_PASSWORD=%%b"

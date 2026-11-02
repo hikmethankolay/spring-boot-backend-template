@@ -154,7 +154,7 @@ scripts/test.sh
 ```
 
 Then add your tables as Flyway migrations and your features as packages next to `user/`. Delete what you don't need,
-such as `account/`. The build checks the basics for you: controllers use services, entities stay out of the API,
+such as the `note/` example. The build checks the basics for you: controllers use services, entities stay out of the API,
 and every public class is documented. See [Using the template](https://hikmethankolay.github.io/spring-boot-backend-template/guides/new-project/).
 
 ## Documentation

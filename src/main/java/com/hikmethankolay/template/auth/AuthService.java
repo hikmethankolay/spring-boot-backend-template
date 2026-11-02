@@ -175,13 +175,13 @@ public class AuthService {
                 .findByUsernameOrEmail(identifier, identifier.toLowerCase(Locale.ROOT))
                 .map(User::getId)
                 .orElse(null);
+        // Users sometimes type their password into the identifier field: neither Redis nor the audit log gets the
+        // text, only a hash of it.
+        String fullIdentifierHash = SecureTokens.hash(identifier.toLowerCase(Locale.ROOT));
         // Keyed by user id, so the username and the email of one account share a single limit.
-        String accountKey =
-                "account:" + (accountId != null ? accountId.toString() : identifier.toLowerCase(Locale.ROOT));
+        String accountKey = "account:" + (accountId != null ? accountId.toString() : fullIdentifierHash);
         String ipKey = "ip:" + ClientIp.limitKey(clientIp);
-        // Users sometimes type their password into the identifier field: audit a short hash, never the text.
-        String identifierHash =
-                SecureTokens.hash(identifier.toLowerCase(Locale.ROOT)).substring(0, 12);
+        String identifierHash = fullIdentifierHash.substring(0, 12);
 
         if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
             audit.record(AuditEvent.LOGIN_BLOCKED, accountId, "identifierHash", identifierHash);

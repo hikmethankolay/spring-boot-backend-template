@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: app
 spec:
-  replicas: 2
+  # No replicas: the HorizontalPodAutoscaler (hpa.yaml, at least 2) owns the count, and a fixed value here would
+  # scale the pods back down on every kubectl apply.
   revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate

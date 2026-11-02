@@ -103,7 +103,11 @@ class ProductionSettingsCheck {
         if (address == null) {
             return false;
         }
-        String domain = address.substring(address.lastIndexOf('@') + 1).strip().toLowerCase(Locale.ROOT);
+        // "Name <a@example.com>" leaves a trailing '>' after the domain.
+        String domain = address.substring(address.lastIndexOf('@') + 1)
+                .strip()
+                .replaceFirst(">$", "")
+                .toLowerCase(Locale.ROOT);
         return List.of("example.com", "example.net", "example.org").stream()
                 .anyMatch(reserved -> domain.equals(reserved) || domain.endsWith("." + reserved));
     }

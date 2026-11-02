@@ -16,6 +16,7 @@ import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.auth.dto.LoginRequest;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ClientIp;
+import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.mfa.MfaService;
 import com.hikmethankolay.template.security.AppUserDetails;
 import com.hikmethankolay.template.security.LoginAttemptService;
@@ -98,7 +99,8 @@ class AuthServiceTest {
         // The cause, not a 401: GlobalExceptionHandler answers it 500.
         assertThatThrownBy(() -> service.login(new LoginRequest("alice", "secret", false), CLIENT_IP))
                 .isSameAs(outage);
-        verify(loginAttempts).giveBack(IP_KEY, "account:alice");
+        // An unknown identifier may be a mistyped password, so only its hash is a Redis key.
+        verify(loginAttempts).giveBack(IP_KEY, "account:" + SecureTokens.hash("alice"));
     }
 
     @Test
