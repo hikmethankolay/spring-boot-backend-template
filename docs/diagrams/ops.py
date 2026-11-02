@@ -28,7 +28,7 @@ def kubernetes():
     d.node(70, 156, 200, 60, "Service app", ":80 → port http", tag="SERVICE")
     d.node(470, 156, 200, 60, "Secrets as files", "/etc/app/secrets", tag="SECRET")
     d.node(50, 264, 360, 112, "App pods, database role app",
-           ["2 replicas · HPA 2–6 at 70% CPU", "PDB minAvailable 1",
+           ["HPA 2–6 replicas at 70% CPU", "PDB minAvailable 1",
             "rolling update: maxUnavailable 0, maxSurge 1", "probes /actuator/health/{liveness,readiness}"],
            tag="DEPLOYMENT", kind="box-focal")
     d.node(470, 264, 200, 72, "migrate", ["Flyway as app_owner", "app-migrator-secrets"], tag="JOB")
@@ -41,34 +41,39 @@ def kubernetes():
 
 
 def release_pipeline():
-    d = Diagram("release-pipeline", 720, 832, "Release pipeline",
-                "scripts/release.sh checks the repository, stamps the changelog and image tags, then commits, tags and "
-                "pushes atomically; the tag runs the release workflow, which tests, builds, signs and publishes the "
-                "image, then pins its digest and generates SLSA provenance, while an operator migrates and deploys.")
-    d.zone(40, 24, 640, 232, "YOUR MACHINE")
-    d.zone(40, 296, 640, 344, "GITHUB ACTIONS, ON THE TAG")
-    d.zone(40, 672, 640, 136, "CLUSTER, BY HAND")
-    d.wire((360, 152), (360, 184))
-    d.wire((240, 224), (240, 328), accent=True)
-    d.label(250, 280, "PUSH vX.Y.Z", anchor="start", accent=True)
-    d.wire((520, 224), (520, 272), (580, 272), (580, 328))
-    d.wire((240, 388), (240, 420))
-    d.wire((190, 516), (190, 556))
-    d.wire((360, 516), (360, 536), (450, 536), (450, 556))
-    d.wire((190, 616), (190, 712))
-    d.label(200, 660, "PULL MAIN", anchor="start")
+    d = Diagram("release-pipeline", 720, 1020, "Release pipeline",
+                "scripts/release.sh checks the repository, stamps the changelog and image tags, commits, pushes main "
+                "and starts the release workflow on main, which tests, builds and publishes the image, pins its digest "
+                "and tags that commit; the run on the tag checks the pin, signs, creates the GitHub release, SLSA "
+                "provenance and the docs site, while an operator migrates and deploys.")
+    d.zone(40, 24, 640, 212, "YOUR MACHINE")
+    d.zone(40, 268, 640, 288, "GITHUB ACTIONS, ON MAIN")
+    d.zone(40, 584, 640, 244, "GITHUB ACTIONS, ON THE TAG")
+    d.zone(40, 860, 640, 136, "CLUSTER, BY HAND")
+    d.wire((360, 152), (360, 168))
+    d.wire((240, 208), (240, 296), accent=True)
+    d.label(250, 252, "RUN ON MAIN, VERSION X.Y.Z", anchor="start", accent=True)
+    d.wire((240, 356), (240, 384))
+    d.wire((240, 444), (240, 472))
+    d.wire((240, 532), (240, 612), accent=True)
+    d.label(250, 572, "TAG vX.Y.Z, RUN ON IT", anchor="start", accent=True)
+    d.wire((400, 502), (620, 502), (620, 900))
+    d.label(630, 840, "PULL", anchor="start")
+    d.wire((190, 708), (190, 748))
+    d.wire((360, 708), (360, 728), (450, 728), (450, 748))
     d.node(120, 56, 480, 96, "scripts/release.sh <version>",
            ["checks: on main, clean, equal to origin/main,", "CHANGELOG notes; stamps the version and image",
             "tags, runs KubernetesManifestTest"], tag="SCRIPT")
-    d.node(120, 184, 480, 40, "commit, tag, git push --atomic after a yes")
-    d.node(80, 328, 320, 60, "test", "release.yml: ./mvnw verify", tag="JOB")
-    d.node(480, 328, 180, 60, "pages.yml", "docs for the tag", tag="WORKFLOW")
-    d.node(80, 420, 320, 96, "release",
-           ["amd64 + arm64 image, SBOM, provenance", "cosign sign and verify, signed SBOM",
+    d.node(120, 168, 480, 40, "commit; after a yes, push main and gh workflow run")
+    d.node(80, 296, 320, 60, "test", "release.yml: ./mvnw verify", tag="JOB")
+    d.node(80, 384, 320, 60, "build", "amd64 + arm64 image, SBOM, provenance", tag="JOB")
+    d.node(80, 472, 320, 60, "pin-and-tag", "digest → deploy/kubernetes, tag it", tag="JOB")
+    d.node(80, 612, 320, 96, "publish",
+           ["checks the tag pins the pushed image", "cosign sign and verify, signed SBOM",
             "GitHub release with notes"], tag="JOB", kind="box-focal")
-    d.node(80, 556, 220, 60, "pin-digest", "digest → deploy/kubernetes", tag="JOB")
-    d.node(340, 556, 220, 60, "provenance", "SLSA generator v2.1.0", tag="JOB")
-    d.node(80, 712, 560, 64, "Migrate, then deploy",
+    d.node(80, 748, 220, 56, "provenance", "SLSA generator v2.1.0", tag="JOB")
+    d.node(340, 748, 220, 56, "pages.yml", "docs for the tag", tag="WORKFLOW")
+    d.node(80, 900, 560, 64, "Migrate, then deploy",
            ["kubectl apply -f migrate-job.yaml, wait for it", "kubectl apply -k deploy/kubernetes"])
     d.save()
 
