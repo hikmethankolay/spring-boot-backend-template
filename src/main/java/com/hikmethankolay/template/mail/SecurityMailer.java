@@ -147,16 +147,48 @@ public class SecurityMailer {
      * @param provider the provider id, e.g. {@code github}
      */
     public void socialAccountLinked(String to, String provider) {
-        String name = switch (provider) {
-            case "github" -> "GitHub";
-            case "google" -> "Google";
-            default -> provider;
-        };
+        String name = providerName(provider);
         send(
                 "social-linked",
                 to,
                 "A " + name + " account was linked to your account",
                 "A " + name + " account was linked to your account, and can now be used to sign in.");
+    }
+
+    /**
+     * Reports that an external account was unlinked and can no longer sign in to this one.
+     *
+     * @param to       the user's address
+     * @param provider the provider id, e.g. {@code github}
+     */
+    public void socialAccountUnlinked(String to, String provider) {
+        String name = providerName(provider);
+        send(
+                "social-unlinked",
+                to,
+                "A " + name + " account was unlinked from your account",
+                "A " + name + " account was unlinked from your account, and can no longer be used to sign in.");
+    }
+
+    /**
+     * Reports that the two-factor recovery codes were replaced.
+     *
+     * @param to the user's address
+     */
+    public void recoveryCodesRegenerated(String to) {
+        send(
+                "recovery-codes-regenerated",
+                to,
+                "New two-factor recovery codes were created",
+                "New recovery codes were created for your account, and the old ones no longer work.");
+    }
+
+    private static String providerName(String provider) {
+        return switch (provider) {
+            case "github" -> "GitHub";
+            case "google" -> "Google";
+            default -> provider;
+        };
     }
 
     private void send(String alert, String to, String subject, String message, String... details) {

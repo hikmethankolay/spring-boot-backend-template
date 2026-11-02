@@ -64,6 +64,8 @@ refreshed, when it expires, and the `User-Agent` and IP of its login or last ref
 devices. `current` marks the session making the request. `DELETE /api/v1/users/me/sessions/{id}` ends one: its refresh
 tokens are deleted and its access tokens are rejected through Redis (by their `sid`), so that device is logged out at
 once. Ending the current session works like logging out. Another user's session id answers `404`, like an unknown one.
+`DELETE /api/v1/users/me/sessions` ends every session except the one making the request, the same way (audited as
+`auth.other_sessions_revoked` with the number of sessions ended).
 
 The client IP is `request.getRemoteAddr()`: behind a proxy, set `FORWARD_HEADERS_STRATEGY` (see
 [Rate limiting](#rate-limiting)), or every session shows the proxy's address.
@@ -156,7 +158,7 @@ do not retry a refresh automatically with the same token.
 | Event | Effect |
 |-------|--------|
 | Logout | The session of the presented access token and of the refresh token ends: its refresh tokens are deleted and its `sid` is denylisted, so older access tokens of that session stop working too |
-| Ending a session (`DELETE /api/v1/users/me/sessions/{id}`), reused refresh token | The session's refresh tokens are deleted and its `sid` is denylisted |
+| Ending a session (`DELETE /api/v1/users/me/sessions/{id}`), or all others (`DELETE /api/v1/users/me/sessions`), reused refresh token | The session's refresh tokens are deleted and its `sid` is denylisted |
 | Password change, password reset | Every session of the user ends: refresh tokens are deleted and all access tokens issued so far are rejected |
 | Admin changes a user's password, or the owner changes a role | Same, so a demoted administrator loses access immediately |
 | User deleted (by an admin, the owner or themselves) | Same; the refresh tokens are deleted with the user |
@@ -246,7 +248,7 @@ password or logged in on a newer version cannot log in until they reset their pa
   checks. Tokens are never logged.
 - Security alerts ([ADR 9](../../adr/0009-security-alerts-and-broadcast/)) tell a user about a sign-in from a new
   device and about changes to the password, email address (sent to the old address, without the new one), two-factor
-  authentication and linked accounts. They are queued in the transaction of the change, cannot be turned off by
+  authentication (including new recovery codes) and linked accounts (linked or unlinked). They are queued in the transaction of the change, cannot be turned off by
   users, and never contain tokens, codes or new values (`MAIL_SECURITY_ALERTS_ENABLED`,
   `MAIL_NEW_LOGIN_ALERT_ENABLED`).
 - A device is recognized by a device cookie set at login (random, stored as its SHA-256, HttpOnly, sent only to
@@ -271,6 +273,7 @@ Users can protect their account with an authenticator app (TOTP, RFC 6238: Googl
 |----------|---------|
 | `POST /api/v1/users/me/mfa/totp` | New secret and its `otpauth://` URI; show the URI as a QR code |
 | `POST /api/v1/users/me/mfa/totp/confirm` | Password and the first code from the app: turns 2FA on and returns ten recovery codes, once |
+| `POST /api/v1/users/me/mfa/totp/recovery-codes` | Replaces every recovery code with ten new ones, returned once; needs the password **and** a code from the app (not a recovery code) |
 | `DELETE /api/v1/users/me/mfa/totp` | Turns 2FA off; needs the password **and** a code or recovery code |
 | `POST /api/v1/auth/login/mfa` | Second login step: `{"mfaToken": "…", "code": "123456"}` |
 
@@ -334,6 +337,13 @@ Who logs in:
   (`409 social-account-conflict`): whoever registered the address may not own it.
 - Otherwise a new `USER` is created with the email marked verified and a random password; it can set a password
   through the password reset, which it needs to delete the account, change its email or turn on 2FA.
+
+`GET /api/v1/users/me/social-accounts` lists the linked accounts (`id`, `provider`, `linkedAt`; never the provider's
+user id). `DELETE /api/v1/users/me/social-accounts/{id}` with `{"currentPassword": "…"}` unlinks one, audited as
+`auth.social_account_unlinked` and reported by a security alert. Wrong passwords count as failed logins. Requiring the
+password means the account always keeps a way to sign in, so there is no "last login method" check: a user created
+by a social login sets a password through the reset first. Signing in with an unlinked provider account later works
+like a first social login (linked again if its verified email is the account's, otherwise a new account).
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/social-account-resolution-light.svg" width="712" height="728" alt="A provider account linked before logs in as its user; otherwise an unverified provider email gets 403, an email whose local account is unverified gets 409, an email with a verified account is linked to it, and an unknown email creates a new user; then the login proceeds." />
@@ -437,9 +447,9 @@ Security events are written to the `audit` logger and counted in the `security_a
 | Event | When |
 |-------|------|
 | `auth.login_succeeded`, `auth.login_failed`, `auth.login_blocked`, `auth.login_unverified`, `auth.login_suspended` | Login attempts |
-| `auth.mfa_failed`, `auth.recovery_code_used`, `auth.social_account_linked` | Second factor and social login |
-| `auth.logout`, `auth.session_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused`, `auth.session_expired_absolute` | Session changes |
-| `user.mfa_enabled`, `user.mfa_disabled` | Two-factor authentication turned on or off |
+| `auth.mfa_failed`, `auth.recovery_code_used`, `auth.social_account_linked`, `auth.social_account_unlinked` | Second factor and social login |
+| `auth.logout`, `auth.session_revoked`, `auth.other_sessions_revoked`, `auth.sessions_revoked`, `auth.refresh_token_reused`, `auth.session_expired_absolute` | Session changes |
+| `user.mfa_enabled`, `user.mfa_disabled`, `user.recovery_codes_regenerated` | Two-factor authentication turned on or off, new recovery codes |
 | `user.registered`, `user.registration_repeated`, `user.email_verified`, `user.email_change_requested`, `user.email_changed`, `user.password_changed` | Account changes |
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |
 | `user.account_deleted`, `user.data_exported` | Personal data requests |

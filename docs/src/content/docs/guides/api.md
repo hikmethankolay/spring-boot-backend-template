@@ -100,9 +100,13 @@ push and type-checks it, but check the generator you choose against your own bui
 | `GET` | `/api/v1/users/me/export` | authenticated | `200` JSON attachment |
 | `POST` | `/api/v1/users/me/mfa/totp` | authenticated | `200` new secret and `otpauth://` URI |
 | `POST` | `/api/v1/users/me/mfa/totp/confirm` | authenticated + password + code | `200` recovery codes, shown once |
+| `POST` | `/api/v1/users/me/mfa/totp/recovery-codes` | authenticated + password + authenticator code | `200` new recovery codes, shown once; the old ones stop working |
 | `DELETE` | `/api/v1/users/me/mfa/totp` | authenticated + password + code | `204` |
 | `GET` | `/api/v1/users/me/sessions` | authenticated | `200` active sessions, `current` marks this one |
+| `DELETE` | `/api/v1/users/me/sessions` | authenticated | `204`; every other session is logged out at once, this one stays |
 | `DELETE` | `/api/v1/users/me/sessions/{id}` | authenticated | `204`; that device is logged out at once |
+| `GET` | `/api/v1/users/me/social-accounts` | authenticated | `200` linked GitHub/Google accounts: `id`, `provider`, `linkedAt` |
+| `DELETE` | `/api/v1/users/me/social-accounts/{id}` | authenticated + password | `204`; that provider account can no longer sign in |
 | `GET` | `/api/v1/users?page=0&size=20&sort=createdAt,desc` | admin | `200` page |
 | `GET` | `/api/v1/users/{id}` | admin or that user | `200` |
 | `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; administrators: owner; role changes and deleting an administrator: owner + password | `200` / `204` |
@@ -171,6 +175,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:user-not-found` | 404 | No user has this id |
 | `urn:problem:note-not-found` | 404 | The caller has no note with this id (other users' notes look missing too) |
 | `urn:problem:session-not-found` | 404 | The caller has no session with this id (other users' sessions look missing too) |
+| `urn:problem:social-account-not-found` | 404 | The caller has no linked account with this id (other users' links look missing too) |
 | `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account (`POST /register` never answers `email-taken`) |
 | `urn:problem:password-too-short` | 400 | The new password has fewer than 15 characters (8 with two-factor authentication) |
 | `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |

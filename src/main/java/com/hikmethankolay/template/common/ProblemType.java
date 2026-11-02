@@ -94,6 +94,9 @@ public enum ProblemType {
     /** The caller has no session with the requested id; other users' sessions look the same as missing ones. */
     SESSION_NOT_FOUND("session-not-found", "The caller has no session with this id"),
 
+    /** The caller has no linked provider account with the requested id; other users' look the same as missing. */
+    SOCIAL_ACCOUNT_NOT_FOUND("social-account-not-found", "The caller has no linked provider account with this id"),
+
     /** The authenticator or recovery code is wrong, expired or already used. */
     INVALID_MFA_CODE("invalid-mfa-code", "The authenticator or recovery code is wrong, expired or already used"),
 

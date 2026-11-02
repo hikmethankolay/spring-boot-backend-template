@@ -205,14 +205,50 @@ class SecurityAlertIntegrationTest extends IntegrationTest {
                 .andExpect(status().isOk());
         assertThat(alert(address, "Two-factor authentication was turned on")).isPresent();
 
-        mockMvc.perform(delete(TOTP)
+        String codes = mockMvc.perform(post(TOTP + "/recovery-codes")
                         .with(bearer(token))
                         .with(fromIp("10.0.19.5"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"currentPassword":"%s","code":"%s"}""", PASSWORD, Totp.code(secret, step + 1))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(alert(address, "New two-factor recovery codes were created")).isPresent();
+
+        // The authenticator code of step + 1 is used up, so a new recovery code turns it off.
+        String recoveryCode = JsonPath.read(codes, "$.recoveryCodes[0]");
+        mockMvc.perform(delete(TOTP)
+                        .with(bearer(token))
+                        .with(fromIp("10.0.19.5"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"currentPassword":"%s","code":"%s"}""", PASSWORD, recoveryCode)))
                 .andExpect(status().isNoContent());
         assertThat(alert(address, "Two-factor authentication was turned off")).isPresent();
+    }
+
+    @Test
+    void unlinkingASocialAccountIsReported() throws Exception {
+        String username = uniqueUsername();
+        String address = username + "@example.com";
+        long id = register(username);
+        String token = login(username, PASSWORD);
+        Long linkId = jdbc.queryForObject(
+                "INSERT INTO social_identities (user_id, provider, subject) VALUES (?, 'github', ?) RETURNING id",
+                Long.class,
+                id,
+                username);
+
+        mockMvc.perform(delete("/api/v1/users/me/social-accounts/{id}", linkId)
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"currentPassword":"%s"}""", PASSWORD)))
+                .andExpect(status().isNoContent());
+        assertThat(alert(address, "A GitHub account was unlinked from your account"))
+                .isPresent();
     }
 
     private static byte[] base32Decode(String text) {

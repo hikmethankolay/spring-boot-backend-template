@@ -68,6 +68,28 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     int deleteAllByUserIdAndFamilyId(long userId, UUID familyId);
 
     /**
+     * Locks every token of the user's other sessions, like {@link #lockAllByUserIdAndFamilyId(long, UUID)} for one.
+     *
+     * @param userId   owner of the sessions
+     * @param familyId the session to leave out
+     * @return the locked tokens
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from RefreshToken t where t.userId = :userId and t.familyId <> :familyId")
+    List<RefreshToken> lockAllByUserIdExceptFamily(long userId, UUID familyId);
+
+    /**
+     * Deletes every token of the user's other sessions.
+     *
+     * @param userId   owner of the sessions
+     * @param familyId the session to keep
+     * @return the number of deleted tokens
+     */
+    @Modifying
+    @Query("delete from RefreshToken t where t.userId = :userId and t.familyId <> :familyId")
+    int deleteAllByUserIdExceptFamily(long userId, UUID familyId);
+
+    /**
      * Removes the used tokens of a session except one.
      *
      * @param familyId  the session

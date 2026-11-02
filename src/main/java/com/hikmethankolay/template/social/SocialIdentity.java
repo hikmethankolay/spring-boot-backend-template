@@ -46,6 +46,15 @@ public class SocialIdentity {
     }
 
     /**
+     * Returns the id of the link.
+     *
+     * @return the id, or {@code null} before it is saved
+     */
+    public Long getId() {
+        return id;
+    }
+
+    /**
      * Returns the linked user.
      *
      * @return the user id

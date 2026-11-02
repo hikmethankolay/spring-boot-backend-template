@@ -53,6 +53,9 @@ public enum AuditEvent {
     /** A user ended one of their sessions ({@code DELETE /api/v1/users/me/sessions/{id}}). */
     SESSION_REVOKED("auth.session_revoked", Level.INFO),
 
+    /** A user ended all their other sessions ({@code DELETE /api/v1/users/me/sessions}; details: sessions). */
+    OTHER_SESSIONS_REVOKED("auth.other_sessions_revoked", Level.INFO),
+
     /** A user changed their own password. */
     PASSWORD_CHANGED("user.password_changed", Level.INFO),
 
@@ -89,6 +92,9 @@ public enum AuditEvent {
     /** Two-factor authentication was turned off. */
     MFA_DISABLED("user.mfa_disabled", Level.WARN),
 
+    /** The recovery codes were replaced with new ones; the old ones stopped working. */
+    RECOVERY_CODES_REGENERATED("user.recovery_codes_regenerated", Level.INFO),
+
     /** A wrong second-factor code was entered at login. */
     MFA_FAILED("auth.mfa_failed", Level.WARN),
 
@@ -97,6 +103,9 @@ public enum AuditEvent {
 
     /** An external provider account was linked to a user. */
     SOCIAL_ACCOUNT_LINKED("auth.social_account_linked", Level.INFO),
+
+    /** A user unlinked an external provider account, which can no longer sign in to theirs. */
+    SOCIAL_ACCOUNT_UNLINKED("auth.social_account_unlinked", Level.INFO),
 
     /** An optional email category was turned on or off (details: category, enabled, source). */
     EMAIL_PREFERENCES_CHANGED("user.email_preferences_changed", Level.INFO),

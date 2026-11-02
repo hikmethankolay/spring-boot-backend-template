@@ -83,6 +83,30 @@ class SessionListIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void signingOutTheOtherSessionsLogsEveryOtherDeviceOutAndKeepsThisOne() throws Exception {
+        String username = uniqueUsername();
+        register(username);
+        Tokens laptop = loginTokens(username, PASSWORD);
+        Tokens phone = loginFromPhone(username);
+        Tokens tablet = loginTokens(username, PASSWORD);
+        String stranger = registerAndLogin(uniqueUsername());
+
+        mockMvc.perform(delete(SESSIONS).with(bearer(laptop.accessToken()))).andExpect(status().isNoContent());
+
+        for (Tokens other : List.of(phone, tablet)) {
+            mockMvc.perform(get("/api/v1/users/me").with(bearer(other.accessToken())))
+                    .andExpect(status().isUnauthorized());
+            refresh(other.refreshToken()).andExpect(status().isUnauthorized());
+        }
+        assertThat(sessions(laptop.accessToken()))
+                .singleElement()
+                .satisfies(s -> assertThat(s).containsEntry("current", true));
+        refresh(laptop.refreshToken()).andExpect(status().isOk());
+        // Other users' sessions are untouched.
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(stranger))).andExpect(status().isOk());
+    }
+
+    @Test
     void refreshingKeepsTheSessionAndWhenItStarted() throws Exception {
         String username = uniqueUsername();
         register(username);

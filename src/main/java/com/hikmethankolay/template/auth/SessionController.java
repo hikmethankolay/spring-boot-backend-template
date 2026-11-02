@@ -70,6 +70,23 @@ public class SessionController {
     }
 
     /**
+     * Ends every session of the caller except the one making the request.
+     *
+     * @param jwt the caller's token
+     */
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(
+            operationId = "revokeOtherSessions",
+            summary = "Sign out all other sessions",
+            description = "Logs every other device out: their refresh tokens stop working at once and their access "
+                    + "tokens are rejected. The session making this request stays signed in.")
+    @ApiResponse(responseCode = "204", description = "Every other session has ended")
+    public void revokeOthers(@AuthenticationPrincipal Jwt jwt) {
+        refreshTokens.revokeOthers(TokenService.userId(jwt), TokenService.sessionId(jwt));
+    }
+
+    /**
      * Ends one of the caller's sessions.
      *
      * @param jwt the caller's token
