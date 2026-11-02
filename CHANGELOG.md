@@ -6,6 +6,27 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- Personal access tokens for scripts and integrations: `POST/GET /api/v1/users/me/access-tokens` and
+  `DELETE /api/v1/users/me/access-tokens/{id}`. A `pat_…` token is sent as a bearer token, acts with its user's
+  current role (capped by `ACCESS_TOKENS_MAX_ROLE`) and a `READ` or `WRITE` scope, cannot call account self-service
+  under `/api/v1/users/me/**`, expires (`ACCESS_TOKENS_MAX_LIFETIME`) and is deleted when the user's sessions end.
+  Creating one needs the password, emails a security alert and is audited. Migration `V20__access_tokens.sql`;
+  settings `ACCESS_TOKENS_ENABLED`, `ACCESS_TOKENS_MAX_ROLE`, `ACCESS_TOKENS_ALLOW_WRITE`, `ACCESS_TOKENS_MAX_LIFETIME`
+  and `ACCESS_TOKENS_MAX_PER_USER`; [ADR 10](docs/src/content/docs/adr/0010-personal-access-tokens.md).
+- Outbound webhooks signed per Standard Webhooks: `/api/v1/webhooks` registers endpoints for `note.*` events (and
+  `user.registered` / `user.deleted` for administrators), rotates secrets, sends test events and shows a delivery log
+  with retries. Deliveries go through an outbox (`V21__webhooks.sql`), are retried with backoff for about three days
+  and turn an endpoint off on `410 Gone` or repeated failures. Every connection resolves through an SSRF guard that
+  refuses non-public addresses. Features publish events with `WebhookEvents.publish`. New dependency: Apache
+  HttpClient 5 (managed by Spring Boot); settings `WEBHOOKS_*` (the `prod` profile requires HTTPS and its startup check
+  warns about private addresses). **New required secret `WEBHOOK_ENCRYPTION_KEY`** (while webhooks are enabled):
+  signing secrets are encrypted under their own key, separate from `MFA_ENCRYPTION_KEY`; `scripts/setup.sh` adds it to
+  an existing `.env`, and deployments must add it to their secrets (or set `WEBHOOKS_ENABLED=false`);
+  [guide](docs/src/content/docs/guides/webhooks.md),
+  [ADR 11](docs/src/content/docs/adr/0011-webhooks.md).
+
 ### Fixed
 
 - The release workflow skipped the SLSA provenance on the tag run, because its jobs skipped there (test, build) failed

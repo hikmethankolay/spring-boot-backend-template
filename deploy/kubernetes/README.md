@@ -19,6 +19,7 @@ or newer (the `preStop` sleep action).
      --from-literal=DB_USERNAME=app --from-literal=DB_PASSWORD='...' \
      --from-literal=JWT_SECRET="$(openssl rand -base64 48)" \
      --from-literal=MFA_ENCRYPTION_KEY="$(openssl rand -base64 48)" \
+     --from-literal=WEBHOOK_ENCRYPTION_KEY="$(openssl rand -base64 48)" \
      --from-literal=REDIS_PASSWORD='...' \
      --from-literal=SPRING_MAIL_USERNAME='...' --from-literal=SPRING_MAIL_PASSWORD='...' \
      --from-literal=ADMIN_USERNAME=admin --from-literal=ADMIN_EMAIL='you@example.com' \

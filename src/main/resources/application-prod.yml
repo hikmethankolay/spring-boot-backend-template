@@ -18,6 +18,8 @@ app:
     secure: ${COOKIE_SECURE:true}
   account:
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:true}
+  webhooks:
+    require-https: ${WEBHOOKS_REQUIRE_HTTPS:true}
 
 springdoc:
   swagger-ui:

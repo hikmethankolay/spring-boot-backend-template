@@ -177,6 +177,49 @@ public class SecurityMailer {
                 "New recovery codes were created for your account, and the old ones no longer work.");
     }
 
+    /**
+     * Reports that a personal access token was created, which can call the API as this user until it expires.
+     *
+     * @param to        the user's address
+     * @param name      the label the user gave it
+     * @param scope     {@code READ} or {@code WRITE}
+     * @param expiresAt when it stops working
+     */
+    public void accessTokenCreated(String to, String name, String scope, Instant expiresAt) {
+        send(
+                "access-token-created",
+                to,
+                "A new access token was created for your account",
+                "A personal access token was created for your account. It can call the API as you until it expires "
+                        + "or you revoke it.",
+                "Name",
+                name,
+                "Scope",
+                scope,
+                "Expires",
+                WHEN.format(expiresAt));
+    }
+
+    /**
+     * Reports that a webhook endpoint was turned off because deliveries kept failing or the receiver asked to stop.
+     *
+     * @param to     the owner's address
+     * @param url    the endpoint URL
+     * @param reason why it was turned off
+     */
+    public void webhookDisabled(String to, String url, String reason) {
+        send(
+                "webhook-disabled",
+                to,
+                "A webhook endpoint was turned off",
+                "One of your webhook endpoints was turned off and no longer receives events. Fix the receiver, then turn "
+                        + "the endpoint back on.",
+                "Endpoint",
+                url,
+                "Reason",
+                reason);
+    }
+
     private static String providerName(String provider) {
         return switch (provider) {
             case "github" -> "GitHub";

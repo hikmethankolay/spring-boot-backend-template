@@ -68,8 +68,8 @@ difference; regenerate the file with `-Dopenapi.update=true`, see [API overview]
 - **Error Prone** finds an error-level bug pattern while compiling.
 - The **Maven Enforcer** finds a JDK older than 25, Maven older than 3.9, or conflicting dependency versions.
 
-**Mutation testing** (PIT) changes the code in the `security` and `auth` packages and checks that a test fails each
-time. It runs weekly in CI (`.github/workflows/mutation.yml`) and fails below the threshold in `pom.xml`; run it with
+**Mutation testing** (PIT) changes the code that decides who gets in and where requests go (the `security`, `auth`
+and `token` packages, and the webhook SSRF guard and signer) and checks that a test fails each time. It runs weekly in CI (`.github/workflows/mutation.yml`) and fails below the threshold in `pom.xml`; run it with
 `./mvnw test-compile org.pitest:pitest-maven:mutationCoverage` (report in `target/pit-reports`).
 
 ## Architecture tests

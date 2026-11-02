@@ -101,6 +101,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- Webhook delivery: its DnsResolver hook lets WebhookSender refuse private addresses at connect time. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -432,6 +437,10 @@
                     <targetClasses>
                         <param>com.hikmethankolay.template.security.*</param>
                         <param>com.hikmethankolay.template.auth.*</param>
+                        <param>com.hikmethankolay.template.token.*</param>
+                        <!-- The webhook SSRF guard and signatures; the delivery plumbing is covered by tests only. -->
+                        <param>com.hikmethankolay.template.webhook.WebhookAddressPolicy</param>
+                        <param>com.hikmethankolay.template.webhook.WebhookSigner</param>
                     </targetClasses>
                     <argLine>-javaagent:${org.mockito:mockito-core:jar} -Xshare:off -DDOTENV_PATH=${project.build.directory}/no-dotenv-in-tests</argLine>
                     <!-- The security code is exercised mostly by integration tests, which Surefire excludes. -->

@@ -65,7 +65,9 @@ class ArchitectureTest {
                     ROOT + ".note..",
                     ROOT + ".security..",
                     ROOT + ".social..",
-                    ROOT + ".user..")
+                    ROOT + ".token..",
+                    ROOT + ".user..",
+                    ROOT + ".webhook..")
             .because("every feature uses audit and common, so they must not use a feature back (no cycles); put "
                     + "endpoints that read them in the feature that owns the data");
 

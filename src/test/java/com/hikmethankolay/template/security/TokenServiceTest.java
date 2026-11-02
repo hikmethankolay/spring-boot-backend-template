@@ -291,7 +291,7 @@ class TokenServiceTest {
      * @return the decoder
      */
     private JwtDecoder decoder(AppProperties props) {
-        return securityConfig.jwtDecoder(new JwtKeys(props), props, revocations);
+        return securityConfig.jwtDecoder(new JwtKeys(props), props, revocations, null);
     }
 
     /**

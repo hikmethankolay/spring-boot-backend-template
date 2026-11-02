@@ -15,10 +15,12 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.HKDFParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Encrypts TOTP secrets with AES-256-GCM, so a copy of the database alone does not reveal them.
+ * Encrypts TOTP secrets (and, through a second instance with its own keys, webhook signing secrets) with AES-256-GCM,
+ * so a copy of the database alone does not reveal them.
  *
  * <p>The key is derived from {@code app.mfa.encryption-key} with HKDF-SHA256 (RFC 5869; info
  * {@code mfa-secret-v1}). Each value is {@code v1:} followed by {@code base64(iv || ciphertext || tag)} with a random
@@ -44,27 +46,42 @@ public class SecretCipher {
     /** Prefix of values encrypted with the HKDF-derived key. */
     static final String V1 = "v1:";
 
-    private static final byte[] V1_INFO = "mfa-secret-v1".getBytes(StandardCharsets.UTF_8);
-
     /** The derived keys, in the order of the setting: the first encrypts. */
     private final List<SecretKey> keys;
 
     /** The keys of values without the {@code v1:} prefix, one per setting. */
     private final List<SecretKey> legacyKeys;
 
+    /** The setting the keys come from, named in errors. */
+    private final String settingName;
+
     /**
-     * Creates the cipher.
+     * Creates the cipher of TOTP secrets, keyed by {@code MFA_ENCRYPTION_KEY}.
      *
      * @param properties application properties holding the encryption keys
      */
+    @Autowired
     public SecretCipher(AppProperties properties) {
-        List<String> settings = properties.mfa().encryptionKey();
+        this(properties.mfa().encryptionKey(), "mfa-secret-v1", "MFA_ENCRYPTION_KEY");
+    }
+
+    /**
+     * Creates a cipher for another kind of secret, with its own keys and HKDF info, so its values never decrypt with
+     * another purpose's key.
+     *
+     * @param settings    the keys, the first encrypting; may be empty if nothing is ever encrypted
+     * @param info        the HKDF info, e.g. {@code webhook-secret-v1}
+     * @param settingName the environment variable holding the keys, named in errors
+     */
+    public SecretCipher(List<String> settings, String info, String settingName) {
+        byte[] infoBytes = info.getBytes(StandardCharsets.UTF_8);
         this.keys = settings.stream()
-                .map(setting -> hkdf(setting.getBytes(StandardCharsets.UTF_8)))
+                .map(setting -> hkdf(setting.getBytes(StandardCharsets.UTF_8), infoBytes))
                 .toList();
         this.legacyKeys = settings.stream()
                 .<SecretKey>map(setting -> new SecretKeySpec(sha256(setting), "AES"))
                 .toList();
+        this.settingName = settingName;
     }
 
     /**
@@ -89,7 +106,7 @@ public class SecretCipher {
                                     .put(ciphertext)
                                     .array());
         } catch (GeneralSecurityException ex) {
-            throw new IllegalStateException("Could not encrypt the TOTP secret", ex);
+            throw new IllegalStateException("Could not encrypt the secret", ex);
         }
     }
 
@@ -109,7 +126,7 @@ public class SecretCipher {
                         .flatMap(key -> tryDecrypt(key, value, userId).stream())
                         .findFirst()
                         .orElseThrow(() -> new IllegalStateException(
-                                "Could not decrypt the TOTP secret; was its key removed from MFA_ENCRYPTION_KEY?"));
+                                "Could not decrypt the secret; was its key removed from " + settingName + "?"));
     }
 
     /**
@@ -155,11 +172,11 @@ public class SecretCipher {
      * @param setting the bytes of one {@code app.mfa.encryption-key}
      * @return the key
      */
-    private static SecretKey hkdf(byte[] setting) {
+    private static SecretKey hkdf(byte[] setting, byte[] info) {
         try {
             return KDF.getInstance("HKDF-SHA256")
                     .deriveKey(
-                            "AES", HKDFParameterSpec.ofExtract().addIKM(setting).thenExpand(V1_INFO, 32));
+                            "AES", HKDFParameterSpec.ofExtract().addIKM(setting).thenExpand(info, 32));
         } catch (GeneralSecurityException ex) {
             throw new IllegalStateException("HKDF-SHA256 is not available", ex);
         }

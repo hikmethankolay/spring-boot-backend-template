@@ -39,6 +39,32 @@ class ApiDocsSecurityCustomizerTest {
         assertThat(me.getResponses()).containsKey("401");
     }
 
+    /** Account self-service refuses personal access tokens, so it documents 403; reading the own profile does not. */
+    @Test
+    void accountSelfServiceDocumentsTheAccessTokenRefusal() {
+        Operation readProfile = operation();
+        Operation changeProfile = operation();
+        Operation sessions = operation();
+        Operation notes = operation();
+        Operation adminUser = operation();
+        OpenAPI openApi = new OpenAPI()
+                .paths(new Paths()
+                        .addPathItem(
+                                "/api/v1/users/me",
+                                new PathItem().get(readProfile).patch(changeProfile))
+                        .addPathItem("/api/v1/users/me/sessions", new PathItem().get(sessions))
+                        .addPathItem("/api/v1/notes", new PathItem().get(notes))
+                        .addPathItem("/api/v1/users/{id}", new PathItem().get(adminUser)));
+
+        customizer.customise(openApi);
+
+        assertThat(readProfile.getResponses()).doesNotContainKey("403");
+        assertThat(changeProfile.getResponses()).containsKey("403");
+        assertThat(sessions.getResponses()).containsKey("403");
+        assertThat(notes.getResponses()).doesNotContainKey("403");
+        assertThat(adminUser.getResponses()).doesNotContainKey("403");
+    }
+
     /** Components already in the document are reused, not replaced. */
     @Test
     void existingComponentsAreKept() {

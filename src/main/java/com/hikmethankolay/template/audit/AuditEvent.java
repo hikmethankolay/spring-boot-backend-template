@@ -114,7 +114,31 @@ public enum AuditEvent {
     EMAIL_PREFERENCES_CHANGED("user.email_preferences_changed", Level.INFO),
 
     /** The owner emailed an announcement to many users (details: broadcastId, category, queued, suppressed). */
-    BROADCAST_SENT("mail.broadcast_sent", Level.INFO);
+    BROADCAST_SENT("mail.broadcast_sent", Level.INFO),
+
+    /** A personal access token was created (details: tokenId, scope). */
+    ACCESS_TOKEN_CREATED("auth.access_token_created", Level.INFO),
+
+    /** The user revoked one of their access tokens (details: tokenId). */
+    ACCESS_TOKEN_REVOKED("auth.access_token_revoked", Level.INFO),
+
+    /** Every access token of the user was deleted because their sessions ended (details: accessTokens). */
+    ACCESS_TOKENS_REVOKED("auth.access_tokens_revoked", Level.INFO),
+
+    /** A webhook endpoint was registered (details: endpointId, events). */
+    WEBHOOK_CREATED("webhook.created", Level.INFO),
+
+    /** A webhook endpoint was changed by its owner (details: endpointId). */
+    WEBHOOK_UPDATED("webhook.updated", Level.INFO),
+
+    /** A webhook endpoint was deleted (details: endpointId). */
+    WEBHOOK_DELETED("webhook.deleted", Level.INFO),
+
+    /** A webhook signing secret was replaced (details: endpointId). */
+    WEBHOOK_SECRET_ROTATED("webhook.secret_rotated", Level.INFO),
+
+    /** The application turned a webhook endpoint off: 410 Gone or repeated failures (details: endpointId, reason). */
+    WEBHOOK_DISABLED("webhook.disabled", Level.WARN);
 
     private final String action;
 

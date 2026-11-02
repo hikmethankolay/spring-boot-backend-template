@@ -2,6 +2,9 @@ package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.common.IdempotencyFilter;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.token.AccessTokenDecoder;
+import com.hikmethankolay.template.token.AccessTokenPolicy;
+import com.hikmethankolay.template.token.AccessTokenService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Bean;
@@ -143,7 +146,8 @@ public class SecurityConfig {
             HttpSecurity http, SecurityProblemHandler problemHandler, BearerTokenResolver bearerTokenResolver)
             throws Exception {
         return applyCommonSettings(http, problemHandler)
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                // Authenticated, and within what a personal access token may do if one was sent.
+                .authorizeHttpRequests(auth -> auth.anyRequest().access(new AccessTokenPolicy()))
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .bearerTokenResolver(bearerTokenResolver)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
@@ -276,15 +280,21 @@ public class SecurityConfig {
 
     /**
      * Verifies signature (against any configured key), expiry, issuer, audience, the {@code at+jwt} type and
-     * revocation of incoming tokens.
+     * revocation of incoming tokens. Bearer values starting with {@code pat_} are personal access tokens, checked
+     * against the database instead ({@link AccessTokenDecoder}).
      *
-     * @param keys        the configured keys
-     * @param properties  application properties holding the issuer
-     * @param revocations denylist of revoked token ids
+     * @param keys         the configured keys
+     * @param properties   application properties holding the issuer
+     * @param revocations  denylist of revoked token ids
+     * @param accessTokens checks personal access tokens
      * @return the JWT decoder used by the resource server
      */
     @Bean
-    JwtDecoder jwtDecoder(JwtKeys keys, AppProperties properties, TokenRevocationService revocations) {
+    JwtDecoder jwtDecoder(
+            JwtKeys keys,
+            AppProperties properties,
+            TokenRevocationService revocations,
+            AccessTokenService accessTokens) {
         NimbusJwtDecoder decoder = keys.decoder();
         OAuth2TokenValidator<Jwt> notRevoked = jwt -> revocations.isRevoked(jwt)
                 ? OAuth2TokenValidatorResult.failure(
@@ -299,7 +309,7 @@ public class SecurityConfig {
                 new JwtTypeValidator(TokenService.ACCESS_TOKEN_TYPE, "application/" + TokenService.ACCESS_TOKEN_TYPE),
                 new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience)),
                 notRevoked));
-        return decoder;
+        return new AccessTokenDecoder(decoder, accessTokens);
     }
 
     /**

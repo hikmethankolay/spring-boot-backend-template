@@ -90,7 +90,7 @@ class SignUpTokensTest {
                 tokenService.issue(1L, "alice", Role.USER, UUID.randomUUID()).value();
 
         assertThat(tokens.verify(accessToken)).isEmpty();
-        assertThatThrownBy(() -> config.jwtDecoder(keys, properties, mock(TokenRevocationService.class))
+        assertThatThrownBy(() -> config.jwtDecoder(keys, properties, mock(TokenRevocationService.class), null)
                         .decode(tokens.issue("alice@example.com")))
                 .isInstanceOf(JwtException.class);
     }

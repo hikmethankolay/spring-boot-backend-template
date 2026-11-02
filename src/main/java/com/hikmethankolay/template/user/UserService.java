@@ -8,6 +8,7 @@ import com.hikmethankolay.template.common.SortAllowList;
 import com.hikmethankolay.template.common.Versioned;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.security.CallerRole;
 import com.hikmethankolay.template.security.LoginAttemptService;
 import com.hikmethankolay.template.user.dto.AdminUpdateUserRequest;
 import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
@@ -153,6 +154,7 @@ public class UserService {
         user.setEmailVerified(emailVerified);
         User saved = userRepository.save(user);
         audit.record(AuditEvent.USER_REGISTERED, saved.getId(), "role", role);
+        events.publishEvent(new UserRegistered(saved.getId(), saved.getUsername()));
         if (!emailVerified) {
             events.publishEvent(new EmailVerificationRequired(saved.getId()));
         }
@@ -501,6 +503,7 @@ public class UserService {
         }
         userRepository.delete(user);
         audit.record(AuditEvent.USER_DELETED_BY_ADMIN, id);
+        events.publishEvent(new UserDeleted(id));
         events.publishEvent(new SessionsInvalidated(id));
     }
 
@@ -525,6 +528,7 @@ public class UserService {
         }
         userRepository.delete(user);
         audit.record(AuditEvent.ACCOUNT_DELETED, id);
+        events.publishEvent(new UserDeleted(id));
         events.publishEvent(new SessionsInvalidated(id));
     }
 
@@ -541,16 +545,17 @@ public class UserService {
 
     /**
      * Loads the requester and checks that they are the owner. The role is read from the database, not
-     * from the access token, so a demotion applies even before the token expires.
+     * from the access token, so a demotion applies even before the token expires; the token must say OWNER too, so a
+     * personal access token capped below OWNER ({@code app.access-tokens.max-role}) cannot act as the owner.
      *
      * @param requesterId id of the user making the request
      * @param detail      explanation sent to the client when the requester is not the owner
      * @return the owner
-     * @throws ApiException 403 if the requester is not the owner
+     * @throws ApiException 403 if the requester is not the owner, or their token does not carry the owner role
      */
     private User requireOwner(long requesterId, String detail) {
         User requester = findUser(requesterId);
-        if (requester.getRole() != Role.OWNER) {
+        if (requester.getRole() != Role.OWNER || !CallerRole.atLeast(Role.OWNER)) {
             throw new ApiException(HttpStatus.FORBIDDEN, ProblemType.OWNER_REQUIRED, detail);
         }
         return requester;

@@ -11,6 +11,15 @@ class ProductionSettingsWarningsTest {
     private static final String VERIFIED_DB = "jdbc:postgresql://db.acme.test:5432/app?sslmode=verify-full";
 
     @Test
+    void webhooksThatCanReachInternalServicesOrSendPlainTextAreReported() {
+        assertThat(ProductionSettingsWarnings.webhookWarnings(false, true)).isEmpty();
+        assertThat(ProductionSettingsWarnings.webhookWarnings(true, false))
+                .hasSize(2)
+                .anySatisfy(warning -> assertThat(warning).startsWith("WEBHOOKS_ALLOW_PRIVATE_ADDRESSES"))
+                .anySatisfy(warning -> assertThat(warning).startsWith("WEBHOOKS_REQUIRE_HTTPS"));
+    }
+
+    @Test
     void hardenedSettingsGiveNoWarning() {
         assertThat(warnings(VERIFIED_DB, "redis.acme.test", "s3cret", true, false, true, false))
                 .isEmpty();

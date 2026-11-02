@@ -207,6 +207,41 @@ app:
       - path: /api/v1/admin/mail/broadcasts/**
         requests: 30
         window: 1h
+  access-tokens:
+    # Personal access tokens (Authorization: Bearer pat_...) for scripts and integrations. false rejects every
+    # token and the endpoints that create them.
+    enabled: ${ACCESS_TOKENS_ENABLED:true}
+    # The highest role a token acts with (USER, ADMIN or OWNER). A token acts with its user's current role, capped
+    # here: USER keeps the administrator and owner endpoints for interactive logins.
+    max-role: ${ACCESS_TOKENS_MAX_ROLE:OWNER}
+    # false makes every token read-only (GET, HEAD, OPTIONS), whatever scope it was created with.
+    allow-write-scope: ${ACCESS_TOKENS_ALLOW_WRITE:true}
+    max-lifetime: ${ACCESS_TOKENS_MAX_LIFETIME:365d}
+    max-per-user: ${ACCESS_TOKENS_MAX_PER_USER:20}
+  webhooks:
+    # Outbound webhooks (Standard Webhooks signatures). false stops queuing and sending and refuses the endpoints.
+    enabled: ${WEBHOOKS_ENABLED:true}
+    # Encrypts the endpoints' signing secrets in the database (AES-GCM): at least 32 random characters, separate from
+    # MFA_ENCRYPTION_KEY and kept out of the database backups. Comma-separated for rotation: the first key encrypts, all
+    # decrypt; an endpoint whose key is dropped is turned off until its secret is rotated. Required while enabled.
+    encryption-key: ${WEBHOOK_ENCRYPTION_KEY:}
+    # Role an endpoint owner needs for application-wide events such as user.registered (USER, ADMIN or OWNER).
+    admin-events-min-role: ${WEBHOOKS_ADMIN_EVENTS_MIN_ROLE:ADMIN}
+    # Refuse http:// endpoint URLs; true in the prod profile.
+    require-https: ${WEBHOOKS_REQUIRE_HTTPS:false}
+    # Deliver to loopback, private and link-local addresses. Local development only: in production it lets users
+    # make the server call internal services (SSRF).
+    allow-private-addresses: ${WEBHOOKS_ALLOW_PRIVATE_ADDRESSES:false}
+    max-endpoints-per-user: ${WEBHOOKS_MAX_ENDPOINTS_PER_USER:10}
+    connect-timeout: ${WEBHOOKS_CONNECT_TIMEOUT:5s}
+    response-timeout: ${WEBHOOKS_RESPONSE_TIMEOUT:10s}
+    # Attempts per delivery (backoff 30s, 2m, 10m, 1h, 6h, then daily: 8 attempts span about 3 days).
+    max-attempts: ${WEBHOOKS_MAX_ATTEMPTS:8}
+    # Failed attempts in a row after which an endpoint is turned off and its owner emailed.
+    disable-after-failures: ${WEBHOOKS_DISABLE_AFTER_FAILURES:24}
+    poll-interval: ${WEBHOOKS_POLL_INTERVAL:5s}
+    # How long sent and failed deliveries stay in the delivery log.
+    delivery-retention: ${WEBHOOKS_DELIVERY_RETENTION:7d}
   audit:
     # How long the audit_events table keeps events (at least 90 days, which the database enforces).
     retention: ${AUDIT_RETENTION:365d}

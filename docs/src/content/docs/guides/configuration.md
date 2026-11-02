@@ -34,6 +34,19 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `JWT_MAX_SESSION_TTL` / `JWT_REMEMBER_ME_MAX_SESSION_TTL` | `7d` / `90d` | Absolute session lifetime after the login, however often it is refreshed |
 | `MFA_ENCRYPTION_KEY` | *(required; `setup` fills it in)* | Encrypts two-factor secrets in the database and signs unsubscribe links, each key at least 32 characters; comma-separated, the first encrypts ([key rotation](../security/#rotating-mfa_encryption_key)). Dropping a key breaks what it encrypted and signed |
 | `MFA_CHALLENGE_TTL` | `5m` | Time to enter the authenticator code after the password |
+| `ACCESS_TOKENS_ENABLED` | `true` | [Personal access tokens](../security/#personal-access-tokens); `false` rejects every token and the endpoints that create them |
+| `ACCESS_TOKENS_MAX_ROLE` | `OWNER` | Highest role a token acts with (`USER`, `ADMIN`, `OWNER`); `USER` keeps administrator and owner endpoints for interactive logins |
+| `ACCESS_TOKENS_ALLOW_WRITE` | `true` | `false` makes every token read-only (`GET`, `HEAD`, `OPTIONS`), whatever its scope |
+| `ACCESS_TOKENS_MAX_LIFETIME` / `ACCESS_TOKENS_MAX_PER_USER` | `365d` / `20` | Longest lifetime a token may be created with (at least `1d`) / unexpired tokens per user |
+| `WEBHOOK_ENCRYPTION_KEY` | *(required while webhooks are on; `setup` fills it in)* | Encrypts webhook signing secrets in the database, each key at least 32 characters and separate from `MFA_ENCRYPTION_KEY`; comma-separated, the first encrypts. An endpoint whose key is dropped is turned off until its secret is rotated |
+| `WEBHOOKS_ENABLED` | `true` | [Outbound webhooks](../webhooks/); `false` stops queuing and sending and refuses the endpoints |
+| `WEBHOOKS_ADMIN_EVENTS_MIN_ROLE` | `ADMIN` | Role needed to receive application-wide events such as `user.registered` |
+| `WEBHOOKS_REQUIRE_HTTPS` | `false` (`true` in prod) | Refuse `http://` endpoint URLs |
+| `WEBHOOKS_ALLOW_PRIVATE_ADDRESSES` | `false` | Deliver to loopback and private addresses; local development only, never in production (SSRF) |
+| `WEBHOOKS_MAX_ENDPOINTS_PER_USER` | `10` | Endpoints per user |
+| `WEBHOOKS_CONNECT_TIMEOUT` / `WEBHOOKS_RESPONSE_TIMEOUT` | `5s` / `10s` | Time to connect to / hear back from a receiver |
+| `WEBHOOKS_MAX_ATTEMPTS` / `WEBHOOKS_DISABLE_AFTER_FAILURES` | `8` / `24` | Attempts per delivery / failed attempts in a row before an endpoint is turned off |
+| `WEBHOOKS_POLL_INTERVAL` / `WEBHOOKS_DELIVERY_RETENTION` | `5s` / `7d` | How often each instance sends due deliveries / how long finished ones stay in the delivery log |
 | `OAUTH2_REDIRECT_URI`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `http://localhost:3000/oauth2/callback`, *(none)* | Login with GitHub and Google; a provider is on when both of its values are set ([details](../security/#login-with-github-and-google)); *prod: must change* the redirect URI when a provider is on |
 | `COOKIE_SECURE` | `false` (`true` in prod) | Send the auth cookies over HTTPS only |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins (*prod: must change*) |

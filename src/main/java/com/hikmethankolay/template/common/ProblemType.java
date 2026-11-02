@@ -97,6 +97,43 @@ public enum ProblemType {
     /** The caller has no linked provider account with the requested id; other users' look the same as missing. */
     SOCIAL_ACCOUNT_NOT_FOUND("social-account-not-found", "The caller has no linked provider account with this id"),
 
+    /** The caller has no access token with the requested id; other users' tokens look the same as missing ones. */
+    ACCESS_TOKEN_NOT_FOUND("access-token-not-found", "The caller has no access token with this id"),
+
+    /** A new access token would outlive {@code app.access-tokens.max-lifetime}. */
+    ACCESS_TOKEN_LIFETIME_TOO_LONG(
+            "access-token-lifetime-too-long", "The requested lifetime is longer than this server allows"),
+
+    /** The caller already has {@code app.access-tokens.max-per-user} unexpired tokens. */
+    ACCESS_TOKEN_LIMIT_REACHED("access-token-limit-reached", "Revoke an access token before creating another"),
+
+    /** The caller has no webhook endpoint with the requested id; other users' look the same as missing ones. */
+    WEBHOOK_NOT_FOUND("webhook-not-found", "The caller has no webhook endpoint with this id"),
+
+    /** The endpoint has no delivery with the requested id. */
+    WEBHOOK_DELIVERY_NOT_FOUND("webhook-delivery-not-found", "The webhook endpoint has no delivery with this id"),
+
+    /** The endpoint URL is malformed, not HTTPS where required, or does not resolve to a public address. */
+    WEBHOOK_URL_INVALID("webhook-url-invalid", "The webhook URL is invalid or points to a non-public address"),
+
+    /** An unknown event type was requested. */
+    WEBHOOK_EVENT_TYPE_INVALID("webhook-event-type-invalid", "There is no webhook event type with this name"),
+
+    /** Application-wide events need {@code app.webhooks.admin-events-min-role}. */
+    WEBHOOK_EVENT_NOT_ALLOWED("webhook-event-not-allowed", "The caller's role cannot receive this webhook event"),
+
+    /** The caller already has {@code app.webhooks.max-endpoints-per-user} endpoints. */
+    WEBHOOK_LIMIT_REACHED("webhook-limit-reached", "Delete a webhook endpoint before registering another"),
+
+    /** The endpoint is turned off; turn it on before sending to it. */
+    WEBHOOK_ENDPOINT_DISABLED("webhook-endpoint-disabled", "The webhook endpoint is turned off"),
+
+    /** {@code app.webhooks.enabled} is {@code false}. */
+    WEBHOOKS_DISABLED("webhooks-disabled", "Webhooks are turned off on this server"),
+
+    /** {@code app.access-tokens.enabled} is {@code false}. */
+    ACCESS_TOKENS_DISABLED("access-tokens-disabled", "Personal access tokens are turned off on this server"),
+
     /** The authenticator or recovery code is wrong, expired or already used. */
     INVALID_MFA_CODE("invalid-mfa-code", "The authenticator or recovery code is wrong, expired or already used"),
 
