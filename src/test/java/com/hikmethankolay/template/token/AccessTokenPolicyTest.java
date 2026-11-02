@@ -47,6 +47,30 @@ class AccessTokenPolicyTest {
     }
 
     @Test
+    void aTokenCannotReachItsOwnAccountByIdEither() {
+        Authentication token = new JwtAuthenticationToken(jwt(true, "WRITE"), List.of());
+        Authentication login = new JwtAuthenticationToken(jwt(false, "WRITE"), List.of());
+
+        assertThat(granted(token, "GET", "/api/v1/users/1")).isTrue();
+        assertThat(granted(token, "GET", "/api/v1/users/1/security-events")).isFalse();
+        assertThat(granted(token, "PATCH", "/api/v1/users/1")).isFalse();
+        assertThat(granted(token, "DELETE", "/api/v1/users/1")).isFalse();
+        assertThat(granted(token, "GET", "/api/v1/users/2/security-events"))
+                .as("another user")
+                .isTrue();
+        assertThat(granted(token, "PATCH", "/api/v1/users/2")).isTrue();
+        assertThat(granted(login, "GET", "/api/v1/users/1/security-events")).isTrue();
+        // The controllers bind {id} as a number, so every spelling of 1 is the token's own account.
+        assertThat(granted(token, "GET", "/api/v1/users/01/security-events")).isFalse();
+        assertThat(granted(token, "GET", "/api/v1/users/+1/security-events")).isFalse();
+        assertThat(granted(token, "GET", "/api/v1/users/abc/security-events"))
+                .as("not a number")
+                .isFalse();
+        assertThat(granted(token, "GET", "/api/v1/users/01")).isTrue();
+        assertThat(granted(token, "GET", "/api/v1/users/me")).isTrue();
+    }
+
+    @Test
     void aReadTokenMayOnlyUseSafeMethods() {
         Authentication token = new JwtAuthenticationToken(jwt(true, "READ"), List.of());
 

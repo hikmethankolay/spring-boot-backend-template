@@ -152,15 +152,18 @@ public class WebhookService {
     public WebhookResponse update(long userId, long id, WebhookUpdateRequest request) {
         requireEnabled();
         WebhookEndpoint endpoint = find(userId, id);
+        // The subscriptions the endpoint ends up with are checked even when unchanged: otherwise a caller who may no
+        // longer receive application-wide events could point an existing subscription to them at a new URL.
+        List<String> types =
+                request.eventTypes() != null ? validEventTypes(userId, request.eventTypes()) : endpoint.getEventTypes();
+        requireMayReceive(userId, types);
         if (request.url() != null) {
             endpoint.setUrl(validUrl(request.url()));
         }
         if (request.description() != null) {
             endpoint.setDescription(blankToNull(request.description()));
         }
-        if (request.eventTypes() != null) {
-            endpoint.setEventTypes(validEventTypes(userId, request.eventTypes()));
-        }
+        endpoint.setEventTypes(types);
         if (request.enabled() != null) {
             endpoint.setEnabled(request.enabled());
             if (!request.enabled()) {
@@ -190,11 +193,13 @@ public class WebhookService {
      * @param userId the caller
      * @param id     the endpoint
      * @return the new secret, shown only now
-     * @throws ApiException 404 if the caller has no such endpoint
+     * @throws ApiException 403 if the endpoint has application-wide events the caller may not receive, 404 if the
+     *                      caller has no such endpoint
      */
     @Transactional
     public WebhookSecretResponse rotateSecret(long userId, long id) {
         WebhookEndpoint endpoint = find(userId, id);
+        requireMayReceive(userId, endpoint.getEventTypes());
         String secret = WebhookSigner.newSecret();
         endpoint.rotateSecret(encrypt(secret, userId), Instant.now().plus(ROTATION_OVERLAP));
         audit.record(AuditEvent.WEBHOOK_SECRET_ROTATED, userId, "endpointId", id);
@@ -214,6 +219,7 @@ public class WebhookService {
         requireEnabled();
         WebhookEndpoint endpoint = find(userId, id);
         requireEndpointEnabled(endpoint);
+        requireMayReceive(userId, endpoint.getEventTypes());
         return toResponse(events.queue(endpoint, WebhookEventType.TEST, Map.of("endpointId", id)));
     }
 
@@ -245,7 +251,9 @@ public class WebhookService {
     @Transactional
     public WebhookDeliveryResponse retry(long userId, long id, long deliveryId) {
         requireEnabled();
-        requireEndpointEnabled(find(userId, id));
+        WebhookEndpoint endpoint = find(userId, id);
+        requireEndpointEnabled(endpoint);
+        requireMayReceive(userId, endpoint.getEventTypes());
         WebhookDelivery delivery = deliveries
                 .findByIdAndEndpointId(deliveryId, id)
                 .orElseThrow(() -> ApiException.notFound(
@@ -288,14 +296,30 @@ public class WebhookService {
                         .orElseThrow(() -> ApiException.badRequest(
                                 ProblemType.WEBHOOK_EVENT_TYPE_INVALID, "There is no event type " + name + ".")))
                 .toList();
-        boolean adminEvents = types.stream().anyMatch(type -> type.audience() == WebhookEventType.Audience.ADMINS);
+        List<String> names = types.stream().map(WebhookEventType::type).toList();
+        requireMayReceive(userId, names);
+        return names;
+    }
+
+    /**
+     * Refuses to create, change, rotate, test or retry an endpoint with application-wide events unless the caller may
+     * receive them: both their stored role and the role of the request (a capped access token) must reach
+     * {@code app.webhooks.admin-events-min-role}.
+     *
+     * @param userId the caller
+     * @param types  the event names the endpoint has or will have
+     * @throws ApiException 403 if an event is application-wide and the caller may not receive it
+     */
+    private void requireMayReceive(long userId, List<String> types) {
+        boolean adminEvents = types.stream()
+                .flatMap(name -> WebhookEventType.of(name).stream())
+                .anyMatch(type -> type.audience() == WebhookEventType.Audience.ADMINS);
         if (adminEvents && !mayReceiveAdminEvents(userId)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     ProblemType.WEBHOOK_EVENT_NOT_ALLOWED,
                     "Application-wide events need the " + properties.adminEventsMinRole() + " role.");
         }
-        return types.stream().map(WebhookEventType::type).toList();
     }
 
     private boolean mayReceiveAdminEvents(long userId) {

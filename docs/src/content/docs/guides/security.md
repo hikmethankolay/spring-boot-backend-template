@@ -96,7 +96,8 @@ curl -s localhost:8080/api/v1/notes -H "Authorization: Bearer pat_…"
 - **What it can never do.** Account self-service under `/api/v1/users/me/**` (password, two-factor, sessions, linked
   accounts, email preferences, data export and the tokens themselves) answers `403` to a token: a leaked token cannot
   take the account over or mint more tokens. Only `GET /api/v1/users/me` is open, so a script can tell whose token it
-  holds.
+  holds. The same applies to the token's own account by id (`/api/v1/users/{its id}/**`, such as its security
+  events): only `GET /api/v1/users/{its id}` is open, while an administrator's token still reaches other accounts.
 - **Lifetime.** Every token expires (`expiresInDays`, at most `ACCESS_TOKENS_MAX_LIFETIME`). Revoking one with
   `DELETE /api/v1/users/me/access-tokens/{id}` takes effect on the next request. Everything that ends a user's
   sessions (password change or reset, role change, suspension, deletion) deletes all their tokens too.

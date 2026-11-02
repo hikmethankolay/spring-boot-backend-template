@@ -173,6 +173,62 @@ class AccessTokenIntegrationTest extends IntegrationTest {
                 .andExpect(jsonPath("$.type").value("urn:problem:webhook-event-not-allowed"));
     }
 
+    @Test
+    void anAdministratorsTokenReachesOtherAccountsButNotItsOwnById() throws Exception {
+        String owner = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        long ownerId = userId(owner);
+        long userId = register(uniqueUsername());
+        String token = token(create(owner, "admin script", "READ", 30, ADMIN_PASSWORD));
+
+        mockMvc.perform(get("/api/v1/users/{id}", ownerId).with(bearer(token))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/users/{id}/security-events", ownerId).with(bearer(token)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/users/0" + ownerId + "/security-events").with(bearer(token)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/users/{id}/security-events", userId).with(bearer(token)))
+                .andExpect(status().isOk());
+        revokeAll(owner);
+    }
+
+    @Test
+    void aCappedTokenCannotRedirectAnExistingAdminEventSubscription() throws Exception {
+        String owner = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        long ownerId = userId(owner);
+        long endpoint = ((Number) JsonPath.read(
+                        mockMvc.perform(post("/api/v1/webhooks")
+                                        .with(bearer(owner))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"url\":\"http://127.0.0.1:9/hook\","
+                                                + "\"eventTypes\":[\"user.registered\"]}"))
+                                .andExpect(status().isCreated())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "$.endpoint.id"))
+                .longValue();
+        try {
+            RequestPostProcessor cappedToUser = capped(ownerId, "USER");
+            mockMvc.perform(patch("/api/v1/webhooks/{id}", endpoint)
+                            .with(cappedToUser)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"url\":\"http://127.0.0.1:10/elsewhere\"}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.type").value("urn:problem:webhook-event-not-allowed"));
+            mockMvc.perform(post("/api/v1/webhooks/{id}/secret", endpoint).with(cappedToUser))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(post("/api/v1/webhooks/{id}/test", endpoint).with(cappedToUser))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(patch("/api/v1/webhooks/{id}", endpoint)
+                            .with(cappedToUser)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"eventTypes\":[\"note.created\"]}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.url").value("http://127.0.0.1:9/hook"));
+        } finally {
+            mockMvc.perform(delete("/api/v1/webhooks/{id}", endpoint).with(bearer(owner)));
+        }
+    }
+
     private static RequestPostProcessor capped(long userId, String role) {
         return jwt().jwt(token -> token.subject(Long.toString(userId))
                         .claim(AccessTokenService.TOKEN_ID_CLAIM, 1L)
@@ -219,6 +275,14 @@ class AccessTokenIntegrationTest extends IntegrationTest {
         for (int id : ids) {
             mockMvc.perform(delete(TOKENS + "/" + id).with(bearer(session)));
         }
+    }
+
+    private long userId(String session) throws Exception {
+        String me = mockMvc.perform(get("/api/v1/users/me").with(bearer(session)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return ((Number) JsonPath.read(me, "$.id")).longValue();
     }
 
     private static String token(ResultActions created) throws Exception {

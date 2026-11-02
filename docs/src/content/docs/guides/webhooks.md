@@ -28,8 +28,10 @@ its own receiver. `POST /api/v1/webhooks/{id}/test` queues a `webhook.test` even
 | `user.registered` | endpoints of users with at least `WEBHOOKS_ADMIN_EVENTS_MIN_ROLE` (default `ADMIN`) | `{userId, username}` |
 | `user.deleted` | the same | `{userId}` |
 
-Subscribing to `user.*` without that role answers `403`. The role is checked again on every event, so a demoted or
-suspended user stops receiving them.
+Subscribing to `user.*` without that role answers `403`, as does changing, rotating, testing or retrying an endpoint
+that has them; the check uses both the stored role and the role of the request, so a personal access token capped
+below it cannot use such an endpoint. The role is checked again on every event, so a demoted or suspended user stops
+receiving them.
 
 ## What a receiver gets
 

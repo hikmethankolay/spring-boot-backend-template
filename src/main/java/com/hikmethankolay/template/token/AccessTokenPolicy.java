@@ -21,6 +21,9 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
  *   <li>Account self-service under {@code /api/v1/users/me/**} (password, two-factor, sessions, linked accounts,
  *       email preferences, data export, the tokens themselves) needs an interactive login; only
  *       {@code GET /api/v1/users/me} is open to tokens, so a script can tell whose token it holds.</li>
+ *   <li>The same holds for the token's own account reached by id, {@code /api/v1/users/{id}/**} with the token's
+ *       user id (such as {@code /api/v1/users/7/security-events}, which "admin or that user" endpoints allow): only
+ *       {@code GET /api/v1/users/{id}} is open. Other users' accounts stay open to an administrator's token.</li>
  *   <li>A {@code READ} token may only send {@code GET}, {@code HEAD} and {@code OPTIONS}.</li>
  * </ul>
  *
@@ -42,6 +45,12 @@ public final class AccessTokenPolicy implements AuthorizationManager<RequestAuth
 
     private static final RequestMatcher ACCOUNT_SELF_SERVICE =
             PathPatternRequestMatcher.withDefaults().matcher(ACCOUNT_SELF_SERVICE_PATHS);
+
+    private static final PathPatternRequestMatcher ACCOUNT_BY_ID =
+            PathPatternRequestMatcher.withDefaults().matcher("/api/v1/users/{id}/**");
+
+    private static final RequestMatcher PROFILE_BY_ID =
+            PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/v1/users/{id}");
 
     private static final AuthorizationDecision GRANTED = new AuthorizationDecision(true);
 
@@ -76,7 +85,30 @@ public final class AccessTokenPolicy implements AuthorizationManager<RequestAuth
         if (ACCOUNT_SELF_SERVICE.matches(request) && !OWN_PROFILE.matches(request)) {
             return DENIED;
         }
+        RequestMatcher.MatchResult byId = ACCOUNT_BY_ID.matcher(request);
+        if (byId.isMatch()
+                && !PROFILE_BY_ID.matches(request)
+                && isOwnId(byId.getVariables().get("id"), jwt)) {
+            return DENIED;
+        }
         boolean readOnly = AccessTokenScope.READ.name().equals(jwt.getClaimAsString(AccessTokenService.SCOPE_CLAIM));
         return readOnly && !SAFE_METHODS.contains(request.getMethod()) ? DENIED : GRANTED;
+    }
+
+    /**
+     * Tells whether a path id names the token's own user, compared as the controllers bind it: as a number, so
+     * {@code 007} or {@code +7} is user 7 too.
+     *
+     * @param pathId the {@code {id}} of the path
+     * @param jwt    the token
+     * @return {@code true} if it is the token's user, or not a number at all (no controller accepts it, so a token is
+     *     refused rather than trusted)
+     */
+    private static boolean isOwnId(String pathId, Jwt jwt) {
+        try {
+            return Long.parseLong(pathId) == Long.parseLong(jwt.getSubject());
+        } catch (NumberFormatException ex) {
+            return true;
+        }
     }
 }
