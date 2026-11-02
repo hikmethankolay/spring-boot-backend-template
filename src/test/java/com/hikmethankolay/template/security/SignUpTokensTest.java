@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.hikmethankolay.template.TestProperties;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.user.Role;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -32,7 +33,8 @@ class SignUpTokensTest {
     private final AppProperties properties = TestProperties.create();
     private final JwtKeys keys = new JwtKeys(properties);
     private final StringRedisTemplate redis = mock(StringRedisTemplate.class, RETURNS_DEEP_STUBS);
-    private final SignUpTokens tokens = new SignUpTokens(config.jwtEncoder(keys), keys, properties, redis, "app");
+    private final SignUpTokens tokens =
+            new SignUpTokens(config.jwtEncoder(keys), keys, properties, redis, "app", new SimpleMeterRegistry());
 
     @Test
     void aTokenCarriesTheAddressItWasIssuedFor() {

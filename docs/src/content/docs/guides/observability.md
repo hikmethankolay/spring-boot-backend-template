@@ -15,6 +15,8 @@ Besides the standard JVM, HTTP (with latency histograms), HikariCP and cache met
 | Metric | Meaning |
 |--------|---------|
 | `security_audit_events_total{event}` | Security events, see [Audit log](../security/#audit-log) |
+| `security_fail_open_total{control}` | Requests a protection let through unchecked because Redis did not answer (`rate-limit`, `token-revocation`, `sign-up-link-reuse`, `sign-up-email-cooldown`) |
+| `client_address_not_public_total` | *prod only:* requests from a private, loopback or link-local address, usually a proxy that hides the client's address (see [Client IP behind a proxy](../production/#client-ip-behind-a-proxy)) |
 | `mail_outbox_pending` | Emails waiting to be sent, broadcasts not included |
 | `mail_outbox_broadcast_pending` | Broadcast emails waiting; they drain at up to 50 per `MAIL_OUTBOX_POLL_INTERVAL` per instance |
 | `mail_security_alerts_total{alert}` | Security alert emails queued, by alert (`new-login`, `password-changed`, …) |
@@ -32,11 +34,11 @@ holds alerting rules for the things that need a human:
 |-------|--------|
 | SLO | error and latency budgets burning too fast ([objectives](../runbooks/#service-level-objectives)) |
 | Availability | instance down, more than 5% 5xx responses, p95 latency above 1 s |
-| Security | more than 30 failed logins per minute, a reused refresh token, a role change |
+| Security | more than 30 failed logins per minute, a reused refresh token, a role change, a protection failing open because Redis did not answer |
 | Logs | any `ERROR` line, more than 10 warnings per minute (usually Redis unreachable) |
 | Email | emails given up after all retries, more than 100 emails waiting |
 | Background | a `@Scheduled` job (email dispatcher, token cleanup, audit retention) throwing |
-| Resources | requests waiting for database connections, heap above 90% |
+| Resources | requests waiting for database connections, heap above 90%, a container OOM-killed (needs kube-state-metrics) |
 
 Each alert has a [runbook](../runbooks/).
 

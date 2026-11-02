@@ -4,6 +4,8 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.config.AppProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -74,6 +76,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final List<Route> routes;
 
+    private final Counter failOpen;
+
     /**
      * Creates the filter.
      *
@@ -81,12 +85,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * @param resolver        Spring MVC's primary exception resolver
      * @param properties      application properties holding the limit
      * @param applicationName value of {@code spring.application.name}, used to namespace keys
+     * @param meterRegistry   registry for the fail-open counter
      */
     public RateLimitFilter(
             StringRedisTemplate redis,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver,
             AppProperties properties,
-            @Value("${spring.application.name}") String applicationName) {
+            @Value("${spring.application.name}") String applicationName,
+            MeterRegistry meterRegistry) {
         this.redis = redis;
         this.resolver = resolver;
         this.keyPrefix = applicationName + ":rate-limit:";
@@ -96,6 +102,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 .map(route -> new Route(
                         PathPatternParser.defaultInstance.parse(route.path()), route.requests(), route.window()))
                 .toList();
+        this.failOpen = FailOpen.counter(meterRegistry, "rate-limit");
     }
 
     /**
@@ -137,6 +144,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         } catch (DataAccessException ex) {
             log.warn("Rate limit check failed, allowing request: {}", ex.getMessage());
+            failOpen.increment();
             filterChain.doFilter(request, response);
             return;
         }

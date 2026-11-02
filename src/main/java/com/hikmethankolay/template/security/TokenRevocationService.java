@@ -1,6 +1,8 @@
 package com.hikmethankolay.template.security;
 
 import com.hikmethankolay.template.config.AppProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -45,21 +47,26 @@ public class TokenRevocationService {
 
     private final Duration accessTokenTtl;
 
+    private final Counter failOpen;
+
     /**
      * Creates the service.
      *
      * @param redis           Redis access
      * @param applicationName value of {@code spring.application.name}, used to namespace keys
      * @param properties      application properties holding the access token lifetime
+     * @param meterRegistry   registry for the fail-open counter
      */
     public TokenRevocationService(
             StringRedisTemplate redis,
             @Value("${spring.application.name}") String applicationName,
-            AppProperties properties) {
+            AppProperties properties,
+            MeterRegistry meterRegistry) {
         this.redis = redis;
         this.userKeyPrefix = applicationName + ":tokens-revoked-before:";
         this.sessionKeyPrefix = applicationName + ":revoked-session:";
         this.accessTokenTtl = properties.jwt().accessTokenTtl();
+        this.failOpen = FailOpen.counter(meterRegistry, "token-revocation");
     }
 
     /**
@@ -78,6 +85,7 @@ public class TokenRevocationService {
             redis.opsForValue().set(userKeyPrefix + userId, Long.toString(cutOff), accessTokenTtl.plusSeconds(1));
         } catch (DataAccessException ex) {
             log.warn("Could not revoke the tokens of user {}: {}", userId, ex.getMessage());
+            failOpen.increment();
         }
     }
 
@@ -93,6 +101,7 @@ public class TokenRevocationService {
             redis.opsForValue().set(sessionKeyPrefix + sessionId, "1", accessTokenTtl.plusSeconds(1));
         } catch (DataAccessException ex) {
             log.warn("Could not revoke the tokens of session {}: {}", sessionId, ex.getMessage());
+            failOpen.increment();
         }
     }
 
@@ -109,6 +118,7 @@ public class TokenRevocationService {
             return Optional.ofNullable(cutOff).map(value -> Instant.ofEpochSecond(Long.parseLong(value)));
         } catch (DataAccessException ex) {
             log.warn("Could not read the token cut-off of user {}: {}", userId, ex.getMessage());
+            failOpen.increment();
             return Optional.empty();
         }
     }
@@ -143,6 +153,7 @@ public class TokenRevocationService {
                     && issuedAt.getEpochSecond() < Long.parseLong(entries.get(0));
         } catch (DataAccessException ex) {
             log.warn("Could not check token revocation for user {}: {}", userId, ex.getMessage());
+            failOpen.increment();
             return false;
         }
     }

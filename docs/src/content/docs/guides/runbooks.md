@@ -92,6 +92,29 @@ Not an alert: a user reports activity they do not recognise, or an account is ab
 
 An administrator changed a role. Confirm with the actor in the `admin.role_changed` audit entry that it was intended.
 
+### SecurityControlFailingOpen
+
+Redis did not answer, and a protection let a request through unchecked (`security_fail_open_total{control}`):
+
+| `control` | What was skipped |
+|-----------|------------------|
+| `rate-limit` | The per-IP request limit |
+| `token-revocation` | Checking or recording a revoked access token: a logged-out or revoked token stays valid until it expires |
+| `sign-up-link-reuse` | Checking or recording that a sign-up link was already used |
+| `sign-up-email-cooldown` | The one-per-minute limit on sign-up emails to an address |
+
+Follow [WarningLogSpike](#warninglogspike): the cause is almost always Redis being unreachable. If revocations failed
+(`token-revocation`) while an incident was going on, revoke the affected users' sessions again once Redis is back.
+
+### Client address is not public
+
+Not an alert: `client_address_not_public_total` grows, and the log said "A request came from the non-public address"
+once after startup. Requests reach the app from a private, loopback or link-local address, which usually means the
+proxy in front of it does not pass the client's address on, so the rate limit, the login lockout and the audit log
+see every user as the proxy. Fix the ingress as described in
+[Client IP behind a proxy](../production/#client-ip-behind-a-proxy). Clients that really are on the private network
+(another service calling the API) also count here; ignore the counter then.
+
 ## Leaked secrets
 
 Not alerts: a secret turned up in a log, a repository, a ticket or a former employee's laptop. In Kubernetes the pods
@@ -272,3 +295,14 @@ Requests wait for a database connection.
 
 Heap above 90% for 10 minutes. Raise the container memory limit (the JVM uses 75% of it). If usage keeps climbing
 after restarts, take a heap dump to look for a leak.
+
+### ContainerOOMKilled
+
+The kernel killed the `app` container for using more memory than its limit (needs kube-state-metrics). A full heap
+does not cause this: the JVM exits on `OutOfMemoryError` by itself. The memory outside the heap (metaspace, thread
+stacks, direct buffers) did not fit next to it.
+
+1. `kubectl -n backend describe pod <pod>` shows `Last State: Terminated, Reason: OOMKilled`.
+2. Raise the memory limit in `deploy/kubernetes/deployment.yaml`, or lower the heap's share of it
+   (`-XX:MaxRAMPercentage=75` in the `Dockerfile`'s `ENTRYPOINT`).
+3. **Impact:** requests in flight on that pod failed; the other replicas kept serving.

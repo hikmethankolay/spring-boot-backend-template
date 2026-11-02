@@ -109,6 +109,60 @@ class AppPropertiesTest {
                 .isFalse();
     }
 
+    @Test
+    void durationsMustBePositive() {
+        Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        AppProperties.Jwt zeroAccessTtl = new AppProperties.Jwt(
+                Algorithm.RS256,
+                null,
+                List.of("pem"),
+                "issuer",
+                "audience",
+                Duration.ZERO,
+                Duration.ofDays(7),
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(90));
+
+        assertThat(validator.validate(zeroAccessTtl)).singleElement().satisfies(violation -> {
+            assertThat(violation.getPropertyPath()).hasToString("accessTokenTtl");
+            assertThat(violation.getMessage()).isEqualTo(AppProperties.POSITIVE);
+        });
+        assertThat(validator.validate(new AppProperties.Login(3, 5, Duration.ofMinutes(-1))))
+                .singleElement()
+                .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("lockDuration"));
+        assertThat(validator.validate(new AppProperties.Mfa(VARIED, Duration.ZERO)))
+                .singleElement()
+                .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("challengeTtl"));
+        assertThat(validator.validate(new AppProperties.Account(true, Duration.ofHours(24), Duration.ZERO, false)))
+                .singleElement()
+                .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("passwordResetTokenTtl"));
+        // Under a millisecond the rate limit would divide by zero.
+        assertThat(validator.validate(new AppProperties.RateLimit.Route("/x", 5, Duration.ofNanos(999_999))))
+                .singleElement()
+                .satisfies(violation -> assertThat(violation.getPropertyPath()).hasToString("window"));
+        assertThat(validator.validate(new AppProperties.RateLimit.Route("/x", 5, Duration.ofMillis(1))))
+                .isEmpty();
+    }
+
+    @Test
+    void rememberMeSessionsMayNotEndBeforeTheirInactivityLimit() {
+        assertThat(jwt(Algorithm.RS256, null, List.of("pem")).isRememberMeMaxSessionLongEnough())
+                .isTrue();
+        AppProperties.Jwt shorter = new AppProperties.Jwt(
+                Algorithm.RS256,
+                null,
+                List.of("pem"),
+                "issuer",
+                "audience",
+                Duration.ofMinutes(15),
+                Duration.ofDays(1),
+                Duration.ofDays(30),
+                Duration.ofDays(7),
+                Duration.ofDays(29));
+        assertThat(shorter.isRememberMeMaxSessionLongEnough()).isFalse();
+    }
+
     private static AppProperties.Jwt jwt(Algorithm algorithm, List<String> secret, List<String> privateKey) {
         return new AppProperties.Jwt(
                 algorithm,

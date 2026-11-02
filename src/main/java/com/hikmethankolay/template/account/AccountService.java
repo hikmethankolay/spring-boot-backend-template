@@ -6,6 +6,7 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.security.FailOpen;
 import com.hikmethankolay.template.security.SignUpTokens;
 import com.hikmethankolay.template.user.EmailChangeRequested;
 import com.hikmethankolay.template.user.EmailVerificationRequired;
@@ -14,6 +15,8 @@ import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
 import com.hikmethankolay.template.user.UserService;
 import com.hikmethankolay.template.user.dto.UserResponse;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -74,6 +77,8 @@ public class AccountService {
 
     private final String signUpCooldownPrefix;
 
+    private final Counter cooldownFailOpen;
+
     /**
      * Creates the service.
      *
@@ -86,6 +91,7 @@ public class AccountService {
      * @param audit       records security events
      * @param redis       throttles sign-up emails per address
      * @param applicationName prefix of the Redis keys
+     * @param meterRegistry registry for the fail-open counter
      */
     public AccountService(
             AccountTokenRepository tokens,
@@ -96,7 +102,8 @@ public class AccountService {
             AppProperties properties,
             AuditLog audit,
             StringRedisTemplate redis,
-            @Value("${spring.application.name}") String applicationName) {
+            @Value("${spring.application.name}") String applicationName,
+            MeterRegistry meterRegistry) {
         this.tokens = tokens;
         this.signUpTokens = signUpTokens;
         this.users = users;
@@ -106,6 +113,7 @@ public class AccountService {
         this.audit = audit;
         this.redis = redis;
         this.signUpCooldownPrefix = applicationName + ":sign-up-cooldown:";
+        this.cooldownFailOpen = FailOpen.counter(meterRegistry, "sign-up-email-cooldown");
     }
 
     /**
@@ -227,6 +235,7 @@ public class AccountService {
             log.warn(
                     "Sign-up email cooldown unavailable, sending anyway: {}",
                     ex.getClass().getSimpleName());
+            cooldownFailOpen.increment();
             return true;
         }
     }
@@ -235,7 +244,9 @@ public class AccountService {
         try {
             redis.delete(key);
         } catch (DataAccessException ex) {
-            log.warn("Could not release the sign-up email cooldown: {}", ex.getClass().getSimpleName());
+            log.warn(
+                    "Could not release the sign-up email cooldown: {}",
+                    ex.getClass().getSimpleName());
         }
     }
 
