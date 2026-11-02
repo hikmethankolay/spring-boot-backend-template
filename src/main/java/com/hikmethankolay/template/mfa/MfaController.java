@@ -4,6 +4,7 @@ import com.hikmethankolay.template.common.ApiDocs;
 import com.hikmethankolay.template.mfa.dto.ConfirmTotpRequest;
 import com.hikmethankolay.template.mfa.dto.DisableTotpRequest;
 import com.hikmethankolay.template.mfa.dto.RecoveryCodesResponse;
+import com.hikmethankolay.template.mfa.dto.RegenerateRecoveryCodesRequest;
 import com.hikmethankolay.template.mfa.dto.TotpEnrollmentResponse;
 import com.hikmethankolay.template.security.TokenService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <tr><th>Method</th><th>Path</th><th>Access</th><th>Success</th></tr>
  *   <tr><td>POST</td><td>/</td><td>authenticated</td><td>200 secret + otpauth URI</td></tr>
  *   <tr><td>POST</td><td>/confirm</td><td>authenticated</td><td>200 recovery codes</td></tr>
+ *   <tr><td>POST</td><td>/recovery-codes</td><td>authenticated + password + code</td><td>200 recovery codes</td></tr>
  *   <tr><td>DELETE</td><td>/</td><td>authenticated + password + code</td><td>204</td></tr>
  * </table>
  */
@@ -111,6 +113,45 @@ public class MfaController {
     public RecoveryCodesResponse confirm(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ConfirmTotpRequest request) {
         return mfaService.confirm(TokenService.userId(jwt), request.currentPassword(), request.code());
+    }
+
+    /**
+     * Replaces the recovery codes.
+     *
+     * @param jwt         the caller's token
+     * @param request     password and an authenticator code
+     * @param httpRequest the servlet request, used for the client IP
+     * @return the new recovery codes, shown only this once
+     */
+    @PostMapping("/recovery-codes")
+    @Operation(
+            operationId = "regenerateRecoveryCodes",
+            summary = "Create new recovery codes",
+            description = "Needs the password and a code from the app (not a recovery code). Replaces every recovery "
+                    + "code, used or not, with ten new ones; they cannot be shown again. Wrong passwords and codes "
+                    + "count as failed logins: repeated failures lock the IP and the account (429).")
+    @ApiResponse(
+            responseCode = "200",
+            description = "The new recovery codes; the old ones no longer work",
+            content = @Content(schema = @Schema(implementation = RecoveryCodesResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid input (see `errors`), or the password or the code is wrong",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Two-factor authentication is off",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "Temporarily unavailable because the failed-login counters cannot be checked",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public RecoveryCodesResponse regenerateRecoveryCodes(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody RegenerateRecoveryCodesRequest request,
+            HttpServletRequest httpRequest) {
+        return mfaService.regenerateRecoveryCodes(
+                TokenService.userId(jwt), request.currentPassword(), request.code(), httpRequest.getRemoteAddr());
     }
 
     /**

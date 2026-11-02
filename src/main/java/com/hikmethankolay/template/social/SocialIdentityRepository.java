@@ -23,4 +23,13 @@ public interface SocialIdentityRepository extends JpaRepository<SocialIdentity, 
      * @return the links, oldest first
      */
     List<SocialIdentity> findAllByUserIdOrderByIdAsc(long userId);
+
+    /**
+     * Finds a link if it belongs to the user.
+     *
+     * @param id     the link's id
+     * @param userId the user
+     * @return the link, or empty if the user has no link with this id
+     */
+    Optional<SocialIdentity> findByIdAndUserId(long id, long userId);
 }

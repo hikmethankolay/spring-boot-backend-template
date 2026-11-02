@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
+import java.util.function.BooleanSupplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -142,16 +143,36 @@ public class MfaService {
             throw ApiException.badRequest(ProblemType.INVALID_MFA_CODE, "The code is wrong or expired.");
         }
         user.enableTotp(step.getAsLong());
-        recoveryCodes.deleteAllByUserId(userId);
-        List<String> codes = new ArrayList<>(RECOVERY_CODE_COUNT);
-        for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
-            String recoveryCode = newRecoveryCode();
-            codes.add(recoveryCode);
-            recoveryCodes.save(new RecoveryCode(userId, SecureTokens.hash(normalize(recoveryCode))));
-        }
+        RecoveryCodesResponse codes = replaceRecoveryCodes(userId);
         audit.record(AuditEvent.MFA_ENABLED, userId);
         securityMailer.twoFactorEnabled(user.getEmail());
-        return new RecoveryCodesResponse(codes);
+        return codes;
+    }
+
+    /**
+     * Replaces all recovery codes with new ones, used or not. Like turning two-factor authentication off, it needs the
+     * password and a code from the app; a recovery code is not accepted, since it is about to be replaced.
+     *
+     * @param userId          the caller
+     * @param currentPassword the caller's password
+     * @param code            an authenticator code
+     * @param clientIp        address of the client, used for the lockout
+     * @return the new recovery codes, which cannot be shown again
+     * @throws ApiException 409 if two-factor authentication is off, 400 if the password or the code is wrong, 429 if
+     *                      the IP or account is blocked, 503 if the failed-login counters cannot be checked
+     */
+    @Transactional
+    public RecoveryCodesResponse regenerateRecoveryCodes(
+            long userId, String currentPassword, String code, String clientIp) {
+        User user = findUser(userId);
+        if (!user.isTotpEnabled()) {
+            throw ApiException.conflict(ProblemType.TOTP_NOT_ENABLED, "Two-factor authentication is off.");
+        }
+        requireBothFactors(user, currentPassword, clientIp, () -> checkTotp(user, normalize(code)));
+        RecoveryCodesResponse codes = replaceRecoveryCodes(userId);
+        audit.record(AuditEvent.RECOVERY_CODES_REGENERATED, userId);
+        securityMailer.recoveryCodesRegenerated(user.getEmail());
+        return codes;
     }
 
     /**
@@ -183,36 +204,7 @@ public class MfaService {
                     "Change your password to one with at least " + UserService.MIN_PASSWORD_LENGTH
                             + " characters before turning off two-factor authentication.");
         }
-        // The same keys as AuthService, so these failures and failed logins share one limit.
-        String accountKey = "account:" + userId;
-        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
-        if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
-            throw ApiException.tooManyRequests(
-                    ProblemType.LOGIN_LOCKED,
-                    "Too many failed attempts. Please try again later.",
-                    loginAttempts.lockDuration());
-        }
-        boolean passwordOk;
-        boolean codeOk;
-        boolean checked = false;
-        try {
-            passwordOk = passwordEncoder.matches(currentPassword, user.getPasswordHash());
-            codeOk = passwordOk && checkCode(user, code);
-            checked = true;
-        } finally {
-            // The code could not be checked (database down): no failed attempt.
-            if (!checked) {
-                loginAttempts.giveBack(ipKey, accountKey);
-            }
-        }
-        if (!passwordOk) {
-            throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
-        }
-        if (!codeOk) {
-            throw ApiException.badRequest(ProblemType.INVALID_MFA_CODE, "The code is wrong, expired or used.");
-        }
-        loginAttempts.reset(accountKey);
-        loginAttempts.release(ipKey);
+        requireBothFactors(user, currentPassword, clientIp, () -> checkCode(user, code));
         user.disableTotp();
         recoveryCodes.deleteAllByUserId(userId);
         audit.record(AuditEvent.MFA_DISABLED, userId);
@@ -235,24 +227,80 @@ public class MfaService {
                 .orElse(false);
     }
 
+    /**
+     * Checks the password and then the second factor, counting failures of either as failed logins of the IP and the
+     * account.
+     *
+     * @throws ApiException 400 if the password or the code is wrong, 429 if the IP or account is blocked
+     */
+    private void requireBothFactors(User user, String currentPassword, String clientIp, BooleanSupplier codeCheck) {
+        // The same keys as AuthService, so these failures and failed logins share one limit.
+        String accountKey = "account:" + user.getId();
+        String ipKey = "ip:" + ClientIp.limitKey(clientIp);
+        if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
+            throw ApiException.tooManyRequests(
+                    ProblemType.LOGIN_LOCKED,
+                    "Too many failed attempts. Please try again later.",
+                    loginAttempts.lockDuration());
+        }
+        boolean passwordOk;
+        boolean codeOk;
+        boolean checked = false;
+        try {
+            passwordOk = passwordEncoder.matches(currentPassword, user.getPasswordHash());
+            codeOk = passwordOk && codeCheck.getAsBoolean();
+            checked = true;
+        } finally {
+            // The code could not be checked (database down): no failed attempt.
+            if (!checked) {
+                loginAttempts.giveBack(ipKey, accountKey);
+            }
+        }
+        if (!passwordOk) {
+            throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
+        }
+        if (!codeOk) {
+            throw ApiException.badRequest(ProblemType.INVALID_MFA_CODE, "The code is wrong, expired or used.");
+        }
+        loginAttempts.reset(accountKey);
+        loginAttempts.release(ipKey);
+    }
+
+    /** Deletes the user's recovery codes and stores new ones, in the caller's transaction. */
+    private RecoveryCodesResponse replaceRecoveryCodes(long userId) {
+        recoveryCodes.deleteAllByUserId(userId);
+        List<String> codes = new ArrayList<>(RECOVERY_CODE_COUNT);
+        for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
+            String recoveryCode = newRecoveryCode();
+            codes.add(recoveryCode);
+            recoveryCodes.save(new RecoveryCode(userId, SecureTokens.hash(normalize(recoveryCode))));
+        }
+        return new RecoveryCodesResponse(codes);
+    }
+
     private boolean checkCode(User user, String code) {
         String normalized = normalize(code);
         if (normalized.length() == TOTP_DIGITS && normalized.chars().allMatch(Character::isDigit)) {
-            OptionalLong step;
-            try {
-                step = Totp.verify(secretOf(user), normalized, Instant.now().getEpochSecond(), user.getTotpLastStep());
-            } catch (IllegalStateException ex) {
-                // The encryption key changed: only recovery codes can still get the user in.
-                return false;
-            }
-            step.ifPresent(user::useTotpStep);
-            return step.isPresent();
+            return checkTotp(user, normalized);
         }
         boolean used = recoveryCodes.markUsed(user.getId(), SecureTokens.hash(normalized), Instant.now()) == 1;
         if (used) {
             audit.record(AuditEvent.RECOVERY_CODE_USED, user.getId());
         }
         return used;
+    }
+
+    /** Accepts an unused authenticator code and uses up its time step. */
+    private boolean checkTotp(User user, String normalized) {
+        OptionalLong step;
+        try {
+            step = Totp.verify(secretOf(user), normalized, Instant.now().getEpochSecond(), user.getTotpLastStep());
+        } catch (IllegalStateException ex) {
+            // The encryption key changed: only recovery codes can still get the user in.
+            return false;
+        }
+        step.ifPresent(user::useTotpStep);
+        return step.isPresent();
     }
 
     private byte[] secretOf(User user) {

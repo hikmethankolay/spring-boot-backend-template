@@ -165,6 +165,39 @@ class MfaIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void newRecoveryCodesNeedBothFactorsAndReplaceTheOldOnes() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        mockMvc.perform(regenerate(token, PASSWORD, "123456", "10.0.9.8"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:problem:totp-not-enabled"));
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        List<String> old = confirm(token, Totp.code(secret, step));
+
+        mockMvc.perform(regenerate(token, "wrong-password-here", Totp.code(secret, step + 1), "10.0.9.8"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:wrong-password"));
+        // A recovery code is not enough: it is about to be replaced.
+        mockMvc.perform(regenerate(token, PASSWORD, old.getFirst(), "10.0.9.8"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:invalid-mfa-code"));
+        String body = mockMvc.perform(regenerate(token, PASSWORD, Totp.code(secret, step + 1), "10.0.9.8"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        List<String> fresh = JsonPath.read(body, "$.recoveryCodes");
+
+        assertThat(fresh).hasSize(10).doesNotHaveDuplicates().doesNotContainAnyElementsOf(old);
+        mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.9"), old.get(1), "10.0.9.9"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value("urn:problem:invalid-mfa-code"));
+        mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.9"), fresh.getFirst(), "10.0.9.9"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void guessingTheCodeToTurnTwoFactorOffRunsIntoTheLockout() throws Exception {
         String token = registerAndLogin(uniqueUsername());
         byte[] secret = enroll(token);
@@ -235,6 +268,16 @@ class MfaIntegrationTest extends IntegrationTest {
     /** Turns 2FA off from its own IP: wrong passwords and codes count against it. */
     private static RequestBuilder disable(String token, String password, String code, String ip) {
         return delete(TOTP)
+                .with(bearer(token))
+                .with(fromIp(ip))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("""
+                        {"currentPassword":"%s","code":"%s"}""", password, code));
+    }
+
+    /** Asks for new recovery codes from its own IP: wrong passwords and codes count against it. */
+    private static RequestBuilder regenerate(String token, String password, String code, String ip) {
+        return post(TOTP + "/recovery-codes")
                 .with(bearer(token))
                 .with(fromIp(ip))
                 .contentType(MediaType.APPLICATION_JSON)

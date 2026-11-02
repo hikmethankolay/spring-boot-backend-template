@@ -13,7 +13,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -196,6 +198,23 @@ public class RefreshTokenService {
         }
         revocations.revokeSession(sessionId);
         audit.record(AuditEvent.SESSION_REVOKED, userId, "sessionId", sessionId);
+    }
+
+    /**
+     * Ends every session of a user except one: deletes their refresh tokens and revokes their access tokens.
+     *
+     * @param userId           owner of the sessions
+     * @param currentSessionId the session to keep, normally the caller's own
+     */
+    @Transactional
+    public void revokeOthers(long userId, UUID currentSessionId) {
+        // Without the lock, a refresh committing during the delete would leave its new token alive.
+        Set<UUID> ended = tokens.lockAllByUserIdExceptFamily(userId, currentSessionId).stream()
+                .map(RefreshToken::getFamilyId)
+                .collect(Collectors.toSet());
+        tokens.deleteAllByUserIdExceptFamily(userId, currentSessionId);
+        ended.forEach(revocations::revokeSession);
+        audit.record(AuditEvent.OTHER_SESSIONS_REVOKED, userId, "sessions", ended.size());
     }
 
     /**

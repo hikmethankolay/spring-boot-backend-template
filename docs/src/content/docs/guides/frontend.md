@@ -66,7 +66,8 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | `/oauth2/callback` | Only with GitHub or Google login: check `state`, then `POST /api/v1/auth/oauth2/{provider}` with `code` and `codeVerifier`; see [the steps](../security/#login-with-github-and-google) |
 | Account settings | `GET`/`PATCH /api/v1/users/me`, `PUT /api/v1/users/me/password`, two-factor enrollment, `GET /api/v1/users/me/export`, `DELETE /api/v1/users/me` with `{"password": "…"}`. A new email does not apply at once: while `pendingEmail` is set, show "Confirm the link we sent to …", with a button that sends the current email to cancel |
 | Recent activity | `GET /api/v1/users/me/security-events`: logins, failed logins, password and email changes, with time and IP |
-| Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others |
+| Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others and `DELETE /api/v1/users/me/sessions` to sign out all of them at once |
+| Linked accounts | `GET /api/v1/users/me/social-accounts`; offer `DELETE /api/v1/users/me/social-accounts/{id}` with `{"currentPassword": "…"}` to unlink one |
 | `/unsubscribe?token=…` | No login. `GET /api/v1/mail/unsubscribe?token=…` returns `{"category": "product-updates", "categoryName": "Product updates", "enabled": true}`; ask to confirm, then `POST /api/v1/mail/unsubscribe?token=…` (no body), or `POST …/unsubscribe/all?token=…` for every optional email. Never change anything on load: mail scanners open links. Serve the page with `Referrer-Policy: no-referrer`, since the token does not expire |
 | `/settings/emails` | `GET /api/v1/users/me/email-preferences` lists `[{"category", "name", "description", "enabled"}]`; save with `PUT` and `{"product-updates": false}`. Account and security emails are not listed and cannot be turned off |
 | `/settings/sessions` | Security alert emails link here: the Sessions page above, where a user ends the sessions they do not recognize |
@@ -103,7 +104,8 @@ try {
 
 To turn two-factor authentication on, `POST /api/v1/users/me/mfa/totp` returns an `otpauth://` URI: show it as a QR
 code (any QR library), then send the password and the first code to `/confirm` and show the ten recovery codes it
-returns. They are shown only once.
+returns. They are shown only once. `POST /api/v1/users/me/mfa/totp/recovery-codes` with the password and a code from
+the app replaces them with ten new ones, shown once as well.
 
 ## Refreshing
 

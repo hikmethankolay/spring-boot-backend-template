@@ -123,6 +123,38 @@ class RefreshTokenServiceTest {
         verify(audit).record(AuditEvent.SESSION_REVOKED, 1L, "sessionId", FAMILY);
     }
 
+    /** Signing out the other sessions ends each of them once, keeps the current one and is audited. */
+    @Test
+    void revokingTheOtherSessionsEndsEachOfThemAndKeepsTheCurrentOne() {
+        UUID other = UUID.randomUUID();
+        UUID another = UUID.randomUUID();
+        when(tokens.lockAllByUserIdExceptFamily(1L, FAMILY))
+                .thenReturn(List.of(tokenOf(other), tokenOf(other), tokenOf(another)));
+
+        service.revokeOthers(1L, FAMILY);
+
+        InOrder order = inOrder(tokens);
+        order.verify(tokens).lockAllByUserIdExceptFamily(1L, FAMILY);
+        order.verify(tokens).deleteAllByUserIdExceptFamily(1L, FAMILY);
+        verify(revocations).revokeSession(other);
+        verify(revocations).revokeSession(another);
+        verify(revocations, never()).revokeSession(FAMILY);
+        verify(audit).record(AuditEvent.OTHER_SESSIONS_REVOKED, 1L, "sessions", 2);
+    }
+
+    private static RefreshToken tokenOf(UUID familyId) {
+        return new RefreshToken(
+                1L,
+                familyId,
+                0,
+                SecureTokens.hash(UUID.randomUUID().toString()),
+                false,
+                STARTED.plusSeconds(60),
+                STARTED,
+                null,
+                null);
+    }
+
     /** Another user's session, or one that has ended, is reported as missing and nothing is revoked. */
     @Test
     void revokingAnUnknownSessionIsNotFound() {
