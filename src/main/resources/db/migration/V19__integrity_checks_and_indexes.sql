@@ -34,9 +34,11 @@ ALTER TABLE users VALIDATE CONSTRAINT ck_users_username_no_at;
 -- The outbox poll: WHERE next_attempt_at <= :now ORDER BY (broadcast_id IS NOT NULL), id LIMIT n FOR UPDATE SKIP
 -- LOCKED. The leading keys match the ORDER BY, so the scan stops after n due rows without sorting a large broadcast;
 -- next_attempt_at as the last key lets emails waiting for a retry be skipped in the index, without reading their rows.
--- It replaces V15's (broadcast_id IS NOT NULL), id, its prefix. V4's next_attempt_at index stays, for the planner to
--- use while almost nothing is due (SMTP down, everything in backoff).
-CREATE INDEX IF NOT EXISTS ix_email_outbox_due ON email_outbox ((broadcast_id IS NOT NULL), id, next_attempt_at);
+-- It replaces V18's (broadcast_id IS NOT NULL), id, its prefix, and like it leaves out dead letters (failed_at set),
+-- which the poll never reads. V4's next_attempt_at index stays, for the planner to use while almost nothing is due
+-- (SMTP down, everything in backoff).
+CREATE INDEX IF NOT EXISTS ix_email_outbox_due ON email_outbox ((broadcast_id IS NOT NULL), id, next_attempt_at)
+    WHERE failed_at IS NULL;
 DROP INDEX ix_email_outbox_send_order;
 
 -- A user's security events, newest first (SecurityEvents; read backwards for oldest first). Replaces the user_id
