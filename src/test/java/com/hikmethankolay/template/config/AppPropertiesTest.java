@@ -77,6 +77,38 @@ class AppPropertiesTest {
     }
 
     @Test
+    void mailSettingsAreValidated() {
+        Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        AppProperties.Mail.SecurityAlerts alerts =
+                new AppProperties.Mail.SecurityAlerts(true, true, Duration.ofDays(90));
+
+        assertThat(validator.validate(mail("Acme", 500, Duration.ofSeconds(10), alerts)))
+                .isEmpty();
+        assertThat(validator.validate(mail(" ", 0, Duration.ZERO, alerts)))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactlyInAnyOrder("appName", "broadcastBatchSize", "outboxPollInterval");
+        assertThat(validator.validate(mail(
+                        "Acme", 500, Duration.ofSeconds(10), new AppProperties.Mail.SecurityAlerts(true, true, null))))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactly("securityAlerts.newLoginLookback");
+    }
+
+    private static AppProperties.Mail mail(
+            String appName, int batchSize, Duration pollInterval, AppProperties.Mail.SecurityAlerts alerts) {
+        return new AppProperties.Mail(
+                "no-reply@acme.test",
+                "https://app.acme.test",
+                "https://api.acme.test",
+                10,
+                Duration.ofSeconds(30),
+                appName,
+                batchSize,
+                pollInterval,
+                Duration.ofDays(7),
+                alerts);
+    }
+
+    @Test
     void mfaKeyMustNotBeRepeatedText() {
         Duration ttl = Duration.ofMinutes(5);
 

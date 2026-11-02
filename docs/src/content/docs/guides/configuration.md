@@ -50,7 +50,8 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `MAIL_SECURITY_ALERTS_ENABLED` / `MAIL_NEW_LOGIN_ALERT_ENABLED` | `true` / `true` | Security alert emails ([list](../email-templates/#security-alerts)); the second turns only the new-sign-in alert off |
 | `MAIL_NEW_LOGIN_LOOKBACK` | `90d` | A device unused this long is forgotten (except the user's latest), and a sign-in from it is reported again |
 | `MAIL_BROADCAST_BATCH_SIZE` | `500` | Owner broadcasts queue this many recipients per transaction |
-| `MAIL_MAX_ATTEMPTS` / `MAIL_RETRY_DELAY` / `MAIL_OUTBOX_POLL_INTERVAL` | `10` / `30s` / `10s` | Email outbox retries (the delay doubles after each failure, up to 1 hour) |
+| `MAIL_MAX_ATTEMPTS` / `MAIL_RETRY_DELAY` / `MAIL_OUTBOX_POLL_INTERVAL` | `10` / `30s` / `10s` | Email outbox retries (the delay doubles after each failure, up to 1 hour). An email given up is kept as a dead letter (see [Runbooks](../runbooks/#emailsdropped)) |
+| `MAIL_DEAD_LETTER_RETENTION` | `7d` | How long an email given up after `MAIL_MAX_ATTEMPTS` is kept for re-queuing before it is deleted |
 | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | *(none; `setup` fills them in)* | The owner account (role `OWNER`, see [Security](../security/#roles)), created only when all three are set and no owner exists; they must pass the registration rules or startup fails |
 | `TRACING_SAMPLING_PROBABILITY` | `1.0` (`0.1` in prod) | Share of requests traced |
 | `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` | *(none)* | OTLP collector, e.g. `http://otel-collector:4318/v1/traces` |

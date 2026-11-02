@@ -1,9 +1,10 @@
 package com.hikmethankolay.template.mail;
 
+import com.hikmethankolay.template.config.AppProperties;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.thymeleaf.TemplateEngine;
@@ -37,11 +38,20 @@ public class MailRenderer {
     /**
      * Creates the renderer.
      *
+     * @param properties application properties holding the app name and the frontend's URL
+     */
+    @Autowired
+    public MailRenderer(AppProperties properties) {
+        this(properties.mail().appName(), properties.mail().linkBaseUrl());
+    }
+
+    /**
+     * Creates the renderer.
+     *
      * @param appName     the application name shown in every email
      * @param linkBaseUrl the frontend's URL, for the unsubscribe and preferences links
      */
-    public MailRenderer(
-            @Value("${app.mail.app-name}") String appName, @Value("${app.mail.link-base-url}") String linkBaseUrl) {
+    MailRenderer(String appName, String linkBaseUrl) {
         this.appName = appName;
         this.linkBaseUrl = linkBaseUrl;
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();

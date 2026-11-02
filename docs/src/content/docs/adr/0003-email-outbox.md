@@ -14,7 +14,10 @@ process stops between commit and send.
 ## Decision
 
 Emails are written to the `email_outbox` table in the same transaction as the change. A scheduled dispatcher sends
-them with retries and backoff, and gives up after a fixed number of attempts.
+them with retries and backoff, and gives up after a fixed number of attempts. An email given up is kept in the table
+as a dead letter (`failed_at` set), which the dispatcher skips, so it can be re-queued after a long SMTP outage; dead
+letters are deleted after a retention period (`app.mail.dead-letter-retention`, 7 days by default). Any exception from
+the send counts as a failed attempt, so a bug in one email cannot make the dispatcher retry it forever.
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/email-outbox-light.svg" width="720" height="588" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or dropped." />
@@ -23,7 +26,8 @@ them with retries and backoff, and gives up after a fixed number of attempts.
 
 ## Consequences
 
-- An email is sent only if its change committed, and survives restarts and SMTP outages.
+- An email is sent only if its change committed, and survives restarts and SMTP outages. Even one given up survives
+  until its retention ends; it still holds its links, tokens included, until then.
 - Delivery is asynchronous (seconds, not milliseconds), and needs monitoring: `mail_outbox_pending` and
   `mail_outbox_dropped_total` have alerts.
 - The commit is normally followed by one immediate send attempt. Emails an anonymous request sends only when an

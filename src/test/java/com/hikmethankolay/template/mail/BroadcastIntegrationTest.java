@@ -40,6 +40,9 @@ class BroadcastIntegrationTest extends IntegrationTest {
     private JdbcTemplate jdbc;
 
     @Autowired
+    private BroadcastService broadcasts;
+
+    @Autowired
     private TransactionTemplate transaction;
 
     private static MockHttpServletRequestBuilder broadcast(
@@ -61,6 +64,42 @@ class BroadcastIntegrationTest extends IntegrationTest {
     private int pending(long broadcastId) {
         return jdbc.queryForObject(
                 "SELECT count(*) FROM email_outbox WHERE broadcast_id = ?", Integer.class, broadcastId);
+    }
+
+    private int queuedTo(long broadcastId, String recipient) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM email_outbox WHERE broadcast_id = ? AND recipient = ?",
+                Integer.class,
+                broadcastId,
+                recipient);
+    }
+
+    @Test
+    void stalledBroadcastIsResumedAfterTheLastUserItQueued() throws Exception {
+        String before = uniqueUsername();
+        long beforeId = register(before);
+        String after = uniqueUsername();
+        register(after);
+        // As if its instance crashed ten minutes ago, right after the batch that ended with the first user.
+        long id = jdbc.queryForObject("""
+                INSERT INTO mail_broadcasts (category, subject, title, body, roles, verified_only, created_at,
+                    last_user_id, progress_at)
+                VALUES ('product-updates', 'Resume test', 'Resumed', 'Body', 'USER', FALSE,
+                    now() - interval '10 minutes', ?, now() - interval '10 minutes')
+                RETURNING id""", Long.class, beforeId);
+
+        broadcasts.resumeStalled();
+
+        for (int wait = 0; wait < 200 && finishedAt(id) == null; wait++) {
+            Thread.sleep(50);
+        }
+        assertThat(finishedAt(id)).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT partial FROM mail_broadcasts WHERE id = ?", Boolean.class, id))
+                .isFalse();
+        assertThat(queuedTo(id, before + "@example.com")).isZero();
+        assertThat(queuedTo(id, after + "@example.com")).isOne();
+        assertThat(jdbc.queryForObject("SELECT queued FROM mail_broadcasts WHERE id = ?", Integer.class, id))
+                .isEqualTo(pending(id));
     }
 
     @Test

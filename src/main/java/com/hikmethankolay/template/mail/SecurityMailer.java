@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.mail;
 
+import com.hikmethankolay.template.config.AppProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -7,7 +8,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -46,23 +46,17 @@ public class SecurityMailer {
      * @param outbox          queues the alerts
      * @param renderer        renders the alert template
      * @param meterRegistry   registry for the alert counter
-     * @param linkBaseUrl     the frontend's URL, for the link to the sessions page
-     * @param enabled         whether alerts are sent at all
-     * @param newLoginEnabled whether sign-ins from new devices are reported
+     * @param properties    application properties holding the frontend's URL (for the link to the sessions page)
+     *                      and the alert switches
      */
     public SecurityMailer(
-            EmailOutbox outbox,
-            MailRenderer renderer,
-            MeterRegistry meterRegistry,
-            @Value("${app.mail.link-base-url}") String linkBaseUrl,
-            @Value("${app.mail.security-alerts.enabled}") boolean enabled,
-            @Value("${app.mail.security-alerts.new-login-enabled}") boolean newLoginEnabled) {
+            EmailOutbox outbox, MailRenderer renderer, MeterRegistry meterRegistry, AppProperties properties) {
         this.outbox = outbox;
         this.renderer = renderer;
         this.meterRegistry = meterRegistry;
-        this.sessionsUrl = linkBaseUrl + "/settings/sessions";
-        this.enabled = enabled;
-        this.newLoginEnabled = newLoginEnabled;
+        this.sessionsUrl = properties.mail().linkBaseUrl() + "/settings/sessions";
+        this.enabled = properties.mail().securityAlerts().enabled();
+        this.newLoginEnabled = properties.mail().securityAlerts().newLoginEnabled();
     }
 
     /**

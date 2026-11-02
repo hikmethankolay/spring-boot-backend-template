@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -73,18 +72,15 @@ public class KnownDevices {
      *
      * @param jdbc       database access
      * @param mailer     sends the new-login alert
-     * @param properties application properties holding the cookie settings
-     * @param lookback   how long an unused device is remembered
+     * @param properties application properties holding the cookie settings and how long an unused device is
+     *                   remembered
      */
-    public KnownDevices(
-            JdbcTemplate jdbc,
-            SecurityMailer mailer,
-            AppProperties properties,
-            @Value("${app.mail.security-alerts.new-login-lookback}") Duration lookback) {
+    public KnownDevices(JdbcTemplate jdbc, SecurityMailer mailer, AppProperties properties) {
         this.jdbc = jdbc;
         this.mailer = mailer;
         this.cookieName = properties.cookie().deviceCookieName();
-        this.lookbackSeconds = lookback.toSeconds();
+        this.lookbackSeconds =
+                properties.mail().securityAlerts().newLoginLookback().toSeconds();
     }
 
     /**

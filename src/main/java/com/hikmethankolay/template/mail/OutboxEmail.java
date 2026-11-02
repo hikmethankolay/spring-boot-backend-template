@@ -9,7 +9,8 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * An email waiting to be sent (table {@code email_outbox}). Rows are deleted once sent or given up.
+ * An email waiting to be sent (table {@code email_outbox}). Rows are deleted once sent; a row given up is kept as a
+ * dead letter ({@code failed_at} set) until the retention cleanup deletes it.
  */
 @Entity
 @Table(name = "email_outbox")
@@ -50,6 +51,9 @@ public class OutboxEmail {
 
     @Column(name = "broadcast_id")
     private Long broadcastId;
+
+    @Column(name = "failed_at")
+    private Instant failedAt;
 
     /** Constructor required by JPA. */
     protected OutboxEmail() {}
@@ -188,5 +192,23 @@ public class OutboxEmail {
         this.lastError =
                 error == null || error.length() <= MAX_ERROR_LENGTH ? error : error.substring(0, MAX_ERROR_LENGTH);
         this.nextAttemptAt = nextAttemptAt;
+    }
+
+    /**
+     * Gives the email up: the dispatcher skips it from now on, and the retention cleanup deletes it.
+     *
+     * @param now the time it was given up
+     */
+    public void markFailed(Instant now) {
+        this.failedAt = now;
+    }
+
+    /**
+     * Returns when the email was given up.
+     *
+     * @return the time, or {@code null} while it is still retried
+     */
+    public Instant getFailedAt() {
+        return failedAt;
     }
 }

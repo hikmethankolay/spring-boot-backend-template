@@ -104,9 +104,12 @@ loses it:
    so the response time does not tell whether the address has an account.
 2. If SMTP fails, it is retried every `MAIL_OUTBOX_POLL_INTERVAL` with exponential backoff from `MAIL_RETRY_DELAY`
    (30 s, 1 min, 2 min, … up to 1 hour).
-3. After `MAIL_MAX_ATTEMPTS` attempts it is dropped, an error is logged and `mail_outbox_dropped_total` grows.
+3. After `MAIL_MAX_ATTEMPTS` attempts it is given up, an error is logged and `mail_outbox_dropped_total` grows. The
+   row stays as a dead letter (`failed_at` set): no longer sent, but there to re-queue after a long outage (see the
+   [runbook](../runbooks/#emailsdropped)) until `MAIL_DEAD_LETTER_RETENTION` (7 days) has passed.
 
-Rows are deleted once sent or dropped, so links with tokens do not stay in the database. Several instances can send at
+Rows are deleted once sent, and dead letters after their retention, so links with tokens do not stay in the database
+longer than needed. Several instances can send at
 the same time: rows are locked with `FOR UPDATE SKIP LOCKED`, so no email goes out twice. Use `EmailOutbox.enqueue`
 for your own emails.
 

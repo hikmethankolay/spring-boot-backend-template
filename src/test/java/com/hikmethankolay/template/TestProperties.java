@@ -63,7 +63,12 @@ public final class TestProperties {
                         "http://localhost:3000",
                         "http://localhost:8080",
                         10,
-                        Duration.ofSeconds(30)),
+                        Duration.ofSeconds(30),
+                        "Template",
+                        500,
+                        Duration.ofSeconds(10),
+                        Duration.ofDays(7),
+                        new AppProperties.Mail.SecurityAlerts(true, true, Duration.ofDays(90))),
                 new AppProperties.Admin(null, null, null),
                 new AppProperties.Mfa(List.of(MFA_KEY), Duration.ofMinutes(5)),
                 new AppProperties.SocialLogin(

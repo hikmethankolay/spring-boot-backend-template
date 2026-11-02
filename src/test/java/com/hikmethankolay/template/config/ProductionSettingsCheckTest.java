@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hikmethankolay.template.TestProperties;
-import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails;
@@ -194,11 +193,25 @@ class ProductionSettingsCheckTest {
                 p.login(),
                 p.rateLimit(),
                 p.account(),
-                new AppProperties.Mail("no-reply@acme.test", linkBaseUrl, linkBaseUrl, 10, Duration.ofSeconds(30)),
+                mail(p.mail(), "no-reply@acme.test", linkBaseUrl),
                 p.admin(),
                 p.mfa(),
                 new AppProperties.SocialLogin(
                         redirectUri, github ? new AppProperties.SocialLogin.Client("id", "secret") : none, none));
+    }
+
+    private static AppProperties.Mail mail(AppProperties.Mail m, String from, String linkBaseUrl) {
+        return new AppProperties.Mail(
+                from,
+                linkBaseUrl,
+                linkBaseUrl,
+                m.maxAttempts(),
+                m.retryDelay(),
+                m.appName(),
+                m.broadcastBatchSize(),
+                m.outboxPollInterval(),
+                m.deadLetterRetention(),
+                m.securityAlerts());
     }
 
     private static AppProperties withFrom(AppProperties p, String from) {
@@ -210,7 +223,17 @@ class ProductionSettingsCheckTest {
                 p.login(),
                 p.rateLimit(),
                 p.account(),
-                new AppProperties.Mail(from, m.linkBaseUrl(), m.unsubscribeBaseUrl(), m.maxAttempts(), m.retryDelay()),
+                new AppProperties.Mail(
+                        from,
+                        m.linkBaseUrl(),
+                        m.unsubscribeBaseUrl(),
+                        m.maxAttempts(),
+                        m.retryDelay(),
+                        m.appName(),
+                        m.broadcastBatchSize(),
+                        m.outboxPollInterval(),
+                        m.deadLetterRetention(),
+                        m.securityAlerts()),
                 p.admin(),
                 p.mfa(),
                 p.socialLogin());
