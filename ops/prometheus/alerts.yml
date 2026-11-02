@@ -152,7 +152,7 @@ groups:
           severity: critical
         annotations:
           summary: "Emails were given up after all retries"
-          description: "Users did not receive verification or password reset emails. Check the SMTP settings."
+          description: "Users did not receive verification, password reset or security alert emails. They are kept as dead letters (failed_at); fix SMTP, then re-queue them (runbooks: EmailsDropped)."
 
       - alert: EmailBacklog
         expr: max by (application) (mail_outbox_pending) > 100

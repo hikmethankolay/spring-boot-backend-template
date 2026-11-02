@@ -41,14 +41,16 @@ import org.springframework.web.util.UriComponentsBuilder;
  *       arrives without delay.</li>
  *   <li>Emails that failed are retried by {@link #sendDue()} every {@code app.mail.outbox-poll-interval},
  *       with exponential backoff from {@code app.mail.retry-delay} (capped at one hour), until
- *       {@code app.mail.max-attempts} is reached; then the email is dropped and an error is logged.</li>
+ *       {@code app.mail.max-attempts} is reached; then an error is logged and the email is kept as a dead letter
+ *       ({@code failed_at} set): no longer sent, but there to re-queue after a long outage, until
+ *       {@code app.mail.dead-letter-retention} has passed. Any exception from the send counts as a failed attempt.</li>
  * </ul>
  *
  * <p>An email with an HTML body is sent as {@code multipart/alternative} with its text body as the fallback; one
  * without is sent as plain text.</p>
  *
- * <p>Sent and dropped emails are deleted, so links with tokens are not kept in the database longer
- * than needed. Metrics: {@code mail.outbox.sent}, {@code mail.outbox.failures},
+ * <p>Sent emails are deleted, and dead letters after their retention, so links with tokens are not kept in the
+ * database longer than needed. Metrics: {@code mail.outbox.sent}, {@code mail.outbox.failures},
  * {@code mail.outbox.dropped} and the gauge {@code mail.outbox.pending}.</p>
  */
 @Service
@@ -127,10 +129,13 @@ public class EmailOutbox {
         this.dropped = Counter.builder("mail.outbox.dropped")
                 .description("Emails given up")
                 .register(meterRegistry);
-        Gauge.builder("mail.outbox.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNull)
+        Gauge.builder("mail.outbox.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNullAndFailedAtIsNull)
                 .description("Emails waiting to be sent, broadcasts not included")
                 .register(meterRegistry);
-        Gauge.builder("mail.outbox.broadcast.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNotNull)
+        Gauge.builder(
+                        "mail.outbox.broadcast.pending",
+                        outbox,
+                        OutboxEmailRepository::countByBroadcastIdIsNotNullAndFailedAtIsNull)
                 .description("Broadcast emails waiting to be sent")
                 .register(meterRegistry);
     }
@@ -260,7 +265,10 @@ public class EmailOutbox {
                             status -> outbox.lockById(id).ifPresent(email -> send(email, Instant.now())));
                 } catch (RuntimeException ex) {
                     // The caller's transaction already committed, so it must not fail; sendDue retries the row.
-                    log.warn("Immediate send of email {} failed, leaving it to the outbox: {}", id, ex.getClass().getSimpleName());
+                    log.warn(
+                            "Immediate send of email {} failed, leaving it to the outbox: {}",
+                            id,
+                            ex.getClass().getSimpleName());
                 } finally {
                     immediateSend.release();
                 }
@@ -271,6 +279,7 @@ public class EmailOutbox {
     /** Sends the emails that are due. Runs on every instance; row locks keep them from sending the same email. */
     @Scheduled(fixedDelayString = "${app.mail.outbox-poll-interval}")
     public void sendDue() {
+        // The interval is validated as AppProperties.Mail.outboxPollInterval at startup, before the scheduler starts.
         sendDue(Instant.now());
     }
 
@@ -295,7 +304,7 @@ public class EmailOutbox {
     }
 
     /**
-     * Sends one locked email: deletes it on success, otherwise schedules a retry or drops it.
+     * Sends one locked email: deletes it on success, otherwise schedules a retry or keeps it as a dead letter.
      *
      * @param email the locked email
      * @param now   the current time
@@ -313,18 +322,20 @@ public class EmailOutbox {
             }
             outbox.delete(email);
             sent.increment();
-        } catch (MailException ex) {
+        } catch (RuntimeException ex) {
+            // Not only MailException: anything else would roll back the attempt count and retry this row first forever.
+            String error = ex instanceof MailException ? ex.getMessage() : ex.toString();
             failures.increment();
-            email.recordFailure(ex.getMessage(), now.plus(retryDelay(email.getAttempts())));
+            email.recordFailure(error, now.plus(retryDelay(email.getAttempts())));
             if (email.getAttempts() >= properties.maxAttempts()) {
-                outbox.delete(email);
+                email.markFailed(now);
                 dropped.increment();
                 log.error(
                         "Gave up sending email {} '{}' after {} attempts: {}",
                         email.getId(),
                         email.getSubject(),
                         email.getAttempts(),
-                        ex.getMessage());
+                        error);
             } else {
                 log.warn(
                         "Could not send email {} '{}' (attempt {}), retrying at {}: {}",
@@ -332,8 +343,18 @@ public class EmailOutbox {
                         email.getSubject(),
                         email.getAttempts(),
                         email.getNextAttemptAt(),
-                        ex.getMessage());
+                        error);
             }
+        }
+    }
+
+    /** Deletes the dead letters older than {@code app.mail.dead-letter-retention}, once an hour. */
+    @Scheduled(cron = "0 50 * * * *")
+    @Transactional
+    public void deleteExpiredDeadLetters() {
+        int deleted = outbox.deleteFailedBefore(Instant.now().minus(properties.deadLetterRetention()));
+        if (deleted > 0) {
+            log.info("Deleted {} emails given up more than {} ago", deleted, properties.deadLetterRetention());
         }
     }
 

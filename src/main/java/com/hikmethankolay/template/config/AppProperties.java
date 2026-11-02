@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Duration;
 import java.util.List;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -238,15 +239,38 @@ public record AppProperties(
      * @param unsubscribeBaseUrl public URL of this API, e.g. {@code https://api.example.com}; the
      *                           {@code List-Unsubscribe} header of optional emails points to
      *                           {@code /api/v1/mail/unsubscribe} there, which mailbox providers call directly
-     * @param maxAttempts        sending attempts before an email is given up
+     * @param maxAttempts        sending attempts before an email is given up and kept as a dead letter
      * @param retryDelay         wait after the first failed attempt; doubles after each further failure
+     * @param appName            name shown at the top and bottom of every email
+     * @param broadcastBatchSize recipients of an owner broadcast queued per transaction
+     * @param outboxPollInterval wait between two runs of the outbox dispatcher
+     * @param deadLetterRetention how long an email given up is kept for re-queuing before it is deleted
+     * @param securityAlerts     security alert emails
      */
     public record Mail(
             @NotBlank String from,
             @NotBlank String linkBaseUrl,
             @NotBlank String unsubscribeBaseUrl,
             @Positive int maxAttempts,
-            @NotNull Duration retryDelay) {}
+            @NotNull @DurationMin(millis = 1) Duration retryDelay,
+            @NotBlank String appName,
+            @Positive int broadcastBatchSize,
+            @NotNull @DurationMin(millis = 1) Duration outboxPollInterval,
+            @NotNull @DurationMin(millis = 1) Duration deadLetterRetention,
+            @Valid @NotNull SecurityAlerts securityAlerts) {
+
+        /**
+         * Security alert emails ({@code SecurityMailer}).
+         *
+         * @param enabled          whether alerts are sent at all
+         * @param newLoginEnabled  whether sign-ins from new devices are reported
+         * @param newLoginLookback a device unused this long is forgotten; a sign-in from it is then reported as new
+         */
+        public record SecurityAlerts(
+                boolean enabled,
+                boolean newLoginEnabled,
+                @NotNull @DurationMin(millis = 1) Duration newLoginLookback) {}
+    }
 
     /**
      * Initial administrator, created on startup when all three fields are set and no admin exists yet.

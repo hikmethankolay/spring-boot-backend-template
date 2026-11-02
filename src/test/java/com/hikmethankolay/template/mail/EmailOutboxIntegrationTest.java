@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -29,6 +30,9 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
 
     @Autowired
     private TransactionTemplate transaction;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @AfterEach
     void stopOutage() {
@@ -155,8 +159,15 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
         assertThat(queued("outbox-retry@example.com")).isFalse();
     }
 
+    private OutboxEmail row(String to) {
+        return repository.findAll().stream()
+                .filter(email -> email.getRecipient().equals(to))
+                .findFirst()
+                .orElseThrow();
+    }
+
     @Test
-    void emailIsDroppedAfterTheLastAttempt() {
+    void emailIsKeptAsADeadLetterAfterTheLastAttemptAndCanBeRequeued() {
         mail.failNext(100);
         enqueue("outbox-drop@example.com");
 
@@ -165,7 +176,54 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
             outbox.sendDue(Instant.now().plus(retry * 2L, ChronoUnit.HOURS));
         }
 
-        assertThat(queued("outbox-drop@example.com")).isFalse();
+        OutboxEmail dead = row("outbox-drop@example.com");
+        assertThat(dead.getAttempts()).isEqualTo(10);
+        assertThat(dead.getFailedAt()).isNotNull();
+        mail.failNext(0);
+        outbox.sendDue(Instant.now().plus(30, ChronoUnit.HOURS));
         assertThat(mail.latest("outbox-drop@example.com", "Outbox test")).isEmpty();
+
+        // The runbook's re-queue statement.
+        jdbc.update(
+                "UPDATE email_outbox SET failed_at = NULL, attempts = 0, next_attempt_at = now() WHERE id = ?",
+                dead.getId());
+        outbox.sendDue(Instant.now().plus(30, ChronoUnit.HOURS));
+
+        assertThat(mail.latest("outbox-drop@example.com", "Outbox test")).isPresent();
+        assertThat(queued("outbox-drop@example.com")).isFalse();
+    }
+
+    @Test
+    void deadLettersAreDeletedAfterTheirRetention() {
+        mail.failNext(100);
+        enqueue("outbox-expired@example.com");
+        long id = row("outbox-expired@example.com").getId();
+        // Given up eight days ago; the retention is seven.
+        jdbc.update("UPDATE email_outbox SET failed_at = now() - interval '8 days' WHERE id = ?", id);
+        enqueue("outbox-recent-dead@example.com");
+        jdbc.update(
+                "UPDATE email_outbox SET failed_at = now() - interval '1 day' WHERE id = ?",
+                row("outbox-recent-dead@example.com").getId());
+
+        outbox.deleteExpiredDeadLetters();
+
+        assertThat(queued("outbox-expired@example.com")).isFalse();
+        assertThat(queued("outbox-recent-dead@example.com")).isTrue();
+    }
+
+    /** Before the fix, an exception other than MailException rolled the attempt back: the row was retried forever. */
+    @Test
+    void anyExceptionFromTheSendCountsAsAnAttempt() {
+        mail.failNextWithBug(1);
+        enqueue("outbox-bug@example.com");
+
+        // The immediate send failed; its attempt is recorded, not rolled back.
+        OutboxEmail pending = row("outbox-bug@example.com");
+        assertThat(pending.getAttempts()).isEqualTo(1);
+        assertThat(pending.getNextAttemptAt()).isAfter(Instant.now());
+
+        outbox.sendDue(Instant.now().plus(1, ChronoUnit.HOURS));
+        assertThat(mail.latest("outbox-bug@example.com", "Outbox test")).isPresent();
+        assertThat(queued("outbox-bug@example.com")).isFalse();
     }
 }

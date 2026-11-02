@@ -56,6 +56,8 @@ public class TestMailConfiguration {
 
         private final AtomicInteger failuresLeft = new AtomicInteger();
 
+        private volatile boolean failAsBug;
+
         private final AtomicReference<Hold> hold = new AtomicReference<>();
 
         @Override
@@ -119,6 +121,9 @@ public class TestMailConfiguration {
                 }
             }
             if (failuresLeft.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
+                if (failAsBug) {
+                    throw new IllegalStateException("Simulated bug in the mail transport");
+                }
                 throw new MailSendException("Simulated SMTP outage");
             }
             if (mime != null) {
@@ -141,6 +146,13 @@ public class TestMailConfiguration {
 
         /** Makes the next {@code count} sends fail, like an SMTP outage. */
         public void failNext(int count) {
+            failAsBug = false;
+            failuresLeft.set(count);
+        }
+
+        /** Makes the next {@code count} sends throw an {@link IllegalStateException}, not a {@code MailException}. */
+        public void failNextWithBug(int count) {
+            failAsBug = true;
             failuresLeft.set(count);
         }
 

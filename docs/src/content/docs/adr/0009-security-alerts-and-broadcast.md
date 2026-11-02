@@ -47,5 +47,7 @@ There is no endpoint that sends an email to an address chosen by the caller.
   any cookie-based scheme.
 - Broadcasts go out at the outbox's pace (50 emails per run per instance); a provider's bulk API would be faster
   but ties the template to one provider.
-- A broadcast interrupted by a stop longer than the shutdown wait stays unfinished; its queued emails still go out,
-  and it stops blocking new broadcasts after an hour.
+- Each batch saves the last user id it queued in the same transaction as its emails. A broadcast interrupted by a
+  crash or a stop longer than the shutdown wait is resumed from there by a scheduled run on one instance once it has
+  made no progress for five minutes, so no recipient gets it twice or is skipped; until then it blocks new
+  broadcasts.

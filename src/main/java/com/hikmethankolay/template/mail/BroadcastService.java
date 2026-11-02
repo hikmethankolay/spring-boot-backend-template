@@ -4,6 +4,7 @@ import com.hikmethankolay.template.audit.AuditEvent;
 import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
+import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.mail.dto.BroadcastPreview;
 import com.hikmethankolay.template.mail.dto.BroadcastRequest;
 import com.hikmethankolay.template.mail.dto.BroadcastResponse;
@@ -20,9 +21,9 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -39,13 +40,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>The request checks the password, records and audits the broadcast and returns; the recipients are queued in
  *       the background, in batches by id ({@code app.mail.broadcast-batch-size}), each in its own transaction, through
  *       {@link EmailOutbox}, which skips users who turned the category off and adds their unsubscribe link. An error
- *       stops the queuing and marks the broadcast partial; the batches before it still go out. {@code finished_at}
- *       is set when queuing ends.</li>
+ *       stops the queuing and marks the broadcast partial; the batches before it still go out. Each batch saves the
+ *       last user id it queued with its emails, and {@code finished_at} is set when queuing ends.</li>
+ *   <li>A broadcast cut off by a crash or stop is resumed after its saved last user id by {@link #resumeStalled()},
+ *       once it has made no progress for five minutes, so no recipient is queued twice or skipped.</li>
  *   <li>Broadcast emails are sent by the outbox's scheduled runs, after the other emails waiting, so a large
  *       broadcast neither holds up a request nor delays a password reset.</li>
- *   <li>A new broadcast is refused while one is still being queued, or less than a minute after the last one,
- *       across every instance. A broadcast still unfinished after an hour is taken to have stopped with its
- *       instance and no longer blocks new ones.</li>
+ *   <li>A new broadcast is refused while one is still being queued (or waits to be resumed), or less than a minute
+ *       after the last one, across every instance.</li>
  * </ul>
  */
 @Service
@@ -95,7 +97,7 @@ public class BroadcastService {
      * @param audit              records broadcasts
      * @param meterRegistry      registry for the recipient counter
      * @param transactionManager runs the start and each batch in its own transaction
-     * @param batchSize          recipients queued per transaction
+     * @param properties         application properties holding the recipients queued per transaction
      * @param executor           Spring Boot's task executor, which queues broadcasts in the background and lets
      *                           them finish when the app stops ({@code spring.task.execution.shutdown})
      */
@@ -107,7 +109,7 @@ public class BroadcastService {
             AuditLog audit,
             MeterRegistry meterRegistry,
             PlatformTransactionManager transactionManager,
-            @Value("${app.mail.broadcast-batch-size}") int batchSize,
+            AppProperties properties,
             @Qualifier("applicationTaskExecutor") TaskExecutor executor) {
         this.jdbc = jdbc;
         this.outbox = outbox;
@@ -117,7 +119,7 @@ public class BroadcastService {
         this.meterRegistry = meterRegistry;
         this.newTransaction = new TransactionTemplate(transactionManager);
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        this.batchSize = batchSize;
+        this.batchSize = properties.mail().broadcastBatchSize();
         this.executor = executor;
     }
 
@@ -131,7 +133,8 @@ public class BroadcastService {
     @Transactional(readOnly = true)
     public BroadcastPreview preview(BroadcastRequest request) {
         MailCategory category = category(request);
-        RenderedMail sample = renderer.render(TEMPLATE, request.subject(), model(request), category, "preview");
+        RenderedMail sample = renderer.render(
+                TEMPLATE, request.subject(), model(request.title(), request.body()), category, "preview");
         return new BroadcastPreview(recipients(request, category), sample.subject(), sample.text());
     }
 
@@ -154,7 +157,7 @@ public class BroadcastService {
         int recipients = recipients(request, category);
         long id =
                 Objects.requireNonNull(newTransaction.execute(status -> start(ownerId, request, category, recipients)));
-        executor.execute(() -> queue(id, request, category));
+        executor.execute(() -> queue(id));
         return new BroadcastResult(id, recipients);
     }
 
@@ -204,7 +207,7 @@ public class BroadcastService {
         jdbc.queryForList("SELECT pg_advisory_xact_lock(?)", START_LOCK);
         if (Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM mail_broadcasts WHERE created_at > now() - interval '1 minute'
-                    OR (finished_at IS NULL AND created_at > now() - interval '1 hour'))
+                    OR finished_at IS NULL)
                 """, Boolean.class))) {
             throw ApiException.conflict(
                     ProblemType.BROADCAST_IN_PROGRESS,
@@ -233,45 +236,103 @@ public class BroadcastService {
         return id;
     }
 
-    /** Queues every recipient in batches; runs on the task executor and always marks the broadcast finished. */
-    private void queue(long id, BroadcastRequest request, MailCategory category) {
-        String roles = roles(request);
-        Map<String, Object> model = model(request);
-        int queued = 0;
-        int suppressed = 0;
-        boolean partial = false;
-        long lastId = 0;
-        try {
-            while (true) {
-                List<Recipient> batch = jdbc.query(
-                        "SELECT u.id, u.email" + AUDIENCE + " AND u.id > ? ORDER BY u.id LIMIT ?",
-                        (row, i) -> new Recipient(row.getLong(1), row.getString(2)),
-                        roles,
-                        request.verifiedOnly(),
-                        lastId,
-                        batchSize);
-                if (batch.isEmpty()) {
-                    break;
-                }
-                int sent = Objects.requireNonNull(newTransaction.execute(status -> (int) batch.stream()
-                        .filter(recipient -> outbox.enqueueBroadcast(
-                                id, recipient.id(), recipient.email(), category, TEMPLATE, request.subject(), model))
-                        .count()));
-                queued += sent;
-                suppressed += batch.size() - sent;
-                lastId = batch.getLast().id();
+    /**
+     * Resumes, once a minute, the broadcasts whose queuing stopped: unfinished and without progress for five minutes,
+     * because their instance crashed or was stopped. Each continues after the last user id saved with its last batch.
+     * One instance at a time claims them, under the start lock.
+     */
+    @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
+    public void resumeStalled() {
+        List<Long> stalled = newTransaction.execute(status -> {
+            if (!Boolean.TRUE.equals(
+                    jdbc.queryForObject("SELECT pg_try_advisory_xact_lock(?)", Boolean.class, START_LOCK))) {
+                return List.of();
             }
-        } catch (RuntimeException ex) {
-            log.error("Broadcast {} stopped after {} recipients", id, queued + suppressed, ex);
-            partial = true;
+            // Claims them: their progress_at is now recent, so no other run takes them for five minutes.
+            return jdbc.queryForList("""
+                    UPDATE mail_broadcasts SET progress_at = now()
+                    WHERE finished_at IS NULL AND progress_at < now() - interval '5 minutes' RETURNING id
+                    """, Long.class);
+        });
+        for (long id : Objects.requireNonNull(stalled)) {
+            log.warn("Resuming broadcast {}, whose queuing stopped", id);
+            executor.execute(() -> queue(id));
         }
-        jdbc.update(
-                "UPDATE mail_broadcasts SET queued = ?, suppressed = ?, partial = ?, finished_at = now() WHERE id = ?",
-                queued,
-                suppressed,
-                partial,
-                id);
-        meterRegistry.counter("mail.broadcast.recipients").increment(queued);
+    }
+
+    /**
+     * Queues the recipients after the broadcast's saved progress in batches, then marks it finished; runs on the task
+     * executor. Each batch saves its progress in its own transaction, only if no other run saved progress meanwhile,
+     * so two runs never queue the same recipient.
+     */
+    private void queue(long id) {
+        try {
+            Map<String, Object> broadcast = jdbc.queryForMap(
+                    "SELECT category, subject, title, body, roles, verified_only, last_user_id FROM mail_broadcasts "
+                            + "WHERE id = ? AND finished_at IS NULL",
+                    id);
+            MailCategory category =
+                    MailCategory.fromKey((String) broadcast.get("category")).orElseThrow();
+            String subject = (String) broadcast.get("subject");
+            String roles = (String) broadcast.get("roles");
+            boolean verifiedOnly = (Boolean) broadcast.get("verified_only");
+            Map<String, Object> model = model((String) broadcast.get("title"), (String) broadcast.get("body"));
+            long lastId = ((Number) broadcast.get("last_user_id")).longValue();
+            int queued = 0;
+            boolean partial = false;
+            try {
+                while (true) {
+                    List<Recipient> batch = jdbc.query(
+                            "SELECT u.id, u.email" + AUDIENCE + " AND u.id > ? ORDER BY u.id LIMIT ?",
+                            (row, i) -> new Recipient(row.getLong(1), row.getString(2)),
+                            roles,
+                            verifiedOnly,
+                            lastId,
+                            batchSize);
+                    if (batch.isEmpty()) {
+                        break;
+                    }
+                    long from = lastId;
+                    Integer sent = newTransaction.execute(status -> {
+                        int count = (int) batch.stream()
+                                .filter(recipient -> outbox.enqueueBroadcast(
+                                        id, recipient.id(), recipient.email(), category, TEMPLATE, subject, model))
+                                .count();
+                        if (jdbc.update(
+                                        "UPDATE mail_broadcasts SET last_user_id = ?, queued = queued + ?, "
+                                                + "suppressed = suppressed + ?, progress_at = now() "
+                                                + "WHERE id = ? AND last_user_id = ? AND finished_at IS NULL",
+                                        batch.getLast().id(),
+                                        count,
+                                        batch.size() - count,
+                                        id,
+                                        from)
+                                == 0) {
+                            status.setRollbackOnly();
+                            return null;
+                        }
+                        return count;
+                    });
+                    if (sent == null) {
+                        log.warn("Broadcast {} is being queued by another run; this one stops", id);
+                        return;
+                    }
+                    queued += sent;
+                    lastId = batch.getLast().id();
+                }
+            } catch (RuntimeException ex) {
+                log.error("Broadcast {} stopped after user id {}", id, lastId, ex);
+                partial = true;
+            }
+            jdbc.update(
+                    "UPDATE mail_broadcasts SET partial = ?, finished_at = now() WHERE id = ? AND finished_at IS NULL",
+                    partial,
+                    id);
+            meterRegistry.counter("mail.broadcast.recipients").increment(queued);
+        } catch (RuntimeException ex) {
+            // Left unfinished: resumeStalled continues it from its saved progress.
+            log.error("Broadcast {} could not be queued or marked finished; it is resumed later", id, ex);
+        }
     }
 
     private static MailCategory category(BroadcastRequest request) {
@@ -288,12 +349,12 @@ public class BroadcastService {
     }
 
     /** The template model: the title, and the body split into paragraphs at blank lines. */
-    private static Map<String, Object> model(BroadcastRequest request) {
-        List<String> paragraphs = Arrays.stream(request.body().split("\\R\\s*\\R"))
+    private static Map<String, Object> model(String title, String body) {
+        List<String> paragraphs = Arrays.stream(body.split("\\R\\s*\\R"))
                 .map(String::strip)
                 .filter(paragraph -> !paragraph.isEmpty())
                 .toList();
-        return Map.of("title", request.title(), "paragraphs", paragraphs);
+        return Map.of("title", title, "paragraphs", paragraphs);
     }
 
     private record Recipient(long id, String email) {}

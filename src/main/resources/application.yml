@@ -236,10 +236,12 @@ app:
       # A device unused this long is forgotten; a login from it is then reported as new.
       new-login-lookback: ${MAIL_NEW_LOGIN_LOOKBACK:90d}
     # Emails go through an outbox table and are retried with exponential backoff while SMTP fails
-    # (30s, 1m, 2m, ... capped at 1h); after max-attempts they are dropped and an error is logged.
+    # (30s, 1m, 2m, ... capped at 1h); after max-attempts an error is logged and they are kept as dead letters
+    # (failed_at set, see the runbooks to re-queue them), deleted after dead-letter-retention.
     max-attempts: ${MAIL_MAX_ATTEMPTS:10}
     retry-delay: ${MAIL_RETRY_DELAY:30s}
     outbox-poll-interval: ${MAIL_OUTBOX_POLL_INTERVAL:10s}
+    dead-letter-retention: ${MAIL_DEAD_LETTER_RETENTION:7d}
   admin:
     username: ${ADMIN_USERNAME:}
     email: ${ADMIN_EMAIL:}

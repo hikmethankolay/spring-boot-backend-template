@@ -115,12 +115,24 @@ failures`, `Rate limit check failed` or `Could not check token revocation`.
 
 ### EmailsDropped
 
-Emails were abandoned after every retry. Users did not get verification or password-reset links.
+Emails were given up after every retry. Users did not get verification, password-reset or security-alert emails.
+They are kept in `email_outbox` as dead letters (`failed_at` set) for `MAIL_DEAD_LETTER_RETENTION` (7 days).
 
 1. Check the SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `SPRING_MAIL_USERNAME`) and the provider's status. A log line
    with `STARTTLS is required but host does not support STARTTLS` means the server offers no TLS on that port: use
    the provider's TLS port (see [Mail encryption](../production/#mail-encryption)).
-2. Users can request the email again (`/api/v1/auth/verify-email/resend`, also for the link of a pending email
+2. Once SMTP works again, re-queue the dead letters; the dispatcher sends them within `MAIL_OUTBOX_POLL_INTERVAL`:
+
+   ```sql
+   -- Check first: SELECT id, recipient, subject, attempts, last_error, failed_at FROM email_outbox
+   --              WHERE failed_at IS NOT NULL ORDER BY failed_at;
+   UPDATE email_outbox SET failed_at = NULL, attempts = 0, next_attempt_at = now()
+   WHERE failed_at IS NOT NULL AND failed_at > now() - interval '1 day';
+   ```
+
+   Narrow the `WHERE` to the outage window: a password-reset link is only valid for
+   `app.account.password-reset-token-ttl` (1 hour), so an old one is useless and users should request a new one.
+3. Users can also request the email again (`/api/v1/auth/verify-email/resend`, also for the link of a pending email
    change, and `/api/v1/auth/password-reset`).
 
 If an email is never queued at all, look for a `TemplateInputException` in the log: it names the template that is
@@ -136,9 +148,12 @@ the backlog by itself once SMTP recovers. A broadcast does not trigger it: its e
 
 ### ScheduledTaskFailing
 
-A `@Scheduled` method (email dispatcher, expired account-token and refresh-token cleanup, audit retention purge)
-threw an exception. The `code_function` label names it. Search the logs for the exception; a failing cleanup only
-lets old rows pile up, a failing dispatcher also raises `EmailBacklog`.
+A `@Scheduled` method (email dispatcher, dead-letter cleanup, broadcast resume, expired account-token and
+refresh-token cleanup, audit retention purge) threw an exception. The `code_function` label names it. Search the logs
+for the exception; a failing cleanup only lets old rows pile up, a failing dispatcher also raises `EmailBacklog`.
+
+A broadcast that stays unfinished (`finished_at IS NULL` in `mail_broadcasts`) blocks new ones until it is resumed;
+if resuming keeps failing, end it by hand: `UPDATE mail_broadcasts SET partial = TRUE, finished_at = now() WHERE id = …`.
 
 ## Deploys
 
