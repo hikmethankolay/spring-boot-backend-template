@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import javax.crypto.KDF;
 import javax.crypto.Mac;
@@ -18,8 +19,9 @@ import org.springframework.stereotype.Component;
  * <p>The tokens are stateless and never expire, so a link in an old email still works without logging in, as
  * mailbox providers expect, and using it twice does no harm. The user id is readable; the HMAC-SHA256 signature
  * keeps anyone from forging a token for another user. The key is derived from {@code app.mfa.encryption-key} with
- * HKDF-SHA256 (info {@code unsubscribe-v1}): that setting must never change, unlike the JWT keys, which are rotated
- * and would invalidate every link already sent.</p>
+ * HKDF-SHA256 (info {@code unsubscribe-v1}), not from the JWT keys, which are rotated often. That setting is a
+ * comma-separated list: the first key signs, every key verifies, so a link signed before a rotation works as long
+ * as its key stays in the list.</p>
  */
 @Component
 public class UnsubscribeTokens {
@@ -32,19 +34,33 @@ public class UnsubscribeTokens {
 
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
-    private final SecretKeySpec key;
+    /** One key per {@code app.mfa.encryption-key} entry: the first signs, all verify. */
+    private final List<SecretKeySpec> keys;
 
     /**
-     * Derives the signing key.
+     * Derives the signing keys.
      *
      * @param properties application properties holding {@code app.mfa.encryption-key}
      */
     public UnsubscribeTokens(AppProperties properties) {
-        byte[] setting = properties.mfa().encryptionKey().getBytes(StandardCharsets.UTF_8);
+        this.keys = properties.mfa().encryptionKey().stream()
+                .map(UnsubscribeTokens::derive)
+                .toList();
+    }
+
+    /**
+     * Derives one signing key.
+     *
+     * @param setting one {@code app.mfa.encryption-key} entry
+     * @return the HMAC-SHA256 key
+     */
+    private static SecretKeySpec derive(String setting) {
         try {
             byte[] bytes = KDF.getInstance("HKDF-SHA256")
-                    .deriveData(HKDFParameterSpec.ofExtract().addIKM(setting).thenExpand(INFO, 32));
-            this.key = new SecretKeySpec(bytes, "HmacSHA256");
+                    .deriveData(HKDFParameterSpec.ofExtract()
+                            .addIKM(setting.getBytes(StandardCharsets.UTF_8))
+                            .thenExpand(INFO, 32));
+            return new SecretKeySpec(bytes, "HmacSHA256");
         } catch (GeneralSecurityException ex) {
             throw new IllegalStateException("HKDF-SHA256 is not available", ex);
         }
@@ -59,7 +75,8 @@ public class UnsubscribeTokens {
      */
     public String issue(long userId, MailCategory category) {
         byte[] payload = (userId + "." + category.key()).getBytes(StandardCharsets.UTF_8);
-        return VERSION + "." + ENCODER.encodeToString(payload) + "." + ENCODER.encodeToString(sign(payload));
+        return VERSION + "." + ENCODER.encodeToString(payload) + "."
+                + ENCODER.encodeToString(sign(keys.getFirst(), payload));
     }
 
     /**
@@ -76,7 +93,8 @@ public class UnsubscribeTokens {
         }
         try {
             byte[] payload = DECODER.decode(parts[1]);
-            if (!MessageDigest.isEqual(sign(payload), DECODER.decode(parts[2]))) {
+            byte[] signature = DECODER.decode(parts[2]);
+            if (keys.stream().noneMatch(key -> MessageDigest.isEqual(sign(key, payload), signature))) {
                 return Optional.empty();
             }
             String[] fields = new String(payload, StandardCharsets.UTF_8).split("\\.", 2);
@@ -89,7 +107,7 @@ public class UnsubscribeTokens {
         }
     }
 
-    private byte[] sign(byte[] payload) {
+    private static byte[] sign(SecretKeySpec key, byte[] payload) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(key);

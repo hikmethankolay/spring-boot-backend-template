@@ -3,6 +3,7 @@ package com.hikmethankolay.template.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -307,13 +308,16 @@ public record AppProperties(
     /**
      * Two-factor authentication (TOTP) settings.
      *
-     * @param encryptionKey encrypts the TOTP secrets stored in the database; changing it makes every enrolled
-     *                      authenticator useless until its user signs in with a recovery code and re-enrolls
+     * @param encryptionKey keys that encrypt the TOTP secrets stored in the database and sign unsubscribe links,
+     *                      comma-separated like {@code JWT_SECRET}: the first encrypts and signs, every key decrypts
+     *                      and verifies, so a key can be rotated (see the Security guide). Dropping a key still in use
+     *                      makes the authenticators it encrypted useless until their users sign in with a recovery
+     *                      code and re-enroll, and breaks the unsubscribe links it signed
      * @param challengeTtl  how long a user has to enter the code after the password
      */
     public record Mfa(
-            @NotBlank @Size(min = 32, message = "must be at least 32 characters (MFA_ENCRYPTION_KEY)")
-            String encryptionKey,
+            @NotEmpty(message = "must be set (MFA_ENCRYPTION_KEY)")
+            List<@Size(min = 32, message = "must be at least 32 characters (MFA_ENCRYPTION_KEY)") String> encryptionKey,
 
             @NotNull @DurationMin(nanos = 1, message = POSITIVE)
             Duration challengeTtl) {
@@ -321,11 +325,13 @@ public record AppProperties(
         /**
          * Rejects placeholder keys such as a repeated character.
          *
-         * @return {@code false} if the key has fewer than 10 distinct characters
+         * @return {@code false} if a key has fewer than 10 distinct characters
          */
         @AssertTrue(message = "must be a random value, not repeated or placeholder text (MFA_ENCRYPTION_KEY)")
         public boolean isEncryptionKeyVaried() {
-            return encryptionKey == null || encryptionKey.chars().distinct().count() >= 10;
+            return encryptionKey == null
+                    || encryptionKey.stream()
+                            .allMatch(key -> key.chars().distinct().count() >= 10);
         }
     }
 

@@ -8,6 +8,7 @@ import java.util.List;
 public final class TestProperties {
 
     public static final String JWT_SECRET = "unit-test-secret-that-is-at-least-43-characters";
+    public static final String MFA_KEY = "unit-test-mfa-key-that-is-at-least-32-chars";
     public static final String ISSUER = "test-issuer";
     public static final String AUDIENCE = "test-audience";
 
@@ -32,6 +33,22 @@ public final class TestProperties {
                 Duration.ofDays(90));
     }
 
+    /** Default test properties with other MFA keys: the first encrypts and signs, all decrypt and verify. */
+    public static AppProperties withMfaKeys(String... keys) {
+        AppProperties p = create();
+        return new AppProperties(
+                p.jwt(),
+                p.cookie(),
+                p.cors(),
+                p.login(),
+                p.rateLimit(),
+                p.account(),
+                p.mail(),
+                p.admin(),
+                new AppProperties.Mfa(List.of(keys), Duration.ofMinutes(5)),
+                p.socialLogin());
+    }
+
     /** Default test properties with different JWT settings. */
     public static AppProperties withJwt(AppProperties.Jwt jwt) {
         return new AppProperties(
@@ -48,7 +65,7 @@ public final class TestProperties {
                         10,
                         Duration.ofSeconds(30)),
                 new AppProperties.Admin(null, null, null),
-                new AppProperties.Mfa("unit-test-mfa-key-that-is-at-least-32-chars", Duration.ofMinutes(5)),
+                new AppProperties.Mfa(List.of(MFA_KEY), Duration.ofMinutes(5)),
                 new AppProperties.SocialLogin(
                         null,
                         new AppProperties.SocialLogin.Client(null, null),

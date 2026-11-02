@@ -1,5 +1,7 @@
 package com.hikmethankolay.template.user;
 
+import com.hikmethankolay.template.audit.AuditEvent;
+import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.user.validation.ValidEmail;
@@ -41,17 +43,21 @@ class AdminBootstrap implements ApplicationRunner {
 
     private final Validator validator;
 
+    private final AuditLog audit;
+
     /**
      * Creates the runner.
      *
      * @param userService creates the admin account
      * @param properties  application properties holding the admin credentials
      * @param validator   checks the credentials against the registration rules
+     * @param audit       records the creation of the owner
      */
-    AdminBootstrap(UserService userService, AppProperties properties, Validator validator) {
+    AdminBootstrap(UserService userService, AppProperties properties, Validator validator, AuditLog audit) {
         this.userService = userService;
         this.admin = properties.admin();
         this.validator = validator;
+        this.audit = audit;
     }
 
     /**
@@ -68,8 +74,11 @@ class AdminBootstrap implements ApplicationRunner {
         checkCredentials();
         // The configured admin address is trusted, so no verification email is sent.
         try {
-            userService.register(admin.username(), admin.email(), admin.password(), Role.OWNER, true);
+            long ownerId = userService
+                    .register(admin.username(), admin.email(), admin.password(), Role.OWNER, true)
+                    .id();
             log.info("Created the owner account '{}'", admin.username());
+            audit.record(AuditEvent.OWNER_BOOTSTRAPPED, ownerId, "username", admin.username());
         } catch (ApiException | DataIntegrityViolationException ex) {
             // Several instances starting at once all try; only a conflict with another account is an error.
             if (!userService.ownerExists()) {

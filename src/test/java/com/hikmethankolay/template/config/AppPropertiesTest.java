@@ -81,8 +81,10 @@ class AppPropertiesTest {
         Duration ttl = Duration.ofMinutes(5);
 
         assertThat(new AppProperties.Mfa(null, ttl).isEncryptionKeyVaried()).isTrue();
-        assertThat(new AppProperties.Mfa(VARIED, ttl).isEncryptionKeyVaried()).isTrue();
-        assertThat(new AppProperties.Mfa("changeme".repeat(5), ttl).isEncryptionKeyVaried())
+        assertThat(new AppProperties.Mfa(List.of(VARIED), ttl).isEncryptionKeyVaried())
+                .isTrue();
+        // Every key of the list is checked, not only the first.
+        assertThat(new AppProperties.Mfa(List.of(VARIED, "changeme".repeat(5)), ttl).isEncryptionKeyVaried())
                 .isFalse();
     }
 

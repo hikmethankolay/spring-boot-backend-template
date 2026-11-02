@@ -292,15 +292,24 @@ public class MfaService {
 
     /** Accepts an unused authenticator code and uses up its time step. */
     private boolean checkTotp(User user, String normalized) {
+        byte[] secret;
         OptionalLong step;
         try {
-            step = Totp.verify(secretOf(user), normalized, Instant.now().getEpochSecond(), user.getTotpLastStep());
+            secret = secretOf(user);
+            step = Totp.verify(secret, normalized, Instant.now().getEpochSecond(), user.getTotpLastStep());
         } catch (IllegalStateException ex) {
-            // The encryption key changed: only recovery codes can still get the user in.
+            // Its key was removed from MFA_ENCRYPTION_KEY: only recovery codes can still get the user in.
             return false;
         }
-        step.ifPresent(user::useTotpStep);
-        return step.isPresent();
+        if (step.isEmpty()) {
+            return false;
+        }
+        user.useTotpStep(step.getAsLong());
+        if (!cipher.isCurrent(user.getTotpSecret(), user.getId())) {
+            // Encrypted with an older key (or format): move it to the first key, so the old one can be dropped.
+            user.reencryptTotpSecret(cipher.encrypt(secret, user.getId()));
+        }
+        return true;
     }
 
     private byte[] secretOf(User user) {

@@ -32,7 +32,7 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `JWT_ACCESS_TOKEN_TTL` | `15m` | Access token (JWT) lifetime; keep it short |
 | `JWT_REFRESH_TOKEN_TTL` / `JWT_REMEMBER_ME_TTL` | `1d` / `30d` | Session lifetime without activity, normal / remember-me |
 | `JWT_MAX_SESSION_TTL` / `JWT_REMEMBER_ME_MAX_SESSION_TTL` | `7d` / `90d` | Absolute session lifetime after the login, however often it is refreshed |
-| `MFA_ENCRYPTION_KEY` | *(required; `setup` fills it in)* | Encrypts two-factor secrets in the database, at least 32 characters. Changing it breaks enrolled authenticators ([details](../security/#two-factor-authentication)) |
+| `MFA_ENCRYPTION_KEY` | *(required; `setup` fills it in)* | Encrypts two-factor secrets in the database and signs unsubscribe links, each key at least 32 characters; comma-separated, the first encrypts ([key rotation](../security/#rotating-mfa_encryption_key)). Dropping a key breaks what it encrypted and signed |
 | `MFA_CHALLENGE_TTL` | `5m` | Time to enter the authenticator code after the password |
 | `OAUTH2_REDIRECT_URI`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `http://localhost:3000/oauth2/callback`, *(none)* | Login with GitHub and Google; a provider is on when both of its values are set ([details](../security/#login-with-github-and-google)); *prod: must change* the redirect URI when a provider is on |
 | `COOKIE_SECURE` | `false` (`true` in prod) | Send the auth cookies over HTTPS only |
