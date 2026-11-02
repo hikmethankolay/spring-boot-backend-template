@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-03
+
 ### Added
 
 - Personal access tokens for scripts and integrations: `POST/GET /api/v1/users/me/access-tokens` and
@@ -595,7 +597,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.2...v4.3.0
 [4.2.2]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.2.0...v4.2.1
