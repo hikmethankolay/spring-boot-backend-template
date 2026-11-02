@@ -154,7 +154,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:invalid-token` | 400 | An email verification or password reset token is unknown, used or expired |
 | `urn:problem:unsubscribe-token-invalid` | 400 | An unsubscribe link's token is malformed or was not issued by this server |
 | `urn:problem:broadcast-in-progress` | 409 | Another broadcast is still being queued or started less than a minute ago |
-| `urn:problem:own-account` | 400 | An administrator tried to delete themselves through `/users/{id}` |
+| `urn:problem:own-account` | 400 | An administrator tried to delete or suspend themselves through `/users/{id}` or `/users/{id}/suspension` |
 | `urn:problem:invalid-mfa-code` | 400 / 401 | The authenticator or recovery code is wrong, expired or used (401 at login) |
 | `urn:problem:mfa-challenge-expired` | 401 | The `mfaToken` is unknown, used or expired; log in again |
 | `urn:problem:social-email-unverified` | 403 | The GitHub/Google account has no verified email |

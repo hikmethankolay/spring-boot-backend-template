@@ -75,24 +75,24 @@ def release_pipeline():
 
 def package_dependencies():
     d = Diagram("package-dependencies", 720, 544, "Package dependencies",
-                "auth depends on account, mfa, social and the user and security core; account, mfa, social and note "
-                "depend on that core; every package uses audit, common and config; only auth imports mfa and social.")
+                "auth depends on account, mfa, social and the core of user, security and mail, which import each "
+                "other; account, mfa, social and note depend on that core; every package uses audit, common and "
+                "config; only auth imports mfa and social.")
     d.wire((194, 140), (229, 140), (229, 68), (264, 68))
     d.wire((194, 164), (264, 164), accent=True)
-    d.wire((194, 212), (520, 212))
+    d.wire((194, 212), (488, 212))
     d.wire((194, 228), (240, 228), (240, 260), (264, 260), accent=True)
-    d.wire((440, 60), (520, 60))
-    d.wire((440, 80), (480, 80), (480, 152), (520, 152))
-    d.wire((440, 164), (520, 164))
-    d.wire((440, 260), (520, 260))
+    d.wire((440, 68), (488, 68))
+    d.wire((440, 164), (488, 164))
+    d.wire((440, 260), (488, 260))
     d.wire((194, 348), (608, 348), (608, 288))
     d.node(24, 120, 170, 120, "auth", ["login · tokens", "sessions"], kind="box-focal")
     d.node(24, 320, 170, 56, "note", "the sample feature")
     d.node(264, 40, 176, 56, "account", "verify email · reset")
     d.node(264, 136, 176, 56, "mfa", "authenticator codes")
     d.node(264, 232, 176, 56, "social", "GitHub and Google")
-    d.node(520, 40, 176, 56, "mail", "email outbox")
-    d.node(520, 136, 176, 152, "user + security", ["users, roles, JWT", "they import", "each other"])
+    d.node(488, 40, 208, 248, "user · security · mail",
+           ["users, roles, JWT", "email outbox, alerts", "they import", "each other"])
     d.node(24, 424, 672, 60, "audit · common · config", "used by every package, so not drawn as arrows",
            tag="SHARED")
     d.text(360, 520, "Only auth imports mfa and social, so removing either leaves the other features untouched.",

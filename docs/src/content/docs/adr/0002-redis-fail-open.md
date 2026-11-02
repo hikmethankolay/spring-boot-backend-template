@@ -30,5 +30,11 @@ clients keep working, since access tokens are verified without Redis and refresh
   fail until Redis is back.
 - During the outage, rate limiting is off, and a revoked access token is accepted until it expires (at most
   `JWT_ACCESS_TOKEN_TTL`). Refresh tokens are in PostgreSQL and stay revocable.
+- A revocation requested while Redis is down (logout, ending a session, a password or role change, a suspension) is
+  not recorded for the access tokens already issued: the write fails, a warning (`Could not revoke the tokens of …`)
+  is logged, and nothing replays it once Redis is back. Those access tokens stay valid until they expire, at most
+  `JWT_ACCESS_TOKEN_TTL` after the request. The PostgreSQL part still applies at once: the refresh tokens are deleted
+  and, for user-wide revocations, the session version is raised, so no new access token can be obtained. Keep
+  `JWT_ACCESS_TOKEN_TTL` short.
 - Redis has no alert of its own: the burst of warnings it causes fires `WarningLogSpike`, and
   [its runbook](../../guides/runbooks/#warninglogspike) covers what to watch for while it lasts.
