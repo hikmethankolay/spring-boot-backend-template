@@ -303,6 +303,15 @@ public class User {
         this.totpLastStep = step;
     }
 
+    /**
+     * Replaces the stored secret with the same secret encrypted under the current key, after a key rotation.
+     *
+     * @param encryptedSecret the secret, encrypted again
+     */
+    public void reencryptTotpSecret(String encryptedSecret) {
+        this.totpSecret = encryptedSecret;
+    }
+
     /** Turns two-factor authentication off and forgets the secret. */
     public void disableTotp() {
         this.totpSecret = null;

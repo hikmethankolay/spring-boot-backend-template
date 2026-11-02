@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.HashOperations;
@@ -156,6 +158,33 @@ class IdempotencyFilterTest {
 
         verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
         verify(redis).delete(anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {408, 409, 429})
+    void aTransientClientErrorIsNotKeptSoTheRetryRunsAgain(int status) throws Exception {
+        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+
+        filter.doFilter(
+                request(), new MockHttpServletResponse(), (req, res) -> ((HttpServletResponse) res).setStatus(status));
+
+        verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
+        verify(redis).delete(anyString());
+    }
+
+    @Test
+    void finalAnswersAreKeptAndTransientOnesAreNot() {
+        assertThat(IdempotencyFilter.keeps(200)).isTrue();
+        assertThat(IdempotencyFilter.keeps(201)).isTrue();
+        assertThat(IdempotencyFilter.keeps(400)).isTrue();
+        assertThat(IdempotencyFilter.keeps(404)).isTrue();
+        assertThat(IdempotencyFilter.keeps(422)).isTrue();
+        assertThat(IdempotencyFilter.keeps(499)).isTrue();
+        assertThat(IdempotencyFilter.keeps(408)).isFalse();
+        assertThat(IdempotencyFilter.keeps(409)).isFalse();
+        assertThat(IdempotencyFilter.keeps(429)).isFalse();
+        assertThat(IdempotencyFilter.keeps(500)).isFalse();
+        assertThat(IdempotencyFilter.keeps(503)).isFalse();
     }
 
     @Test

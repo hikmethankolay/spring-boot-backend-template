@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
+import com.hikmethankolay.template.config.AppProperties;
 import com.jayway.jsonpath.JsonPath;
 import java.io.ByteArrayOutputStream;
 import java.time.Instant;
@@ -17,14 +18,25 @@ import java.util.List;
 import java.util.Locale;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 class MfaIntegrationTest extends IntegrationTest {
 
     private static final String TOTP = "/api/v1/users/me/mfa/totp";
+
+    @Autowired
+    private AppProperties properties;
+
+    @Autowired
+    private SecretCipher cipher;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void loginNeedsTheSecondFactorOnceEnabled() throws Exception {
@@ -62,6 +74,28 @@ class MfaIntegrationTest extends IntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.3"), recovery, "10.0.9.3"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aSecretUnderAnOlderKeyIsEncryptedAgainWithTheCurrentOneOnUse() throws Exception {
+        String username = uniqueUsername();
+        long userId = register(username);
+        String token = login(username, PASSWORD);
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        confirm(token, Totp.code(secret, step));
+        // As stored before the key derivation: the same rule moves a value off a rotated-out key.
+        String old =
+                SecretCipherTest.legacyValue(properties.mfa().encryptionKey().getFirst(), secret, userId);
+        jdbc.update("UPDATE users SET totp_secret = ? WHERE id = ?", old, userId);
+
+        mockMvc.perform(mfaLogin(passwordStep(username, "10.0.9.8"), Totp.code(secret, step + 1), "10.0.9.8"))
+                .andExpect(status().isOk());
+
+        String stored = jdbc.queryForObject("SELECT totp_secret FROM users WHERE id = ?", String.class, userId);
+        assertThat(stored).isNotEqualTo(old);
+        assertThat(cipher.isCurrent(stored, userId)).isTrue();
+        assertThat(cipher.decrypt(stored, userId)).isEqualTo(secret);
     }
 
     @Test

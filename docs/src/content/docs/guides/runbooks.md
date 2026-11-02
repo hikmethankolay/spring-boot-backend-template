@@ -88,6 +88,17 @@ Not an alert: a user reports activity they do not recognise, or an account is ab
    regained control (for example after a password reset). Suspending an administrator needs the owner.
 3. **Impact:** only that account; it is logged out everywhere until reactivated.
 
+### Rotating MFA_ENCRYPTION_KEY
+
+Not an alert: routine rotation, or the key leaked.
+
+1. Deploy `MFA_ENCRYPTION_KEY=<new>,<old>` (new key first). Nothing breaks: the old key still decrypts two-factor
+   secrets and verifies unsubscribe links; each authenticator sign-in moves its secret to the new key.
+2. Keep `<old>` listed. Removing it breaks unsubscribe links in emails sent before the rotation and the two-factor
+   secrets of users who have not signed in since (they need a recovery code and must enroll again).
+3. Details, and what to do when the database leaked too:
+   [Security guide](../security/#rotating-mfa_encryption_key).
+
 ### PrivilegeChanges
 
 An administrator changed a role. Confirm with the actor in the `admin.role_changed` audit entry that it was intended.

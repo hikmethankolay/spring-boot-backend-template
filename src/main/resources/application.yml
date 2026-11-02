@@ -245,8 +245,9 @@ app:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
   mfa:
-    # Encrypts the TOTP secrets in the database (AES-GCM): at least 32 random characters, kept out of the
-    # database and its backups. Changing it breaks every enrolled authenticator (recovery codes still work).
+    # Encrypts the TOTP secrets in the database (AES-GCM) and signs unsubscribe links: at least 32 random characters,
+    # kept out of the database and its backups. Comma-separated for rotation: the first key encrypts, all decrypt.
+    # Dropping a key breaks the authenticators (recovery codes still work) and unsubscribe links it covered.
     encryption-key: ${MFA_ENCRYPTION_KEY:}
     # Time between a correct password and the authenticator code.
     challenge-ttl: ${MFA_CHALLENGE_TTL:5m}

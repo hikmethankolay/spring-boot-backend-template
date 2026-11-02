@@ -233,7 +233,8 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
 - [ ] Ship the `audit` logger to long-term storage.
 - [ ] Generate a long random `JWT_SECRET` and store it in your secret manager.
 - [ ] Generate a separate random `MFA_ENCRYPTION_KEY`, store it in your secret manager (not with the database
-      backups) and back it up: losing it breaks every user's two-factor authentication.
+      backups) and back it up: losing it breaks every user's two-factor authentication. To rotate it, list the new
+      key before the old one (see the Security guide).
 - [ ] Back up PostgreSQL (point-in-time recovery) and test a restore.
 - [ ] Deploy only signed images: pin the digest, and install the Sigstore policy-controller with
       `deploy/kubernetes/policy/` (or check with `cosign verify` before each deployment).

@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.audit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,9 +8,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.hikmethankolay.template.IntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 class SecurityEventIntegrationTest extends IntegrationTest {
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Test
+    void creatingTheOwnerAtStartupIsRecorded() {
+        Integer recorded = jdbc.queryForObject("""
+                SELECT count(*) FROM audit_events e JOIN users u ON u.id = e.user_id
+                WHERE e.action = 'admin.owner_bootstrapped' AND u.username = ?""", Integer.class, ADMIN_USERNAME);
+
+        assertThat(recorded).isPositive();
+    }
 
     @Test
     void usersSeeTheirOwnActivityNewestFirst() throws Exception {

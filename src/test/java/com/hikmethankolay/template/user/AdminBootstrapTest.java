@@ -4,14 +4,19 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.hikmethankolay.template.TestProperties;
+import com.hikmethankolay.template.audit.AuditEvent;
+import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.user.dto.UserResponse;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
@@ -28,6 +33,9 @@ class AdminBootstrapTest {
 
     @Mock
     private UserService users;
+
+    @Mock
+    private AuditLog audit;
 
     private AdminBootstrap bootstrap() {
         return bootstrap("Owner#12345-passphrase");
@@ -48,7 +56,21 @@ class AdminBootstrapTest {
                         new AppProperties.Admin("owner", "owner@example.com", password),
                         p.mfa(),
                         p.socialLogin()),
-                VALIDATOR);
+                VALIDATOR,
+                audit);
+    }
+
+    @Test
+    void creatingTheOwnerIsAudited() {
+        when(users.ownerExists()).thenReturn(false);
+        UserResponse owner = mock(UserResponse.class);
+        when(owner.id()).thenReturn(1L);
+        when(users.register("owner", "owner@example.com", "Owner#12345-passphrase", Role.OWNER, true))
+                .thenReturn(owner);
+
+        bootstrap().run(null);
+
+        verify(audit).record(AuditEvent.OWNER_BOOTSTRAPPED, 1L, "username", "owner");
     }
 
     @Test
@@ -58,6 +80,7 @@ class AdminBootstrapTest {
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         assertThatCode(() -> bootstrap().run(null)).doesNotThrowAnyException();
+        verifyNoInteractions(audit);
     }
 
     @Test

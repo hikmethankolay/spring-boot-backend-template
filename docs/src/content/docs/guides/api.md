@@ -148,7 +148,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 
 | `type` | Status | When |
 |--------|--------|------|
-| `urn:problem:validation-failed` | 400 | The body is invalid; the fields are listed in `errors` |
+| `urn:problem:validation-failed` | 400 | The body or a query or path parameter is invalid; the fields are listed in `errors`, with an empty `field` for a rule about the whole body (e.g. two fields that must match) |
 | `urn:problem:invalid-sort` | 400 | `sort` names a property that cannot be sorted by |
 | `urn:problem:wrong-password` | 400 | The caller's current password, required to confirm a change, is missing or wrong |
 | `urn:problem:invalid-token` | 400 | An email verification or password reset token is unknown, used or expired |
@@ -206,7 +206,9 @@ second note or queuing a second broadcast. This follows the IETF `Idempotency-Ke
   (`/api/v1/users/me/mfa/**`): their answers hold the secret and the recovery codes, which are never copied to Redis.
 - A body over 1 MiB is not buffered for the comparison, so such a request runs without the key.
 - The same key with another path or body is refused with `422`; a retry while the first request still runs gets `409`.
-- `5xx` responses are not kept, so such a request can be retried with the same key.
+- Only final answers are kept: `2xx`, `3xx` and every `4xx` but `408`, `409` and `429`. A `5xx`, `408 Request
+  Timeout`, `409 Conflict` or `429 Too Many Requests` is not kept, so a retry with the same key runs the request again
+  (for example once a rate limit has passed); a `400` or `404` is replayed, as running it again would give the same answer.
 - A key is held for a running request for at most one minute, so that a request whose instance stops does not block
   its key for a day. A request that takes longer and is retried after that minute runs a second time; none of the
   template's endpoints come close.

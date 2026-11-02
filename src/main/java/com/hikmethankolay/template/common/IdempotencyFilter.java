@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -54,7 +55,8 @@ import org.springframework.web.util.pattern.PathPatternParser;
  *   <li>Keys belong to the caller; two users can use the same key.</li>
  *   <li>The same key with another path or body is refused with {@code 422}; a retry while the first request still
  *       runs gets {@code 409}.</li>
- *   <li>A {@code 5xx} response is not kept, so the request can be retried.</li>
+ *   <li>A {@code 5xx} response is not kept, so the request can be retried; nor is a {@code 408}, {@code 409} or
+ *       {@code 429}, which say "try again" rather than answer the request ({@link #keeps(int)}).</li>
  *   <li>Anonymous requests (login, sign-up) are not covered: a replayed login would give its tokens to anyone who
  *       knows the key. Nor are the {@link #UNCOVERED_PATHS}, whose responses hold secrets (the two-factor secret and
  *       recovery codes) that must not be copied to Redis.</li>
@@ -92,6 +94,9 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             redis.call('PEXPIRE', KEYS[2], ARGV[1])
             redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[1])
             return 1""", Long.class);
+
+    /** 4xx statuses that ask the client to try again later (timeout, conflict, rate limit): never replayed. */
+    private static final Set<Integer> TRANSIENT_STATUSES = Set.of(408, 409, 429);
 
     private static final int MAX_KEY_LENGTH = 255;
 
@@ -203,7 +208,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         boolean kept = false;
         try {
             chain.doFilter(cached, recorded);
-            if (recorded.getStatus() < 500) {
+            if (keeps(recorded.getStatus())) {
                 kept = store(recorded, claimKey, responseKey, fingerprint);
             }
         } finally {
@@ -212,6 +217,17 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             }
             recorded.copyBodyToResponse();
         }
+    }
+
+    /**
+     * Tells whether a response is kept for retries: every status but {@code 5xx} and the transient {@code 408},
+     * {@code 409} and {@code 429}, whose retry with the same key runs the request again.
+     *
+     * @param status the response status
+     * @return {@code true} if the response answers the request for good
+     */
+    static boolean keeps(int status) {
+        return status < 500 && !TRANSIENT_STATUSES.contains(status);
     }
 
     private void replayOrReject(

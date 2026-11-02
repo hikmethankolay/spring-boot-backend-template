@@ -23,8 +23,10 @@ Options considered:
 ## Decision
 
 Unsubscribe links carry a signed token. The key is derived with HKDF-SHA256 (info `unsubscribe-v1`) from
-`MFA_ENCRYPTION_KEY`, which must never change anyway; the JWT keys are rotated and would break every link sent
-before a rotation. Preferences are per user and category (`email_preferences`), not per address, so they follow an
+`MFA_ENCRYPTION_KEY`, not from the JWT keys, whose old key is dropped after a 15-minute overlap.
+`MFA_ENCRYPTION_KEY` is a comma-separated list, like `JWT_SECRET`: the first key signs, every listed key verifies,
+so it can be rotated without breaking links as long as the old key stays listed (amended November 2026; before, it
+could not change at all). Preferences are per user and category (`email_preferences`), not per address, so they follow an
 email change. Only optional categories (`MailCategory.optional`) can be turned off; account and security email
 cannot, and carry no unsubscribe link.
 
@@ -37,7 +39,9 @@ nothing because mail scanners open links) and confirms with `POST`.
 - Links never expire and are not single-use; using one twice, or one of a deleted account, succeeds without effect.
 - The user id in a token is readable, only its integrity is protected. Anyone holding a link can turn that one
   category off for that user, which is the point of the link.
-- Changing `MFA_ENCRYPTION_KEY` invalidates every unsubscribe link already sent, as it already does two-factor
-  enrollment.
+- Removing a key from `MFA_ENCRYPTION_KEY` invalidates every unsubscribe link it signed, and the two-factor secrets
+  it still encrypts. A rotation therefore keeps the old key listed; two-factor secrets move to the new key as their
+  users sign in, but links in old emails cannot be re-signed. Tokens carry no key id: verifying tries each listed
+  key, a few HMACs.
 - The opt-out is checked when an email is queued and again when it is sent, so an email waiting in the outbox is
   dropped once its category is turned off.

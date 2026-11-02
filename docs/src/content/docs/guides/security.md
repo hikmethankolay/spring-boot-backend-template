@@ -237,7 +237,8 @@ password or logged in on a newer version cannot log in until they reset their pa
 - Email templates print values with `th:text` and `th:href`, which escape them; `th:utext` and `[(...)]` are
   banned in HTML templates and a test enforces it. See [Email templates](../email-templates/).
 - Unsubscribe links carry `v1.<base64url(userId.category)>.<base64url(HMAC-SHA256)>`, keyed by HKDF from
-  `MFA_ENCRYPTION_KEY` ([ADR 8](../../adr/0008-unsubscribe/)). They need no login and never expire, so they can only
+  `MFA_ENCRYPTION_KEY` ([ADR 8](../../adr/0008-unsubscribe/)); after a [rotation](#rotating-mfa_encryption_key) any
+  listed key verifies them. They need no login and never expire, so they can only
   turn off an optional category; `GET` changes nothing (mail scanners open links). The endpoints are public paths
   and pass the CSRF filter because mail clients send them without cookies, which is the only case that filter
   checks. Tokens are never logged.
@@ -282,14 +283,34 @@ client sends it with a code to `/login/mfa` within `MFA_CHALLENGE_TTL` (5 minute
 - Secrets are encrypted with AES-256-GCM under a key derived from `MFA_ENCRYPTION_KEY` with HKDF-SHA256 (RFC 5869),
   bound to the user id, so a database dump alone does not reveal them. Stored values carry a version prefix (`v1:`),
   so a later key or scheme can coexist with this one; values from before 4.0 (no prefix, key = SHA-256 of the
-  setting) still decrypt. Keep the key out of database backups. Changing it breaks every enrolled authenticator; the
-  affected users log in with a recovery code and enroll again.
+  setting) still decrypt. Keep the key out of database backups. Rotate it as below; replacing it outright breaks
+  every enrolled authenticator (the affected users log in with a recovery code and enroll again) and every unsubscribe
+  link already sent.
 - A code is accepted within one 30-second step of the server clock, and only once: the step of the last accepted code
   is stored. Recovery codes are stored as SHA-256 hashes and work once.
 - Wrong codes count as failed logins of the IP and the account ([brute-force protection](#brute-force-protection)),
   and a correct password does not reset the account counter while the second factor is pending, so codes cannot be
   guessed by logging in again and again.
 - The MFA token lives in Redis; without Redis, users with 2FA cannot log in (`503`), as with the failed-login counters.
+
+### Rotating MFA_ENCRYPTION_KEY
+
+Like `JWT_SECRET`, `MFA_ENCRYPTION_KEY` takes a comma-separated list: the **first** key encrypts new two-factor secrets
+and signs new unsubscribe links, **every** key decrypts and verifies. The stored values carry no key id; AES-GCM's tag
+tells which key fits. A single key, as before, is a list of one, and existing values keep working.
+
+1. Generate a key (`openssl rand -base64 48`) and deploy it first, the old one second:
+   `MFA_ENCRYPTION_KEY=<new>,<old>`.
+2. Each time a user signs in with their authenticator, their secret is encrypted again with the new key. Users who
+   do not sign in keep a secret under the old key, which keeps working while that key is listed.
+3. Keep the old key in the list: unsubscribe links never expire, and those in emails sent before the rotation are
+   signed with it. Drop it only when you accept that those links stop working and that users who have not signed
+   in since must use a recovery code and enroll again.
+
+If the key leaked but the database did not, rotate as above and drop the old key once enough users have signed in:
+the key alone reveals no secret, it only lets someone forge unsubscribe links. If the database leaked as well, the
+two-factor secrets are exposed whatever the key: ask the users to turn two-factor authentication off and on again,
+which creates a new secret.
 - Nobody can turn off another user's 2FA. A user who lost both the app and the recovery codes needs an administrator
   to act in the database; decide and document that procedure.
 
@@ -431,6 +452,7 @@ Security events are written to the `audit` logger and counted in the `security_a
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |
 | `user.account_deleted`, `user.data_exported` | Personal data requests |
 | `admin.user_updated`, `admin.role_changed`, `admin.user_deleted`, `admin.user_suspended`, `admin.user_unsuspended` | Administrator actions |
+| `admin.owner_bootstrapped` | The owner account was created at startup from `ADMIN_USERNAME`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` |
 
 Each entry has the affected `userId`, the authenticated `actorId`, the `clientIp`, and event-specific fields. Failed
 and

@@ -62,6 +62,9 @@ public enum AuditEvent {
     /** A password was set with a reset link. */
     PASSWORD_RESET_COMPLETED("user.password_reset_completed", Level.INFO),
 
+    /** The owner account was created at startup from {@code app.admin.*} (details: username). */
+    OWNER_BOOTSTRAPPED("admin.owner_bootstrapped", Level.WARN),
+
     /** An administrator changed a user's username, email or password. */
     USER_UPDATED_BY_ADMIN("admin.user_updated", Level.INFO),
 

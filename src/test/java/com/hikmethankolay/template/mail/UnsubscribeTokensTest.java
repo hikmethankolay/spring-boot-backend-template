@@ -42,6 +42,23 @@ class UnsubscribeTokensTest {
     }
 
     @Test
+    void linksSignedBeforeAKeyRotationStillWork() {
+        String old = tokens.issue(42, MailCategory.PRODUCT_UPDATES);
+        String newKey = "new-mfa-key-that-is-at-least-32-characters";
+        UnsubscribeTokens rotated = new UnsubscribeTokens(TestProperties.withMfaKeys(newKey, TestProperties.MFA_KEY));
+
+        assertThat(rotated.verify(old)).contains(new UnsubscribeTokens.Claim(42, MailCategory.PRODUCT_UPDATES));
+        // New links are signed with the first key: they do not verify under the old one alone.
+        String fresh = rotated.issue(42, MailCategory.PRODUCT_UPDATES);
+        assertThat(tokens.verify(fresh)).isEmpty();
+        assertThat(new UnsubscribeTokens(TestProperties.withMfaKeys(newKey)).verify(fresh))
+                .isPresent();
+        // Dropping the old key breaks the links it signed.
+        assertThat(new UnsubscribeTokens(TestProperties.withMfaKeys(newKey)).verify(old))
+                .isEmpty();
+    }
+
+    @Test
     void transactionalCategoryCannotBeTurnedOff() {
         assertThat(tokens.verify(tokens.issue(42, MailCategory.ACCOUNT))).isEmpty();
         assertThat(tokens.verify(tokens.issue(42, MailCategory.SECURITY))).isEmpty();
