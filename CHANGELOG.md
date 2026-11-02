@@ -6,6 +6,11 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Fixed
+
+- The release workflow skipped the SLSA provenance on the tag run, because its jobs skipped there (test, build) failed
+  the provenance job's implicit status check; 4.3.0 was released without `sbom.spdx.json.intoto.jsonl`.
+
 ## [4.3.0] - 2026-11-02
 
 ### Added

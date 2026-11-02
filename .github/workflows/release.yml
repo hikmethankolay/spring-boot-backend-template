@@ -295,6 +295,8 @@ jobs:
   # The generator must be referenced by tag (not SHA) so slsa-verifier can check the builder.
   provenance:
     needs: publish
+    # Without a status check the implicit success() also requires the jobs skipped on the tag run (test, build).
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     permissions:
       actions: read
       contents: write
