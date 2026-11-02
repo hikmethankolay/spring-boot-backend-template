@@ -133,7 +133,12 @@ class ProductionSettingsCheckTest {
 
     @Test
     void recognisesPlaceholderAddresses() {
-        assertThat(List.of("no-reply@example.com", "a@EXAMPLE.org", "a@mail.example.net", " a@example.com ", "Acme <no-reply@example.com>"))
+        assertThat(List.of(
+                        "no-reply@example.com",
+                        "a@EXAMPLE.org",
+                        "a@mail.example.net",
+                        " a@example.com ",
+                        "Acme <no-reply@example.com>"))
                 .allMatch(ProductionSettingsCheck::isPlaceholderAddress);
         assertThat(List.of("no-reply@acme.dev", "a@myexample.com", "a@example.com.tr", "Acme <no-reply@acme.dev>"))
                 .noneMatch(ProductionSettingsCheck::isPlaceholderAddress);
