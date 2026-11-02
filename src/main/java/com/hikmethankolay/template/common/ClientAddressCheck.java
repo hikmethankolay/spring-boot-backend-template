@@ -74,7 +74,8 @@ class ClientAddressCheck extends OncePerRequestFilter {
                                 + " FORWARD_HEADERS_STRATEGY=native and let the proxy pass the client address (see"
                                 + " 'Client IP behind a proxy' in the Production guide). Further requests are only"
                                 + " counted in client_address_not_public_total.",
-                        address);
+                        // Behind a proxy the address comes from a header; a value that is not an IP may hold one.
+                        address == null ? null : address.replaceAll("[\\r\\n]", "_"));
             }
         }
         filterChain.doFilter(request, response);

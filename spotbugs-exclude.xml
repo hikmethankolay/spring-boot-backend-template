@@ -45,6 +45,17 @@
         <Class name="com.hikmethankolay.template.config.DevelopmentSettingsWarning"/>
     </Match>
     <!--
+      ProductionSettingsWarnings logs fixed messages naming configuration values (hosts from DB_URL and REDIS_HOST).
+      ClientAddressCheck logs the remote address once, with line breaks replaced.
+    -->
+    <Match>
+        <Bug pattern="CRLF_INJECTION_LOGS"/>
+        <Or>
+            <Class name="com.hikmethankolay.template.config.ProductionSettingsWarnings"/>
+            <Class name="com.hikmethankolay.template.common.ClientAddressCheck"/>
+        </Or>
+    </Match>
+    <!--
       CookieCsrfFilter reads Origin, Host and X-Requested-With to stop cross-site requests. In such a request the
       victim's browser sets them: pages cannot forge Origin or Host, and adding X-Requested-With from another site
       needs a CORS preflight the API refuses. A client that forges them itself already holds the cookie.

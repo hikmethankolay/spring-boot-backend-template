@@ -3154,6 +3154,139 @@
         "tags" : [ "Two-factor authentication" ]
       }
     },
+    "/api/v1/users/me/mfa/totp/recovery-codes" : {
+      "post" : {
+        "description" : "Needs the password and a code from the app (not a recovery code). Replaces every recovery code, used or not, with ten new ones; they cannot be shown again. Wrong passwords and codes count as failed logins: repeated failures lock the IP and the account (429).",
+        "operationId" : "regenerateRecoveryCodes",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegenerateRecoveryCodesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description" : "The new recovery codes; the old ones no longer work",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Invalid input (see `errors`), or the password or the code is wrong",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Two-factor authentication is off",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Create new recovery codes",
+        "tags" : [ "Two-factor authentication" ]
+      }
+    },
     "/api/v1/users/me/password" : {
       "put" : {
         "description" : "Ends every session of the user, including the current one: log in again afterwards. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
@@ -3343,6 +3476,48 @@
       }
     },
     "/api/v1/users/me/sessions" : {
+      "delete" : {
+        "description" : "Logs every other device out: their refresh tokens stop working at once and their access tokens are rejected. The session making this request stays signed in.",
+        "operationId" : "revokeOtherSessions",
+        "responses" : {
+          "204" : {
+            "description" : "Every other session has ended",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Sign out all other sessions",
+        "tags" : [ "Authentication" ]
+      },
       "get" : {
         "description" : "One entry per login that has not ended, newest first, with the browser or app and the IP of its login or last refresh. `current` marks the session making this request.",
         "operationId" : "listSessions",
@@ -3470,6 +3645,192 @@
           "cookieAuth" : [ ]
         } ],
         "summary" : "End a session",
+        "tags" : [ "Authentication" ]
+      }
+    },
+    "/api/v1/users/me/social-accounts" : {
+      "get" : {
+        "description" : "The GitHub and Google accounts that can sign in to this one, oldest first.",
+        "operationId" : "listSocialAccounts",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SocialAccountResponse"
+                  }
+                }
+              }
+            },
+            "description" : "The linked accounts",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "List your linked accounts",
+        "tags" : [ "Authentication" ]
+      }
+    },
+    "/api/v1/users/me/social-accounts/{id}" : {
+      "delete" : {
+        "description" : "Needs the password, so the account always keeps a way to sign in; an account created by a GitHub or Google login sets one with the password reset first. Signing in with that provider account later works like a first social login: it links it again if its verified email is this account's, or creates a new account otherwise. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
+        "operationId" : "unlinkSocialAccount",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UnlinkSocialAccountRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "The account is unlinked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Invalid input (see `errors`), or the password is wrong",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "401" : {
+            "$ref" : "#/components/responses/Unauthorized"
+          },
+          "403" : {
+            "$ref" : "#/components/responses/CrossSiteRequest"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "You have no linked account with this id",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "429" : {
+            "$ref" : "#/components/responses/TooManyRequests"
+          },
+          "500" : {
+            "$ref" : "#/components/responses/InternalServerError"
+          },
+          "503" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Temporarily unavailable because the failed-login counters cannot be checked",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        }, {
+          "cookieAuth" : [ ]
+        } ],
+        "summary" : "Unlink an account",
         "tags" : [ "Authentication" ]
       }
     },
@@ -5018,7 +5379,7 @@
           "type" : {
             "type" : "string",
             "format" : "uri",
-            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
+            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:social-account-not-found`: The caller has no linked provider account with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
             "example" : "urn:problem:validation-failed"
           }
         },
@@ -5045,6 +5406,24 @@
             "minLength" : 0
           }
         }
+      },
+      "RegenerateRecoveryCodesRequest" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "currentPassword" : {
+            "type" : "string",
+            "format" : "password",
+            "maxLength" : 128,
+            "minLength" : 0,
+            "writeOnly" : true
+          }
+        },
+        "required" : [ "code", "currentPassword" ]
       },
       "RegisterRequest" : {
         "type" : "object",
@@ -5110,6 +5489,23 @@
           }
         },
         "required" : [ "current", "expiresAt", "id", "lastUsedAt", "rememberMe", "startedAt" ]
+      },
+      "SocialAccountResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "linkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "linkedAt", "provider" ]
       },
       "SocialLoginRequest" : {
         "type" : "object",
@@ -5183,6 +5579,19 @@
           }
         },
         "required" : [ "otpauthUri", "secret" ]
+      },
+      "UnlinkSocialAccountRequest" : {
+        "type" : "object",
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string",
+            "format" : "password",
+            "maxLength" : 128,
+            "minLength" : 0,
+            "writeOnly" : true
+          }
+        },
+        "required" : [ "currentPassword" ]
       },
       "UnsubscribeResponse" : {
         "type" : "object",
