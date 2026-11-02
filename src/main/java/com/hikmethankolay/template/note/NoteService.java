@@ -3,6 +3,7 @@ package com.hikmethankolay.template.note;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SortAllowList;
+import com.hikmethankolay.template.common.Versioned;
 import com.hikmethankolay.template.note.dto.NoteRequest;
 import com.hikmethankolay.template.note.dto.NoteResponse;
 import java.util.List;
@@ -52,11 +53,11 @@ public class NoteService {
      *
      * @param userId the caller
      * @param id     note id
-     * @return the note
+     * @return the note and its version, for the {@code ETag}
      * @throws ApiException 404 if the caller has no note with this id
      */
-    public NoteResponse get(long userId, long id) {
-        return NoteResponse.from(findNote(userId, id));
+    public Versioned<NoteResponse> get(long userId, long id) {
+        return versioned(findNote(userId, id));
     }
 
     /**
@@ -77,15 +78,17 @@ public class NoteService {
      * @param userId  the caller
      * @param id      note id
      * @param request new title and text
-     * @return the updated note
-     * @throws ApiException 404 if the caller has no note with this id
+     * @param ifMatch the {@code If-Match} header, or {@code null} to update whatever the current version is
+     * @return the updated note and its new version, for the {@code ETag}
+     * @throws ApiException 404 if the caller has no note with this id, 412 if {@code ifMatch} does not match
      */
     @Transactional
-    public NoteResponse update(long userId, long id, NoteRequest request) {
+    public Versioned<NoteResponse> update(long userId, long id, NoteRequest request, String ifMatch) {
         Note note = findNote(userId, id);
+        Versioned.checkIfMatch(ifMatch, note.getVersion());
         note.update(request.title(), request.body());
-        // Flushed here so updatedAt and a concurrent-update conflict (409) are in this response.
-        return NoteResponse.from(notes.saveAndFlush(note));
+        // Flushed here so updatedAt, the new version and a concurrent-update conflict (409) are in this response.
+        return versioned(notes.saveAndFlush(note));
     }
 
     /**
@@ -110,6 +113,10 @@ public class NoteService {
         return notes.findAllByUserIdOrderByIdAsc(userId).stream()
                 .map(NoteResponse::from)
                 .toList();
+    }
+
+    private static Versioned<NoteResponse> versioned(Note note) {
+        return new Versioned<>(NoteResponse.from(note), note.getVersion());
     }
 
     private Note findNote(long userId, long id) {

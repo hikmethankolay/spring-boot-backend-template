@@ -45,6 +45,45 @@ class NoteIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void updateWithAnOutdatedETagIsRefused() throws Exception {
+        String token = registerAndLogin(uniqueUsername());
+        long id = createNote(token, "Groceries", "milk");
+        String etag = mockMvc.perform(get("/api/v1/notes/{id}", id).with(bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", Matchers.matchesPattern("\"\\d+\"")))
+                .andReturn()
+                .getResponse()
+                .getHeader("ETag");
+        mockMvc.perform(get("/api/v1/notes/{id}", id).with(bearer(token)).header("If-None-Match", etag))
+                .andExpect(status().isNotModified());
+
+        String newEtag = mockMvc.perform(put("/api/v1/notes/{id}", id)
+                        .with(bearer(token))
+                        .header("If-Match", etag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Groceries","body":"milk, eggs"}"""))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", Matchers.not(etag)))
+                .andReturn()
+                .getResponse()
+                .getHeader("ETag");
+
+        // A second client still holding the first tag does not overwrite the change.
+        mockMvc.perform(put("/api/v1/notes/{id}", id)
+                        .with(bearer(token))
+                        .header("If-Match", etag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Groceries","body":"bread"}"""))
+                .andExpect(status().isPreconditionFailed())
+                .andExpect(jsonPath("$.type").value("urn:problem:precondition-failed"));
+        mockMvc.perform(get("/api/v1/notes/{id}", id).with(bearer(token)))
+                .andExpect(header().string("ETag", newEtag))
+                .andExpect(jsonPath("$.body").value("milk, eggs"));
+    }
+
+    @Test
     void otherUsersNotesLookMissing() throws Exception {
         String owner = registerAndLogin(uniqueUsername());
         String other = registerAndLogin(uniqueUsername());

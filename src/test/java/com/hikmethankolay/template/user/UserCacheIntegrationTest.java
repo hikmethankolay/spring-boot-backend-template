@@ -18,7 +18,10 @@ import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Verifies the Redis user cache: hits, JSON round-trip and eviction on every write. */
+/**
+ * Verifies the Redis user cache: hits, JSON round-trip and eviction on every write. Uses {@code GET /users/{id}}:
+ * {@code GET /users/me} reads the database, so its {@code ETag} is never stale.
+ */
 class UserCacheIntegrationTest extends IntegrationTest {
 
     @Autowired
@@ -37,16 +40,30 @@ class UserCacheIntegrationTest extends IntegrationTest {
         long id = register(username);
         String token = login(username, PASSWORD);
 
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token))).andExpect(status().isOk());
         assertThat(usersCache().get(id, UserResponse.class))
                 .isNotNull()
                 .satisfies(cached -> assertThat(cached.username()).isEqualTo(username));
 
         // Change the row behind the cache's back: the cached value is still returned.
         jdbcTemplate.update("UPDATE users SET email = ? WHERE id = ?", "changed-in-db@example.com", id);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(username + "@example.com"));
+    }
+
+    @Test
+    void meIsNotServedFromCache() throws Exception {
+        String username = uniqueUsername();
+        long id = register(username);
+        String token = login(username, PASSWORD);
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token))).andExpect(status().isOk());
+
+        jdbcTemplate.update(
+                "UPDATE users SET email = ?, version = version + 1 WHERE id = ?", "me-" + id + "@example.com", id);
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("me-" + id + "@example.com"));
     }
 
     @Test
@@ -54,7 +71,7 @@ class UserCacheIntegrationTest extends IntegrationTest {
         String username = uniqueUsername();
         long id = register(username);
         String token = login(username, PASSWORD);
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token))).andExpect(status().isOk());
 
         mockMvc.perform(patch("/api/v1/users/me")
                         .with(bearer(token))
@@ -64,13 +81,13 @@ class UserCacheIntegrationTest extends IntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(usersCache().get(id)).isNull();
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token)))
                 .andExpect(jsonPath("$.pendingEmail").value("updated-" + username + "@example.com"));
 
         // Confirming the new address changes the user again.
         confirmEmail("updated-" + username + "@example.com");
         assertThat(usersCache().get(id)).isNull();
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token)))
                 .andExpect(jsonPath("$.email").value("updated-" + username + "@example.com"));
     }
 
@@ -81,7 +98,7 @@ class UserCacheIntegrationTest extends IntegrationTest {
         String token = login(username, PASSWORD);
         String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
 
-        mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/users/{id}", id).with(bearer(token))).andExpect(status().isOk());
         mockMvc.perform(put("/api/v1/users/me/password")
                         .with(bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)

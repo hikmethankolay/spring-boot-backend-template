@@ -93,7 +93,7 @@ push and type-checks it, but check the generator you choose against your own bui
 | `POST` | `/api/v1/auth/verify-email/resend` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset` | public | `202` |
 | `POST` | `/api/v1/auth/password-reset/confirm` | public | `204` |
-| `GET` / `PATCH` | `/api/v1/users/me` | authenticated (+ password to change the email) | `200`; a new email is `pendingEmail` until its link is opened |
+| `GET` / `PATCH` | `/api/v1/users/me` | authenticated (+ password to change the email) | `200` + `ETag`; a new email is `pendingEmail` until its link is opened; `PATCH` takes `If-Match` ([concurrent updates](#concurrent-updates)) |
 | `GET` | `/api/v1/users/me/security-events` | authenticated | `200` page of the user's audit events, newest first |
 | `PUT` | `/api/v1/users/me/password` | authenticated | `204`; ends every session |
 | `DELETE` | `/api/v1/users/me` | authenticated + password | `204` |
@@ -103,13 +103,13 @@ push and type-checks it, but check the generator you choose against your own bui
 | `DELETE` | `/api/v1/users/me/mfa/totp` | authenticated + password + code | `204` |
 | `GET` | `/api/v1/users/me/sessions` | authenticated | `200` active sessions, `current` marks this one |
 | `DELETE` | `/api/v1/users/me/sessions/{id}` | authenticated | `204`; that device is logged out at once |
-| `GET` | `/api/v1/users?page=0&size=20&sort=createdAt,desc` | admin | `200` page |
+| `GET` | `/api/v1/users?q=alice&role=USER&suspended=false&page=0&size=20&sort=createdAt,desc` | admin | `200` page; every filter is optional ([filters](#pagination)) |
 | `GET` | `/api/v1/users/{id}` | admin or that user | `200` |
 | `PATCH` / `DELETE` | `/api/v1/users/{id}` | admin; administrators: owner; role changes and deleting an administrator: owner + password | `200` / `204` |
 | `PUT` / `DELETE` | `/api/v1/users/{id}/suspension` | admin; administrators: owner | `200`; suspends (ends the sessions, refuses logins) / reactivates |
 | `GET` | `/api/v1/users/{id}/security-events` | admin or that user | `200` page of the user's audit events, also of deleted users |
 | `GET` / `POST` | `/api/v1/notes` | authenticated (own notes only) | `200` page / `201` + `Location` |
-| `GET` / `PUT` / `DELETE` | `/api/v1/notes/{id}` | the note's owner | `200` / `200` / `204` |
+| `GET` / `PUT` / `DELETE` | `/api/v1/notes/{id}` | the note's owner | `200` + `ETag` / `200` + `ETag` / `204`; `PUT` takes `If-Match` |
 | `GET` / `PUT` | `/api/v1/users/me/email-preferences` | authenticated | `200` optional email categories; `PUT` takes `{"product-updates": false}` |
 | `GET` | `/api/v1/mail/unsubscribe?token=…` | unsubscribe link | `200` `{category, categoryName, enabled}`; changes nothing |
 | `POST` | `/api/v1/mail/unsubscribe?token=…` | unsubscribe link | `204`; turns the link's category off. RFC 8058 one-click target: works without cookies or headers |
@@ -176,6 +176,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |
 | `urn:problem:owner-protected` | 409 | The owner cannot be deleted or demoted, and `OWNER` cannot be assigned |
 | `urn:problem:conflict` | 409 | A concurrent change got there first; retry |
+| `urn:problem:precondition-failed` | 412 | `If-Match` does not match the current `ETag`: the resource changed since it was read |
 | `urn:problem:idempotency-key-invalid` | 400 | The `Idempotency-Key` header is empty or longer than 255 characters |
 | `urn:problem:idempotency-key-in-use` | 409 | A request with the same `Idempotency-Key` is still running; retry later |
 | `urn:problem:idempotency-key-reused` | 422 | The `Idempotency-Key` was used for a request with another path or body |
@@ -193,6 +194,31 @@ hash, is rejected with `400`, because sorting by a hidden column reveals informa
 ```json
 { "content": [ ... ], "page": { "size": 20, "number": 0, "totalElements": 42, "totalPages": 3 } }
 ```
+
+`/api/v1/users` also takes optional filters, combined with AND:
+
+| Parameter | Matches |
+|-----------|---------|
+| `q` | Users whose username or email contains the text, ignoring case; `%` and `_` are plain characters. At most 254 characters (`400` otherwise) |
+| `role` | `USER`, `ADMIN` or `OWNER` |
+| `suspended` | `true`: suspended users only; `false`: active users only |
+
+The filters do not use an index: `q` matches anywhere in the text, which a B-tree index cannot serve. That is fine for
+an admin screen over the users table; a very large one would need a `pg_trgm` index.
+
+## Concurrent updates
+
+`GET /api/v1/notes/{id}` and `GET /api/v1/users/me` return a strong `ETag` (for example `"3"`): the row's version,
+which changes on every write. Send it back as `If-Match` with `PUT /api/v1/notes/{id}` or `PATCH /api/v1/users/me`, and
+the update is refused with `412` and `urn:problem:precondition-failed` if someone changed the resource since you read
+it, instead of overwriting their change. Reload it and retry. The responses of those updates carry the new `ETag`.
+
+- Without `If-Match` an update applies to whatever the current version is, as before. `If-Match: *` does the same.
+- Weak tags (`W/"3"`) never match `If-Match` (RFC 9110).
+- The user's tag also changes on writes that do not show in the body, such as logging out every session, so a `412`
+  does not always mean a visible change.
+- `If-None-Match` with the current tag on those `GET`s answers `304` without a body.
+- Two updates that pass the check at the same time are still told apart by the database: the second gets `409`.
 
 ## Retrying POST requests
 
@@ -222,6 +248,7 @@ second note or queuing a second broadcast. This follows the IETF `Idempotency-Ke
 | `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset` | Rate limit state (seconds until reset) |
 | `Retry-After` | On `429`: seconds to wait |
 | `Location` | On `201`: URL of the created resource |
+| `ETag` | On a note and on `/users/me`: the version to send as `If-Match` ([concurrent updates](#concurrent-updates)) |
 | `Idempotent-Replayed: true` | On a `POST` repeated with the same `Idempotency-Key`: the stored first response |
 | `Cache-Control: no-store` | On every response: exactly `no-store` on token responses, Spring Security's `no-cache, no-store, max-age=0, must-revalidate` elsewhere |
 | `Content-Security-Policy`, `Referrer-Policy`, `Permissions-Policy` | Browser hardening, see [Security](../security/#security-headers) |

@@ -2058,6 +2058,30 @@
             },
             "description" : "The note",
             "headers" : {
+              "ETag" : {
+                "description" : "Strong tag of this version of the resource; send it as `If-Match` to update it",
+                "schema" : {
+                  "type" : "string"
+                },
+                "style" : "simple"
+              },
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "304" : {
+            "description" : "`If-None-Match` lists the current `ETag`: the copy the client has is still current",
+            "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
               },
@@ -2127,6 +2151,14 @@
             "type" : "integer",
             "format" : "int64"
           }
+        }, {
+          "description" : "The `ETag` the change is based on; if the resource changed since, the update is refused with 412. Without the header the update applies to whatever the current version is",
+          "in" : "header",
+          "name" : "If-Match",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
         } ],
         "requestBody" : {
           "content" : {
@@ -2149,6 +2181,13 @@
             },
             "description" : "The updated note",
             "headers" : {
+              "ETag" : {
+                "description" : "Strong tag of this version of the resource; send it as `If-Match` to update it",
+                "schema" : {
+                  "type" : "string"
+                },
+                "style" : "simple"
+              },
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
               },
@@ -2220,6 +2259,30 @@
               }
             }
           },
+          "412" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "`If-Match` does not match the current `ETag`; reload and retry",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
           "429" : {
             "$ref" : "#/components/responses/TooManyRequests"
           },
@@ -2240,6 +2303,33 @@
       "get" : {
         "operationId" : "listUsers",
         "parameters" : [ {
+          "description" : "Only users whose username or email contains this text, ignoring case",
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 254,
+            "minLength" : 0
+          }
+        }, {
+          "description" : "Only users with this role",
+          "in" : "query",
+          "name" : "role",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "USER", "ADMIN", "OWNER" ]
+          }
+        }, {
+          "description" : "`true`: only suspended users; `false`: only active ones",
+          "in" : "query",
+          "name" : "suspended",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
           "description" : "Zero-based page index (0..N)",
           "in" : "query",
           "name" : "page",
@@ -2462,6 +2552,30 @@
             },
             "description" : "The current user",
             "headers" : {
+              "ETag" : {
+                "description" : "Strong tag of this version of the resource; send it as `If-Match` to update it",
+                "schema" : {
+                  "type" : "string"
+                },
+                "style" : "simple"
+              },
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "304" : {
+            "description" : "`If-None-Match` lists the current `ETag`: the copy the client has is still current",
+            "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
               },
@@ -2497,6 +2611,15 @@
       "patch" : {
         "description" : "Changes the username and/or email; omitted fields stay unchanged. Changing the email needs `currentPassword` and is not immediate: the new address is returned as `pendingEmail` and gets a link (to `/verify-email`, like a verification link); once it is opened, it replaces `email` and the old address is told. Sending the current email again cancels the change. Wrong passwords count as failed logins: repeated failures lock the IP and the account (429).",
         "operationId" : "updateCurrentUser",
+        "parameters" : [ {
+          "description" : "The `ETag` the change is based on; if the resource changed since, the update is refused with 412. Without the header the update applies to whatever the current version is",
+          "in" : "header",
+          "name" : "If-Match",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -2518,6 +2641,13 @@
             },
             "description" : "The updated user",
             "headers" : {
+              "ETag" : {
+                "description" : "Strong tag of this version of the resource; send it as `If-Match` to update it",
+                "schema" : {
+                  "type" : "string"
+                },
+                "style" : "simple"
+              },
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
               },
@@ -2571,6 +2701,30 @@
               }
             },
             "description" : "Username or email already taken",
+            "headers" : {
+              "RateLimit-Limit" : {
+                "$ref" : "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining" : {
+                "$ref" : "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset" : {
+                "$ref" : "#/components/headers/RateLimit-Reset"
+              },
+              "X-Trace-Id" : {
+                "$ref" : "#/components/headers/X-Trace-Id"
+              }
+            }
+          },
+          "412" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "`If-Match` does not match the current `ETag`; reload and retry",
             "headers" : {
               "RateLimit-Limit" : {
                 "$ref" : "#/components/headers/RateLimit-Limit"
@@ -5018,7 +5172,7 @@
           "type" : {
             "type" : "string",
             "format" : "uri",
-            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
+            "description" : "Identifies the kind of error. `about:blank` for generic HTTP errors (malformed JSON, unsupported media type, ...), otherwise one of:\n\n- `urn:problem:validation-failed`: The request body is invalid; the fields are listed in `errors`\n- `urn:problem:invalid-sort`: The `sort` parameter names a property that cannot be sorted by\n- `urn:problem:invalid-credentials`: Wrong username, email or password, or a refresh token that is missing, invalid, expired or already used\n- `urn:problem:unauthenticated`: The access token is missing, invalid, expired or revoked\n- `urn:problem:cross-site-request`: A request authenticated by cookie needs an allowed Origin or the header X-Requested-With: XMLHttpRequest\n- `urn:problem:forbidden`: The caller is authenticated but lacks the required role\n- `urn:problem:email-not-verified`: The email address must be verified before logging in\n- `urn:problem:account-suspended`: An administrator suspended this account; it cannot log in\n- `urn:problem:wrong-password`: The caller's current password, required to confirm the change, is missing or wrong\n- `urn:problem:password-too-short`: The new password needs 15 characters, or 8 with two-factor authentication\n- `urn:problem:password-breached`: The new password is common or appeared in a data breach; choose another\n- `urn:problem:invalid-token`: The email verification or password reset token is unknown, used or expired\n- `urn:problem:broadcast-in-progress`: Another broadcast is still being queued or started less than a minute ago; wait and retry\n- `urn:problem:unsubscribe-token-invalid`: The unsubscribe link's token is malformed or was not issued by this server\n- `urn:problem:username-taken`: The username belongs to another account\n- `urn:problem:email-taken`: The email address belongs to another account\n- `urn:problem:owner-required`: Only the owner can change roles and manage administrators\n- `urn:problem:owner-protected`: The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through the API\n- `urn:problem:own-account`: Administrators cannot delete or suspend their own account through the admin endpoints\n- `urn:problem:user-not-found`: No user has this id\n- `urn:problem:note-not-found`: The caller has no note with this id\n- `urn:problem:session-not-found`: The caller has no session with this id\n- `urn:problem:invalid-mfa-code`: The authenticator or recovery code is wrong, expired or already used\n- `urn:problem:mfa-challenge-expired`: The MFA token is unknown, used or expired; log in again\n- `urn:problem:totp-already-enabled`: Two-factor authentication is already enabled\n- `urn:problem:totp-not-enabled`: Two-factor authentication is not enabled, or no enrollment is pending\n- `urn:problem:provider-not-configured`: This login provider is not configured\n- `urn:problem:social-email-unverified`: The provider account has no verified email address to log in with\n- `urn:problem:social-account-conflict`: An account with this email exists but its email is not verified; log in with its password first\n- `urn:problem:conflict`: The change conflicts with data written at the same time; retry it\n- `urn:problem:precondition-failed`: The `If-Match` header does not match the resource's current `ETag`: it changed since it was read; reload it and retry\n- `urn:problem:login-locked`: Too many failed logins for this IP or account; wait for `Retry-After` seconds\n- `urn:problem:login-unavailable`: Login is temporarily unavailable; retry later\n- `urn:problem:idempotency-key-invalid`: The `Idempotency-Key` header is empty or longer than 255 characters\n- `urn:problem:idempotency-key-in-use`: A request with this `Idempotency-Key` is still running; retry it later\n- `urn:problem:idempotency-key-reused`: This `Idempotency-Key` was used for a different request; use a new key\n- `urn:problem:rate-limited`: Too many requests from this IP; wait for `Retry-After` seconds\n- `urn:problem:internal-error`: Unexpected server error; quote `X-Trace-Id` when reporting it",
             "example" : "urn:problem:validation-failed"
           }
         },

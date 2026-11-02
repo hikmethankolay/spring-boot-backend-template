@@ -283,6 +283,91 @@ class UserIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void adminCanSearchUsersByTextRoleAndSuspension() throws Exception {
+        String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String active = uniqueUsername();
+        String suspended = uniqueUsername();
+        register(active);
+        long suspendedId = register(suspended);
+        mockMvc.perform(put("/api/v1/users/{id}/suspension", suspendedId).with(bearer(adminToken)))
+                .andExpect(status().isOk());
+        // "user_1a2b3c4d" -> "R_1A2B3C": any case, and "_" is a literal underscore.
+        String part = active.substring(3, 10).toUpperCase(java.util.Locale.ROOT);
+
+        mockMvc.perform(get("/api/v1/users").with(bearer(adminToken)).param("q", part))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].username").value(active));
+        // Matches the email too.
+        mockMvc.perform(get("/api/v1/users").with(bearer(adminToken)).param("q", suspended + "@example"))
+                .andExpect(jsonPath("$.content[*].username").value(org.hamcrest.Matchers.contains(suspended)));
+        // "%" is not a wildcard: "user%<suffix>" matches nobody.
+        mockMvc.perform(get("/api/v1/users").with(bearer(adminToken)).param("q", "user%" + active.substring(5)))
+                .andExpect(jsonPath("$.page.totalElements").value(0));
+        mockMvc.perform(get("/api/v1/users")
+                        .with(bearer(adminToken))
+                        .param("q", active)
+                        .param("role", "ADMIN"))
+                .andExpect(jsonPath("$.page.totalElements").value(0));
+        mockMvc.perform(get("/api/v1/users")
+                        .with(bearer(adminToken))
+                        .param("q", active)
+                        .param("role", "USER")
+                        .param("suspended", "false"))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+        mockMvc.perform(get("/api/v1/users")
+                        .with(bearer(adminToken))
+                        .param("suspended", "true")
+                        .param("size", "100"))
+                .andExpect(jsonPath("$.content[*].username").value(org.hamcrest.Matchers.hasItem(suspended)))
+                .andExpect(jsonPath("$.content[*].username")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(active))));
+        // The search text is capped at the length of the longest email address.
+        mockMvc.perform(get("/api/v1/users").with(bearer(adminToken)).param("q", "x".repeat(255)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/users").with(bearer(adminToken)).param("role", "NOBODY"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void profileUpdateWithAnOutdatedETagIsRefused() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        String etag = mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(header().exists(HttpHeaders.ETAG))
+                .andReturn()
+                .getResponse()
+                .getHeader(HttpHeaders.ETAG);
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)).header(HttpHeaders.IF_NONE_MATCH, etag))
+                .andExpect(status().isNotModified());
+
+        String newEtag = mockMvc.perform(patch("/api/v1/users/me")
+                        .with(bearer(token))
+                        .header(HttpHeaders.IF_MATCH, etag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"username":"%s"}""", username + "x")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getHeader(HttpHeaders.ETAG);
+
+        mockMvc.perform(patch("/api/v1/users/me")
+                        .with(bearer(token))
+                        .header(HttpHeaders.IF_MATCH, etag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"username":"%s"}""", username + "y")))
+                .andExpect(status().isPreconditionFailed())
+                .andExpect(jsonPath("$.type").value("urn:problem:precondition-failed"));
+        // GET /me reads the tag from the database, never from the user cache.
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(header().string(HttpHeaders.ETAG, newEtag))
+                .andExpect(jsonPath("$.username").value(username + "x"));
+    }
+
+    @Test
     void unknownSortPropertyIsBadRequest() throws Exception {
         String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
 

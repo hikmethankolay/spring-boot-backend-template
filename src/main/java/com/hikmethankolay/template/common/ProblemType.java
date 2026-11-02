@@ -121,6 +121,12 @@ public enum ProblemType {
     /** The change conflicts with data written concurrently. */
     CONFLICT("conflict", "The change conflicts with data written at the same time; retry it"),
 
+    /** The {@code If-Match} header does not match the resource's current {@code ETag}. */
+    PRECONDITION_FAILED(
+            "precondition-failed",
+            "The `If-Match` header does not match the resource's current `ETag`: it changed since it was read; reload "
+                    + "it and retry"),
+
     /** Too many failed logins for the IP or the account. */
     LOGIN_LOCKED("login-locked", "Too many failed logins for this IP or account; wait for `Retry-After` seconds"),
 

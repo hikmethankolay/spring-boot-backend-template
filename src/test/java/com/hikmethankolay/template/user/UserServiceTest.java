@@ -232,7 +232,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.saveAndFlush(user)).thenReturn(user);
 
-        userService.updateProfile(1L, new UpdateProfileRequest("alice", " Alice@Example.COM ", null));
+        userService.updateProfile(1L, new UpdateProfileRequest("alice", " Alice@Example.COM ", null), null);
 
         // Same address after normalising: still verified, no new verification email.
         assertThat(user.isEmailVerified()).isTrue();
@@ -246,10 +246,40 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.saveAndFlush(user)).thenReturn(user);
 
-        UserResponse response = userService.updateProfile(1L, new UpdateProfileRequest("alice2", null, null));
+        UserResponse response = userService
+                .updateProfile(1L, new UpdateProfileRequest("alice2", null, null), null)
+                .body();
 
         assertThat(response.username()).isEqualTo("alice2");
         verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void profileUpdateBasedOnAnOldVersionIsRefused() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        ReflectionTestUtils.setField(user, "version", 3L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.updateProfile(1L, new UpdateProfileRequest("alice2", null, null), "\"2\""))
+                .isInstanceOfSatisfying(
+                        ApiException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.PRECONDITION_FAILED));
+        assertThat(user.getUsername()).isEqualTo("alice");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void profileUpdateBasedOnTheCurrentVersionReturnsIt() {
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        ReflectionTestUtils.setField(user, "version", 3L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+
+        assertThat(userService
+                        .updateProfile(1L, new UpdateProfileRequest("alice2", null, null), "\"3\"")
+                        .version())
+                .isEqualTo(3L);
+        assertThat(user.getUsername()).isEqualTo("alice2");
     }
 
     @Test
@@ -397,7 +427,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.delete(5L, 5L, null))
                 .isInstanceOfSatisfying(
                         ApiException.class, ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test
@@ -418,7 +448,7 @@ class UserServiceTest {
                 () -> userService.deleteOwnAccount(9L, new DeleteAccountRequest("Owner#123")),
                 HttpStatus.CONFLICT,
                 "urn:problem:owner-protected");
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test
@@ -429,7 +459,7 @@ class UserServiceTest {
                 () -> userService.delete(9L, 5L, new DeleteAccountRequest("Admin#123")),
                 HttpStatus.CONFLICT,
                 "urn:problem:owner-protected");
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test
@@ -450,7 +480,7 @@ class UserServiceTest {
                 () -> userService.delete(6L, 9L, new DeleteAccountRequest("Wrong#123")),
                 HttpStatus.BAD_REQUEST,
                 "urn:problem:wrong-password");
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
 
         userService.delete(6L, 9L, new DeleteAccountRequest("Owner#123"));
 

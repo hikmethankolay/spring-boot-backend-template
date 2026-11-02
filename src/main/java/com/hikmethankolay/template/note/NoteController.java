@@ -6,6 +6,7 @@ import com.hikmethankolay.template.note.dto.NoteRequest;
 import com.hikmethankolay.template.note.dto.NoteResponse;
 import com.hikmethankolay.template.security.TokenService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -116,20 +118,22 @@ public class NoteController {
      *
      * @param jwt the caller's token
      * @param id  note id
-     * @return the note
+     * @return the note, with its version as {@code ETag}
      */
     @GetMapping("/{id}")
     @Operation(operationId = "getNote", summary = "Get a note")
     @ApiResponse(
             responseCode = "200",
             description = "The note",
+            headers = @Header(name = HttpHeaders.ETAG, description = ApiDocs.ETAG, schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = NoteResponse.class)))
+    @ApiResponse(responseCode = "304", description = ApiDocs.NOT_MODIFIED, content = @Content)
     @ApiResponse(
             responseCode = "404",
             description = NOT_FOUND,
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
-    public NoteResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
-        return noteService.get(TokenService.userId(jwt), id);
+    public ResponseEntity<NoteResponse> get(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        return noteService.get(TokenService.userId(jwt), id).toResponse();
     }
 
     /**
@@ -137,14 +141,16 @@ public class NoteController {
      *
      * @param jwt     the caller's token
      * @param id      note id
+     * @param ifMatch the {@code ETag} the change is based on, if the client sent one
      * @param request new title and text
-     * @return the updated note
+     * @return the updated note, with its new version as {@code ETag}
      */
     @PutMapping("/{id}")
     @Operation(operationId = "updateNote", summary = "Replace a note's title and text")
     @ApiResponse(
             responseCode = "200",
             description = "The updated note",
+            headers = @Header(name = HttpHeaders.ETAG, description = ApiDocs.ETAG, schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = NoteResponse.class)))
     @ApiResponse(
             responseCode = "404",
@@ -154,9 +160,19 @@ public class NoteController {
             responseCode = "409",
             description = "The note was changed at the same time; reload it and retry",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
-    public NoteResponse update(
-            @AuthenticationPrincipal Jwt jwt, @PathVariable long id, @Valid @RequestBody NoteRequest request) {
-        return noteService.update(TokenService.userId(jwt), id, request);
+    @ApiResponse(
+            responseCode = "412",
+            description = ApiDocs.PRECONDITION_FAILED,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public ResponseEntity<NoteResponse> update(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable long id,
+            @Parameter(description = ApiDocs.IF_MATCH) @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                    String ifMatch,
+            @Valid @RequestBody NoteRequest request) {
+        return noteService
+                .update(TokenService.userId(jwt), id, request, ifMatch)
+                .toResponse();
     }
 
     /**

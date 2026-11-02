@@ -132,7 +132,10 @@ class OpenApiContractIntegrationTest extends IntegrationTest {
 
     @Test
     void paginationUsesSeparateParametersWithALimit() throws Exception {
-        spec().andExpect(jsonPath(USERS + "'].get.parameters[*].name", containsInAnyOrder("page", "size", "sort")))
+        spec().andExpect(jsonPath(
+                        USERS + "'].get.parameters[*].name",
+                        containsInAnyOrder("q", "role", "suspended", "page", "size", "sort")))
+                .andExpect(jsonPath(USERS + "'].get.parameters[?(@.name == 'q')].schema.maxLength", hasItem(254)))
                 .andExpect(jsonPath(USERS + "'].get.parameters[?(@.name == 'size')].schema.maximum", hasItem(100)))
                 .andExpect(jsonPath(
                         USERS + "'].get.parameters[?(@.name == 'sort')].description",

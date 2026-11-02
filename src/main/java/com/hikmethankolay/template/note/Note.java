@@ -138,4 +138,13 @@ public class Note {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    /**
+     * Returns the optimistic-locking version, sent to clients as the note's {@code ETag}.
+     *
+     * @return the version, incremented on every update
+     */
+    public long getVersion() {
+        return version;
+    }
 }
