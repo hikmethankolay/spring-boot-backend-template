@@ -3,13 +3,15 @@ package com.hikmethankolay.template.user;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 /**
- * Spring Data repository for {@link User}. Query methods are derived from their names.
+ * Spring Data repository for {@link User}. Query methods are derived from their names; the admin list's filters
+ * are {@link org.springframework.data.jpa.domain.Specification}s.
  */
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
 
     /**
      * Finds a user whose username or email matches.

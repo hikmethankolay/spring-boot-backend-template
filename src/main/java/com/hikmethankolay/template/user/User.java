@@ -336,4 +336,13 @@ public class User {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    /**
+     * Returns the optimistic-locking version, sent to clients as the {@code ETag} of {@code /users/me}.
+     *
+     * @return the version, incremented on every write of the row
+     */
+    public long getVersion() {
+        return version;
+    }
 }

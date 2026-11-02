@@ -5,6 +5,7 @@ import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SortAllowList;
+import com.hikmethankolay.template.common.Versioned;
 import com.hikmethankolay.template.config.CacheConfig.CacheNames;
 import com.hikmethankolay.template.mail.SecurityMailer;
 import com.hikmethankolay.template.security.LoginAttemptService;
@@ -22,6 +23,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -200,14 +202,44 @@ public class UserService {
     }
 
     /**
-     * Lists users page by page.
+     * Looks up a user with the version its {@code ETag} is made of. Not cached: the version also changes on writes
+     * that do not change the cached {@link UserResponse} and so do not evict it (e.g. ending sessions), and a cached
+     * value can be stale for a moment after an eviction, so a cached tag could make every {@code If-Match} fail.
      *
-     * @param pageable page number, size and sort order
+     * @param id user id
+     * @return the user and its current version
+     * @throws ApiException 404 if the user does not exist
+     */
+    public Versioned<UserResponse> getVersioned(long id) {
+        return versioned(findUser(id));
+    }
+
+    /**
+     * Lists users page by page, optionally filtered. Filters left {@code null} match every user.
+     *
+     * @param q         a case-insensitive part of the username or email; {@code %} and {@code _} match themselves
+     * @param role      only users with this role
+     * @param suspended only suspended ({@code true}) or only active ({@code false}) users
+     * @param pageable  page number, size and sort order
      * @return one page of users
      * @throws ApiException 400 if the sort order uses a property outside {@link #SORTABLE_PROPERTIES}
      */
-    public Page<UserResponse> list(Pageable pageable) {
-        return userRepository.findAll(SORTING.check(pageable)).map(UserResponse::from);
+    public Page<UserResponse> list(String q, Role role, Boolean suspended, Pageable pageable) {
+        Specification<User> filter = Specification.unrestricted();
+        if (q != null && !q.isBlank()) {
+            String pattern = "%" + q.strip().toLowerCase(Locale.ROOT).replaceAll("[\\\\%_]", "\\\\$0") + "%";
+            // Emails are stored in lower case; usernames keep the case they were registered with.
+            filter = filter.and((user, query, cb) -> cb.or(
+                    cb.like(cb.lower(user.get("username")), pattern, '\\'), cb.like(user.get("email"), pattern, '\\')));
+        }
+        if (role != null) {
+            filter = filter.and((user, query, cb) -> cb.equal(user.get("role"), role));
+        }
+        if (suspended != null) {
+            filter = filter.and((user, query, cb) ->
+                    suspended ? cb.isNotNull(user.get("suspendedAt")) : cb.isNull(user.get("suspendedAt")));
+        }
+        return userRepository.findAll(filter, SORTING.check(pageable)).map(UserResponse::from);
     }
 
     /**
@@ -239,15 +271,17 @@ public class UserService {
      *
      * @param id      user id
      * @param request the changes
-     * @return the updated user
+     * @param ifMatch the {@code If-Match} header, or {@code null} to update whatever the current version is
+     * @return the updated user and its new version, for the {@code ETag}
      * @throws ApiException 400 if the email changes without the correct current password, 404 if the user does not
-     *                      exist, 409 if the new username or email is taken, 429 if failed passwords locked the IP or
-     *                      account
+     *                      exist, 409 if the new username or email is taken, 412 if {@code ifMatch} does not match,
+     *                      429 if failed passwords locked the IP or account
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
-    public UserResponse updateProfile(long id, UpdateProfileRequest request) {
+    public Versioned<UserResponse> updateProfile(long id, UpdateProfileRequest request, String ifMatch) {
         User user = findUser(id);
+        Versioned.checkIfMatch(ifMatch, user.getVersion());
         String email = request.email() == null ? null : normalizeEmail(request.email());
         if (email != null && !email.equals(user.getEmail())) {
             confirmPassword(user, request.currentPassword());
@@ -259,7 +293,7 @@ public class UserService {
             user.setPendingEmail(null);
         }
         applyIdentityChanges(user, request.username(), null);
-        return UserResponse.from(userRepository.saveAndFlush(user));
+        return versioned(userRepository.saveAndFlush(user));
     }
 
     /**
@@ -592,6 +626,10 @@ public class UserService {
      * @return the entity
      * @throws ApiException 404 if the user does not exist
      */
+    private static Versioned<UserResponse> versioned(User user) {
+        return new Versioned<>(UserResponse.from(user), user.getVersion());
+    }
+
     private User findUser(long id) {
         return userRepository
                 .findById(id)

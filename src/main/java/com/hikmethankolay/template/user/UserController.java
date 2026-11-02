@@ -10,12 +10,14 @@ import com.hikmethankolay.template.user.dto.PersonalDataExport;
 import com.hikmethankolay.template.user.dto.UpdateProfileRequest;
 import com.hikmethankolay.template.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +35,9 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -66,6 +70,9 @@ public class UserController {
     private static final String SUSPEND_NEEDS_OWNER =
             "Not an administrator, or the user is an administrator and the " + "caller is not the owner";
 
+    /** Longest {@code q} of the user list: the longest email address. */
+    private static final int MAX_QUERY_LENGTH = 254;
+
     private final UserService userService;
 
     private final PersonalDataService personalData;
@@ -85,24 +92,27 @@ public class UserController {
      * Returns the authenticated user.
      *
      * @param jwt the caller's token
-     * @return the current user
+     * @return the current user, with its version as {@code ETag}
      */
     @GetMapping("/me")
     @Operation(operationId = "getCurrentUser", summary = "Get the current user")
     @ApiResponse(
             responseCode = "200",
             description = "The current user",
+            headers = @Header(name = HttpHeaders.ETAG, description = ApiDocs.ETAG, schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = UserResponse.class)))
-    public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
-        return userService.getById(TokenService.userId(jwt));
+    @ApiResponse(responseCode = "304", description = ApiDocs.NOT_MODIFIED, content = @Content)
+    public ResponseEntity<UserResponse> me(@AuthenticationPrincipal Jwt jwt) {
+        return userService.getVersioned(TokenService.userId(jwt)).toResponse();
     }
 
     /**
      * Partially updates the authenticated user's username and/or email.
      *
      * @param jwt     the caller's token
+     * @param ifMatch the {@code ETag} the change is based on, if the client sent one
      * @param request fields to change
-     * @return the updated user
+     * @return the updated user, with its new version as {@code ETag}
      */
     @PatchMapping("/me")
     @Operation(
@@ -117,6 +127,7 @@ public class UserController {
     @ApiResponse(
             responseCode = "200",
             description = "The updated user",
+            headers = @Header(name = HttpHeaders.ETAG, description = ApiDocs.ETAG, schema = @Schema(type = "string")),
             content = @Content(schema = @Schema(implementation = UserResponse.class)))
     @ApiResponse(
             responseCode = "400",
@@ -131,8 +142,18 @@ public class UserController {
             responseCode = "503",
             description = "Temporarily unavailable because the failed-login counters cannot be checked",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
-    public UserResponse updateMe(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateProfileRequest request) {
-        return userService.updateProfile(TokenService.userId(jwt), request);
+    @ApiResponse(
+            responseCode = "412",
+            description = ApiDocs.PRECONDITION_FAILED,
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
+    public ResponseEntity<UserResponse> updateMe(
+            @AuthenticationPrincipal Jwt jwt,
+            @Parameter(description = ApiDocs.IF_MATCH) @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                    String ifMatch,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return userService
+                .updateProfile(TokenService.userId(jwt), request, ifMatch)
+                .toResponse();
     }
 
     /**
@@ -222,11 +243,14 @@ public class UserController {
     }
 
     /**
-     * Lists users. Supports the standard {@code page}, {@code size} and {@code sort} query parameters,
-     * e.g. {@code ?page=0&size=20&sort=createdAt,desc}; {@code sort} is limited to
-     * {@link UserService#SORTABLE_PROPERTIES}.
+     * Lists users, optionally filtered. Supports the standard {@code page}, {@code size} and {@code sort} query
+     * parameters, e.g. {@code ?q=alice&role=ADMIN&suspended=false&page=0&size=20&sort=createdAt,desc}; {@code sort}
+     * is limited to {@link UserService#SORTABLE_PROPERTIES}.
      *
-     * @param pageable requested page
+     * @param q         part of the username or email, any case
+     * @param role      only users with this role
+     * @param suspended only suspended or only active users
+     * @param pageable  requested page
      * @return one page of users
      */
     @GetMapping
@@ -234,8 +258,17 @@ public class UserController {
     @Operation(operationId = "listUsers", summary = "List users (admin)")
     @ApiResponse(responseCode = "200", description = "One page of users")
     @SortableBy(UserService.SORTABLE_PROPERTIES)
-    public Page<UserResponse> list(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return userService.list(pageable);
+    public Page<UserResponse> list(
+            @Parameter(description = "Only users whose username or email contains this text, ignoring case")
+                    @RequestParam(required = false)
+                    @Size(max = MAX_QUERY_LENGTH)
+                    String q,
+            @Parameter(description = "Only users with this role") @RequestParam(required = false) Role role,
+            @Parameter(description = "`true`: only suspended users; `false`: only active ones")
+                    @RequestParam(required = false)
+                    Boolean suspended,
+            @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return userService.list(q, role, suspended, pageable);
     }
 
     /**

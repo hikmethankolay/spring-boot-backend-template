@@ -58,6 +58,17 @@ public class ApiException extends ErrorResponseException {
     }
 
     /**
+     * Creates a {@code 412 Precondition Failed} error, e.g. for an {@code If-Match} header that no longer matches.
+     *
+     * @param type   the problem type
+     * @param detail explanation sent to the client
+     * @return the exception to throw
+     */
+    public static ApiException preconditionFailed(ProblemType type, String detail) {
+        return new ApiException(HttpStatus.PRECONDITION_FAILED, type, detail);
+    }
+
+    /**
      * Creates a {@code 429 Too Many Requests} error with a {@code Retry-After} header.
      *
      * @param type       the problem type
