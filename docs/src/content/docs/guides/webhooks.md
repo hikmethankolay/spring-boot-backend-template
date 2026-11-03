@@ -63,7 +63,7 @@ events. Payloads carry ids on purpose, so personal data never travels to a stale
 ## Retries and the delivery log
 
 Anything but a `2xx` (redirects included) is a failure, retried after 30s, 2m, 10m, 1h, 6h and then daily, up to
-`WEBHOOKS_MAX_ATTEMPTS` (8 by default, about three days). A `410 Gone` answer, or `WEBHOOKS_DISABLE_AFTER_FAILURES`
+`WEBHOOKS_MAX_ATTEMPTS` (8 by default, about 2 days and 7 hours). A `410 Gone` answer, or `WEBHOOKS_DISABLE_AFTER_FAILURES`
 failed attempts in a row, turns the endpoint off, gives up its pending deliveries and emails its owner;
 `PATCH /api/v1/webhooks/{id}` with `{"enabled": true}` turns it back on.
 

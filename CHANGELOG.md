@@ -6,6 +6,86 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- `LOGIN_MFA_MAX_ATTEMPTS` (10): wrong two-factor codes at login are counted per account under their own key and lock
+  it for `LOGIN_LOCK_DURATION` (`429` `urn:problem:login-locked`), on top of the IP and account limits. A block by
+  this limit does not spend the IP and account attempts.
+- `NOTES_MAX_PER_USER` (1000): creating a note beyond it gives `409` `urn:problem:note-limit-reached`. The cap is
+  exact under concurrent requests and bounds the size of a user's data export.
+- The personal data export has a `knownDevices` section (device, network, first and last seen), and its schema now
+  lists the `webhooks` section it already had.
+- `DB_MIGRATE_LOCK_TIMEOUT` (5s): the `migrate` profile gives up on a table lock after it, so a migration waiting
+  behind open transactions fails and can be retried instead of queueing every request on the table.
+- Migration `V22__audit_purge_batches_and_user_search_indexes.sql`: audit retention deletes in batches, and the
+  administrators' user list gets indexes for its sort columns and, where `pg_trgm` can be created, trigram indexes for
+  its search. A schema owner without the right to create extensions still migrates; the search then stays unindexed.
+
+### Changed
+
+- `PATCH /api/v1/users/{id}` on the caller's own id gives `400` `urn:problem:own-account`: the owner changes their own
+  account through `/api/v1/users/me`, which asks for the current password and confirms a new email address.
+- `PATCH /api/v1/users/me` with an email address that has an account no longer answers `409`; the confirmation link
+  sent to it answers `409` `urn:problem:email-taken` when opened, so the endpoint does not tell which addresses are
+  registered.
+- Security events show `"admin"` as `actorId` when someone other than the user acted, instead of that user's id.
+- `POST /api/v1/webhooks/{id}/deliveries/{deliveryId}/retry` on a delivery that is queued or being sent gives `409`
+  `urn:problem:webhook-delivery-pending`.
+- With `WEBHOOKS_REQUIRE_HTTPS=true` (the `prod` profile), a webhook URL must use the default port 443, which is the
+  port the Kubernetes NetworkPolicy opens.
+- `FLYWAY_BASELINE_ON_MIGRATE` defaults to `false`: set it to `true` once to adopt a database created before Flyway.
+  Databases already migrated are not affected.
+- A verification, password-reset or security-alert email that is given up loses its body, which held a one-time link;
+  re-queuing such a dead letter drops it, and the user requests the email again. Optional emails re-queue as before
+  (see the EmailsDropped runbook).
+- The email outbox sends while emails are due, up to one poll interval per run, instead of at most 50 per poll.
+- Kubernetes: the Deployment sets `JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2`, so the number of password hashes in
+  parallel, each about 19 MiB, follows the pod's CPU instead of the node's. The migration Job's pods carry
+  `app.kubernetes.io/component: migrate` instead of the app's name label, so the HPA, PDB and topology spread no longer
+  count them, and have their own NetworkPolicy (DNS and PostgreSQL only).
+
+### Fixed
+
+- Webhooks:
+  - A batch of slow sends handed out leases already in the past, so another instance sent the same delivery again;
+    each attempt now leases and backs off from its own time.
+  - A receiver answering a byte at a time could hold a sender for good: every request now has a hard deadline of
+    `WEBHOOKS_CONNECT_TIMEOUT` plus `WEBHOOKS_RESPONSE_TIMEOUT`, enforced by the sender's own scheduler.
+  - Concurrent failures on one endpoint lost increments of its failure count, and an owner's change could undo an
+    endpoint being turned off at the same moment.
+  - URLs were resolved inside a database transaction.
+  - The per-user endpoint limit could be passed by parallel registrations.
+  - The retry span was documented as about three days; it is about 2 days and 7 hours.
+- An audited request held two database connections at once; the audit row is now written on the request's own
+  connection behind a savepoint, so a failed insert still cannot fail the request.
+- Password hashing and the breached-password lookup ran inside database transactions (sign-up, password change and
+  reset, administrator update).
+- Audit retention deleted a year of events in one statement, which could outlast `DB_STATEMENT_TIMEOUT` and roll back
+  every night.
+- Emails queued for a user were still sent after the account was deleted.
+- Parallel requests could pass the cooldown of password-reset and verification emails, record a known device twice
+  (and send two new-login alerts), or create more personal access tokens than `ACCESS_TOKENS_MAX_PER_USER`.
+- A `page` far past the end of a list gave `500`; it now gives `400` `urn:problem:page-too-large`.
+- Login lockout used a Lua script over two keys, which fails on Redis Cluster.
+- Broadcasts ran one preference query per recipient, and the outbox gauges counted the whole queue on every scrape.
+- Kubernetes: Kustomize's `includeSelectors` added the app's label to the NetworkPolicy's DNS selector, which then
+  matched no DNS pod.
+
+### Security
+
+- Refresh-token reuse detection could be switched off: a thief who refreshed twice erased the victim's old token, so
+  its replay no longer ended the session. Used tokens are now kept until they expire.
+- Wrong two-factor codes at login had only the account limit of 100 an hour (see `LOGIN_MFA_MAX_ATTEMPTS` above).
+- The owner could change their own email address or password through the administrators' endpoint without the
+  current password or a confirmation link.
+- A personal access token created while the password was being changed could outlive the change, and an access token
+  minted while a session was ending could escape its revocation.
+- Responses holding a new personal access token or webhook signing secret were kept in Redis for 24 hours by the
+  idempotency filter. A slow idempotent request could also release another request's claim on its key.
+- A JSON body was read in full before validation, so a few large requests could exhaust the heap; bodies are capped at
+  1 MiB.
+- SMTP error text, which can hold recipient addresses, is no longer written to the log.
+
 ## [5.0.0] - 2026-11-03
 
 ### Added
