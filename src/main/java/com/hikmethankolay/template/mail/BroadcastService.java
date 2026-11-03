@@ -61,9 +61,9 @@ public class BroadcastService {
     /** Key of the PostgreSQL advisory lock that serializes the start of broadcasts. */
     private static final long START_LOCK = 7_401_002L;
 
-    /** Users in the comma-separated roles of the first parameter, verified unless the second is false. */
-    private static final String AUDIENCE_FILTER =
-            " WHERE u.role = ANY (string_to_array(?, ',')) AND (u.email_verified OR NOT ?)";
+    /** Active users in the comma-separated roles of the first parameter, verified unless the second is false. */
+    private static final String AUDIENCE_FILTER = " WHERE u.role = ANY (string_to_array(?, ','))"
+            + " AND (u.email_verified OR NOT ?) AND u.suspended_at IS NULL";
 
     private static final String AUDIENCE = " FROM users u" + AUDIENCE_FILTER;
 
