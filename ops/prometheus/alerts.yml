@@ -173,6 +173,21 @@ groups:
           summary: "More than 100 emails waiting"
           description: "The email outbox of {{ $labels.application }} is not draining; SMTP may be down or slow."
 
+  - name: webhooks
+    rules:
+      # One broken receiver is its owner's problem; most deliveries failing at once points at the app (egress, DNS).
+      - alert: WebhookDeliveriesFailing
+        expr: |
+          sum by (application) (increase(webhook_deliveries_total{outcome=~"retry|failed"}[30m]))
+            / sum by (application) (increase(webhook_deliveries_total{outcome=~"sent|retry|failed"}[30m])) > 0.5
+          and sum by (application) (increase(webhook_deliveries_total{outcome=~"sent|retry|failed"}[30m])) > 20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Most webhook deliveries fail"
+          description: "{{ $value | humanizePercentage }} of the webhook deliveries of {{ $labels.application }} failed in the last 30 minutes; check egress and DNS (runbooks: WebhookDeliveriesFailing)."
+
   - name: background
     rules:
       # @Scheduled methods are timed as tasks_scheduled_execution_seconds (outbox, token and account cleanup).
