@@ -51,12 +51,12 @@ description: Turn the template into your own project.
 ## Removing two-factor authentication or social login
 
 `note/` is self-contained: delete the package and its tests. Keep `account/`: `auth/` calls it for sign-up. Two-factor authentication (`mfa/`) and
-login with GitHub and Google (`social/`) are also called from `auth/`, so they take a few more steps. Either can be
-removed on its own. Both change the API, so clients and `scripts/client.sh` output must follow.
+login with GitHub and Google (`social/`) are also called from `auth/`, and `webhook/` uses the cipher in `mfa/`, so
+they take a few more steps. Either can be removed on its own. Both change the API, so clients and `scripts/client.sh` output must follow.
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/package-dependencies-light.svg" width="720" height="544" alt="auth depends on account, mfa, social and the core of user, security and mail, which import each other; account, mfa, social and note depend on that core; every package uses audit, common and config; only auth imports mfa and social." />
-  <img class="light:sl-hidden" src="../../diagrams/package-dependencies-dark.svg" width="720" height="544" alt="auth depends on account, mfa, social and the core of user, security and mail, which import each other; account, mfa, social and note depend on that core; every package uses audit, common and config; only auth imports mfa and social." />
+  <img class="dark:sl-hidden" src="../../diagrams/package-dependencies-light.svg" width="720" height="640" alt="auth depends on account, social, mfa and the core of user, security, mail and token, which import each other; account, social and mfa depend on that core; webhook depends on the core and on mfa for its secret cipher; note depends on the core and on webhook; every package uses audit, common and config; only auth imports social." />
+  <img class="light:sl-hidden" src="../../diagrams/package-dependencies-dark.svg" width="720" height="640" alt="auth depends on account, social, mfa and the core of user, security, mail and token, which import each other; account, social and mfa depend on that core; webhook depends on the core and on mfa for its secret cipher; note depends on the core and on webhook; every package uses audit, common and config; only auth imports social." />
 </figure>
 
 Leave `V7__two_factor_and_social_login.sql` as it is; it has run in every existing database. Drop the tables in a new
@@ -88,7 +88,10 @@ Accounts created through GitHub or Google stay; their users set a password throu
 
 ### Two-factor authentication
 
-1. Delete `mfa/` in `src/main` and `src/test`, and `auth/MfaChallengeService`, `auth/LoginResult`,
+1. Keep `SecretCipher`: `webhook/WebhookSecrets` encrypts signing secrets with it, under its own key
+   (`WEBHOOK_ENCRYPTION_KEY`). Move it and `SecretCipherTest` to `common/`, delete its `@Component` annotation and
+   the constructor that takes `AppProperties`, and delete the tests of that constructor.
+   Then delete the rest of `mfa/` in `src/main` and `src/test`, and `auth/MfaChallengeService`, `auth/LoginResult`,
    `auth/dto/MfaLoginRequest` and `MfaChallengeResponse`. Remove `implements LoginResult` from `AuthTokens`.
 2. `AuthService`: delete the fields `mfa` and `challenges` and the methods `loginWithMfa`, `startSession` and
    `mfaChallengeExpired`. `login` and `socialLogin` return `AuthTokens` from `issueTokens(...)`, and `login` always

@@ -6,8 +6,9 @@ from lib import Diagram
 def kubernetes():
     d = Diagram("kubernetes", 720, 584, "Kubernetes deployment",
                 "In namespace backend, ingress-nginx reaches the app pods through Service app and Prometheus scrapes "
-                "their management port; secrets are mounted as files, a migrate Job runs Flyway as the schema owner, "
-                "and the NetworkPolicy lets the pods reach only DNS, PostgreSQL, Redis, SMTP and HTTPS.")
+                "their management port; secrets are mounted as files; a migrate Job runs Flyway as the schema owner "
+                "under its own NetworkPolicy, which allows only DNS and PostgreSQL; the app's NetworkPolicy lets its "
+                "pods reach only DNS, PostgreSQL, Redis, SMTP and HTTPS for social login and webhooks.")
     d.zone(24, 116, 672, 272, "NAMESPACE BACKEND")
     d.zone(24, 420, 672, 104, "NETWORKPOLICY EGRESS")
     d.wire((170, 84), (170, 156))
@@ -19,10 +20,10 @@ def kubernetes():
     d.label(425, 177, "MOUNT", on="zone")
     d.wire((570, 216), (570, 264), dashed=True)
     d.label(580, 244, "MOUNT", anchor="start", on="zone")
-    d.wire((200, 376), (200, 460))
-    d.wire((390, 376), (390, 460))
-    d.wire((410, 360), (560, 360), (560, 460))
-    d.wire((620, 336), (620, 460))
+    d.wire((200, 376), (200, 456))
+    d.wire((390, 376), (390, 456))
+    d.wire((410, 368), (560, 368), (560, 456))
+    d.wire((620, 360), (620, 456))
     d.node(60, 24, 220, 60, "ingress-nginx", "the only source of traffic", tag="NAMESPACE", kind="box-ext")
     d.node(300, 24, 200, 60, "Prometheus", "/actuator/prometheus", tag="MONITORING", kind="box-ext")
     d.node(70, 156, 200, 60, "Service app", ":80 → port http", tag="SERVICE")
@@ -31,10 +32,11 @@ def kubernetes():
            ["HPA 2–6 replicas at 70% CPU", "PDB minAvailable 1",
             "rolling update: maxUnavailable 0, maxSurge 1", "probes /actuator/health/{liveness,readiness}"],
            tag="DEPLOYMENT", kind="box-focal")
-    d.node(470, 264, 200, 72, "migrate", ["Flyway as app_owner", "app-migrator-secrets"], tag="JOB")
-    d.node(115, 460, 170, 56, "Redis", ":6379", kind="box-ext")
-    d.node(305, 460, 170, 56, "SMTP and HTTPS", ":587, :465 · :443", kind="box-ext")
-    d.node(500, 460, 170, 56, "PostgreSQL", ":5432", kind="box-ext")
+    d.node(470, 264, 200, 96, "migrate", ["Flyway as app_owner", "app-migrator-secrets", "egress DNS, :5432 only"],
+           tag="JOB")
+    d.node(115, 456, 170, 60, "Redis", ":6379", kind="box-ext")
+    d.node(305, 456, 170, 60, "SMTP and HTTPS", [":587, :465", ":443 social, webhooks"], kind="box-ext")
+    d.node(500, 456, 170, 60, "PostgreSQL", ":5432", kind="box-ext")
     d.legend(564, [("box-ext", "outside the namespace"), ("box-focal", "serves the API"),
                    ("dash", "scrape or volume mount")])
     d.save()
@@ -79,10 +81,11 @@ def release_pipeline():
 
 
 def package_dependencies():
-    d = Diagram("package-dependencies", 720, 544, "Package dependencies",
-                "auth depends on account, mfa, social and the core of user, security and mail, which import each "
-                "other; account, mfa, social and note depend on that core; every package uses audit, common and "
-                "config; only auth imports mfa and social.")
+    d = Diagram("package-dependencies", 720, 640, "Package dependencies",
+                "auth depends on account, social, mfa and the core of user, security, mail and token, which import "
+                "each other; account, social and mfa depend on that core; webhook depends on the core and on mfa for "
+                "its secret cipher; note depends on the core and on webhook; every package uses audit, common and "
+                "config; only auth imports social.")
     d.wire((194, 140), (229, 140), (229, 68), (264, 68))
     d.wire((194, 164), (264, 164), accent=True)
     d.wire((194, 212), (488, 212))
@@ -90,19 +93,23 @@ def package_dependencies():
     d.wire((440, 68), (488, 68))
     d.wire((440, 164), (488, 164))
     d.wire((440, 260), (488, 260))
-    d.wire((194, 348), (608, 348), (608, 288))
+    d.wire((352, 328), (352, 288))
+    d.wire((440, 356), (568, 356), (568, 288))
+    d.wire((194, 444), (300, 444), (300, 384))
+    d.wire((194, 460), (648, 460), (648, 288))
     d.node(24, 120, 170, 120, "auth", ["login · tokens", "sessions"], kind="box-focal")
-    d.node(24, 320, 170, 56, "note", "the sample feature")
+    d.node(24, 416, 170, 56, "note", "the sample feature")
     d.node(264, 40, 176, 56, "account", "verify email · reset")
-    d.node(264, 136, 176, 56, "mfa", "authenticator codes")
-    d.node(264, 232, 176, 56, "social", "GitHub and Google")
-    d.node(488, 40, 208, 248, "user · security · mail",
-           ["users, roles, JWT", "email outbox, alerts", "they import", "each other"])
-    d.node(24, 424, 672, 60, "audit · common · config", "used by every package, so not drawn as arrows",
+    d.node(264, 136, 176, 56, "social", "GitHub and Google")
+    d.node(264, 232, 176, 56, "mfa", "authenticator codes")
+    d.node(264, 328, 176, 56, "webhook", "signed deliveries")
+    d.node(488, 40, 208, 248, "core",
+           ["user: users, roles", "security: JWT", "mail: outbox, alerts", "token: personal tokens", "",
+            "they import each other"])
+    d.node(24, 512, 672, 60, "audit · common · config", "used by every package, so not drawn as arrows",
            tag="SHARED")
-    d.text(360, 520, "Only auth imports mfa and social, so removing either leaves the other features untouched.",
+    d.text(360, 604, "Only auth imports social. mfa is also used by webhook, whose signing secrets it encrypts.",
            anchor="middle")
     d.save()
-
 
 ALL = [kubernetes, release_pipeline, package_dependencies]

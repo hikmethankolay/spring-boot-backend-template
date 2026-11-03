@@ -94,28 +94,32 @@ def social_account_resolution():
 
 
 def session_invalidation():
-    d = Diagram("session-invalidation", 720, 624, "Ending every session of a user",
-                "A password or role change, or deleting the user, deletes the user's refresh tokens in the same "
+    d = Diagram("session-invalidation", 720, 700, "Ending every session of a user",
+                "A password change or reset, a role change, a suspension or deleting the user deletes the user's "
+                "refresh tokens, personal access tokens and pending reset and email-change links in the same "
                 "transaction and, once it commits, sets a cut-off in Redis that rejects every access token issued "
                 "before it.")
     s = Sequence(d, [(96, "Client", "any device", "box"), (280, "Spring Boot API", "UserService", "box"),
-                     (464, "PostgreSQL", "refresh_tokens", "box"), (636, "Redis", "revocation", "box")],
-                 box_w=164, bottom=556)
-    s.msg(0, 1, 108, "change password/role")
+                     (464, "PostgreSQL", "tokens and links", "box"), (636, "Redis", "revocation", "box")],
+                 box_w=164, bottom=612)
+    s.msg(0, 1, 108, "password, role, suspend")
     s.msg(1, 2, 144, "UPDATE user, version+1")
     s.self_msg(1, 180, "SessionsInvalidated")
     s.msg(1, 2, 236, "DELETE refresh tokens")
-    s.msg(1, 3, 272, "after commit: cut-off", at=550)
-    s.msg(1, 0, 308, "204", kind="return")
-    s.divider(348, "OTHER DEVICES, LATER", at=372)
-    s.msg(0, 1, 388, "request, old JWT")
-    s.msg(1, 3, 424, "issued before cut-off?", at=550)
-    s.msg(1, 0, 460, "401", kind="accent")
-    s.msg(0, 1, 496, "POST /auth/refresh")
-    s.msg(1, 0, 532, "401, token gone", kind="return")
-    d.text(360, 588, "Refresh tokens are deleted in the same transaction as the change;", anchor="middle")
-    d.text(360, 608, "access tokens are cut off in Redis once it commits.", anchor="middle")
+    s.msg(1, 2, 272, "DELETE personal tokens")
+    s.msg(1, 2, 308, "DELETE pending links")
+    s.msg(1, 3, 344, "after commit: cut-off", at=550)
+    s.msg(1, 0, 380, "204", kind="return")
+    s.divider(420, "OTHER DEVICES, LATER", at=372)
+    s.msg(0, 1, 460, "request, old JWT")
+    s.msg(1, 3, 496, "issued before cut-off?", at=550)
+    s.msg(1, 0, 532, "401", kind="accent")
+    s.msg(0, 1, 568, "refresh token or PAT")
+    s.msg(1, 0, 604, "401, token gone", kind="return")
+    d.text(360, 640, "Refresh tokens, personal access tokens and reset and email-change links are deleted", anchor="middle")
+    d.text(360, 658, "in the same transaction as the change; access JWTs are cut off in Redis after it commits.",
+           anchor="middle")
+    d.text(360, 682, "A password reset and deleting the account end the sessions the same way.", anchor="middle")
     d.save()
-
 
 ALL = [social_login, sign_up, social_account_resolution, session_invalidation]

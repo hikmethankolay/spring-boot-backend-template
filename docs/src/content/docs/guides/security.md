@@ -7,8 +7,8 @@ Every request passes the same checks, in this order. Each rejection is an RFC 94
 [Errors](../api/#errors)).
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/request-pipeline-light.svg" width="720" height="816" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT (401) and the required role (403); every rejection and exception becomes an RFC 9457 problem detail." />
-  <img class="light:sl-hidden" src="../../diagrams/request-pipeline-dark.svg" width="720" height="816" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT (401) and the required role (403); every rejection and exception becomes an RFC 9457 problem detail." />
+  <img class="dark:sl-hidden" src="../../diagrams/request-pipeline-light.svg" width="720" height="944" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT or a pat_ personal access token (401) and the required role or token scope (403); IdempotencyFilter then replays the stored response for a repeated Idempotency-Key or refuses it (409, 422); every rejection and exception becomes an RFC 9457 problem detail." />
+  <img class="light:sl-hidden" src="../../diagrams/request-pipeline-dark.svg" width="720" height="944" alt="A request passes RateLimitFilter (429) and CookieCsrfFilter (403); public paths then go straight to the controller, others need a valid, unrevoked JWT or a pat_ personal access token (401) and the required role or token scope (403); IdempotencyFilter then replays the stored response for a repeated Idempotency-Key or refuses it (409, 422); every rejection and exception becomes an RFC 9457 problem detail." />
 </figure>
 
 ## Tokens and sessions
@@ -210,8 +210,8 @@ affected tokens would have expired, and the JWT decoder checks both in one round
 instance. After a password change the client must log in again.
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/session-invalidation-light.svg" width="720" height="624" alt="A password or role change raises the user's session version and deletes the refresh tokens in the same transaction; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh with an old token gets 401." />
-  <img class="light:sl-hidden" src="../../diagrams/session-invalidation-dark.svg" width="720" height="624" alt="A password or role change raises the user's session version and deletes the refresh tokens in the same transaction; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh with an old token gets 401." />
+  <img class="dark:sl-hidden" src="../../diagrams/session-invalidation-light.svg" width="720" height="700" alt="A password change or reset, a role change, a suspension or deleting the account raises the user's session version and, in the same transaction, deletes the refresh tokens, personal access tokens and pending reset and email-change links; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh token or personal access token gets 401." />
+  <img class="light:sl-hidden" src="../../diagrams/session-invalidation-dark.svg" width="720" height="700" alt="A password change or reset, a role change, a suspension or deleting the account raises the user's session version and, in the same transaction, deletes the refresh tokens, personal access tokens and pending reset and email-change links; after the commit a cut-off in Redis rejects older access JWTs with 401, and a refresh token or personal access token gets 401." />
 </figure>
 
 ## Passwords

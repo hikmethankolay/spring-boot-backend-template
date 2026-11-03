@@ -22,8 +22,8 @@ letters are deleted after a retention period (`app.mail.dead-letter-retention`, 
 the send counts as a failed attempt, so a bug in one email cannot make the dispatcher retry it forever.
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/email-outbox-light.svg" width="720" height="588" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or dropped." />
-  <img class="light:sl-hidden" src="../../diagrams/email-outbox-dark.svg" width="720" height="588" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or dropped." />
+  <img class="dark:sl-hidden" src="../../diagrams/email-outbox-light.svg" width="720" height="612" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or, after max-attempts, kept as dead letters." />
+  <img class="light:sl-hidden" src="../../diagrams/email-outbox-dark.svg" width="720" height="612" alt="The service enqueues the email, which is inserted into email_outbox in its transaction; after the commit the outbox locks the row, sends it over SMTP and deletes it or schedules a retry, and a scheduled loop retries due rows with backoff until they are sent or, after max-attempts, kept as dead letters." />
 </figure>
 
 ## Consequences

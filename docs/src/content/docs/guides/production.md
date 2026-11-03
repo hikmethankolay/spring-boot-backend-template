@@ -132,8 +132,8 @@ kubectl apply -k deploy/kubernetes
 ```
 
 <figure>
-  <img class="dark:sl-hidden" src="../../diagrams/kubernetes-light.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner; egress is limited to Redis, SMTP/HTTPS and PostgreSQL." />
-  <img class="light:sl-hidden" src="../../diagrams/kubernetes-dark.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner; egress is limited to Redis, SMTP/HTTPS and PostgreSQL." />
+  <img class="dark:sl-hidden" src="../../diagrams/kubernetes-light.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner under its own NetworkPolicy that allows only DNS and PostgreSQL; the app's egress is limited to Redis, SMTP, HTTPS for social login and webhooks, and PostgreSQL." />
+  <img class="light:sl-hidden" src="../../diagrams/kubernetes-dark.svg" width="720" height="584" alt="In namespace backend, ingress-nginx reaches the app pods through Service app (port 8080) and Prometheus scrapes port 8081; secrets are mounted as files; a migrate Job runs Flyway as app_owner under its own NetworkPolicy that allows only DNS and PostgreSQL; the app's egress is limited to Redis, SMTP, HTTPS for social login and webhooks, and PostgreSQL." />
 </figure>
 
 #### Database roles

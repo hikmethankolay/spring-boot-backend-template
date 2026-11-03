@@ -89,8 +89,8 @@ is generally available and the tests pass, and is recorded in the
 ## How it fits together
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/public/diagrams/architecture-dark.svg" width="720" height="568">
-  <img src="docs/public/diagrams/architecture-light.svg" width="720" height="568" alt="Clients call the Spring Boot app over HTTPS through its security filters (trace id, rate limit, CSRF, JWT); REST controllers hand requests to the services, which use PostgreSQL and Redis and reach an SMTP server and GitHub or Google; Prometheus scrapes the app.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/public/diagrams/architecture-dark.svg" width="720" height="580">
+  <img src="docs/public/diagrams/architecture-light.svg" width="720" height="580" alt="Clients call the Spring Boot app over HTTPS through its security filters (trace id, rate limit, CSRF, JWT or pat_ access token); REST controllers hand requests to the services, which use PostgreSQL and Redis and reach an SMTP server, GitHub or Google login and webhook receivers; Prometheus scrapes the app.">
 </picture>
 
 The [guides](https://hikmethankolay.github.io/spring-boot-backend-template/) have a diagram for every flow: request

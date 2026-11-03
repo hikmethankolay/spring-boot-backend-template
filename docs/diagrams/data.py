@@ -28,55 +28,69 @@ def table(d, x, y, w, name, rows, kind="box", note=None):
 
 
 def data_model():
-    d = Diagram("data-model", 720, 900, "Database tables",
-                "Eight tables belong to a user through user_id and are deleted with it; broadcasts keep their sender "
-                "as a nullable reference; the email outbox and the append-only audit log have no foreign key to "
-                "users.")
-    d.zone(14, 592, 692, 268, "NO FOREIGN KEY TO users")
+    d = Diagram("data-model", 720, 1116, "Database tables",
+                "Nine tables belong to a user through user_id and are deleted with it, and webhook deliveries go "
+                "with their endpoint; broadcasts keep their sender as a nullable reference; the email outbox and the "
+                "append-only audit log have no foreign key to users.")
+    d.zone(14, 790, 692, 286, "NO FOREIGN KEY TO users")
     account = table(d, 14, 40, 190, "account_tokens", [
         ("id", "PK"), ("user_id", "FK"), ("type", "3 PURPOSES"), ("token_hash", "UQ"), ("expires_at", "")])
-    recovery = table(d, 14, 190, 190, "recovery_codes", [
+    recovery = table(d, 14, 184, 190, "recovery_codes", [
         ("id", "PK"), ("user_id", "FK"), ("code_hash", "SHA-256"), ("used_at", "")])
-    notes = table(d, 14, 322, 190, "notes", [
+    notes = table(d, 14, 310, 190, "notes", [
         ("id", "PK"), ("user_id", "FK"), ("title, body", ""), ("version", "OPTIMISTIC")])
+    access = table(d, 14, 436, 190, "access_tokens", [
+        ("id", "PK"), ("user_id", "FK"), ("name", ""), ("token_hash", "UQ"), ("scope", "READ·WRITE"),
+        ("expires_at", ""), ("last_used_at", "")])
     refresh = table(d, 516, 40, 190, "refresh_tokens", [
         ("id", "PK"), ("user_id", "FK"), ("family_id", "SESSION ID"), ("token_hash", "UQ"), ("used_at", "REUSE"),
         ("session_version", ""), ("session_started_at", "")])
-    social = table(d, 516, 226, 190, "social_identities", [
+    social = table(d, 516, 220, 190, "social_identities", [
         ("id", "PK"), ("user_id", "FK"), ("provider", "UQ PAIR"), ("subject", "UQ PAIR")])
-    preferences = table(d, 516, 352, 190, "email_preferences", [
+    preferences = table(d, 516, 346, 190, "email_preferences", [
         ("user_id", "PK · FK"), ("category", "PK"), ("enabled, source", "")])
+    endpoints = table(d, 516, 454, 190, "webhook_endpoints", [
+        ("id", "PK"), ("user_id", "FK"), ("url, event_types", ""), ("secret", "AES-GCM"),
+        ("previous_secret", "ROTATION"), ("enabled", "AUTO-OFF")])
     # Foreign keys enter users from the side; the lower tables climb through the gaps between the columns.
     d.wire((204, account(1)), (252, account(1)))
-    d.wire((204, recovery(1)), (222, recovery(1)), (222, 160), (252, 160))
-    d.wire((204, notes(1)), (236, notes(1)), (236, 200), (252, 200))
+    d.wire((204, recovery(1)), (216, recovery(1)), (216, 150), (252, 150))
+    d.wire((204, notes(1)), (228, notes(1)), (228, 190), (252, 190))
+    d.wire((204, access(1)), (240, access(1)), (240, 230), (252, 230))
     d.wire((516, refresh(1)), (468, refresh(1)))
-    d.wire((516, social(1)), (492, social(1)), (492, 180), (468, 180))
-    d.wire((516, preferences(0)), (504, preferences(0)), (504, 220), (468, 220))
-    # known_devices hangs straight below users.
-    d.wire((360, 300), (360, 274))
+    d.wire((516, social(1)), (504, social(1)), (504, 150), (468, 150))
+    d.wire((516, preferences(0)), (492, preferences(0)), (492, 190), (468, 190))
+    d.wire((516, endpoints(1)), (480, endpoints(1)), (480, 230), (468, 230))
+    # known_devices hangs straight below users, webhook_deliveries below its endpoint.
+    d.wire((360, 316), (360, 292))
+    d.wire((611, 622), (611, 598))
     table(d, 252, 40, 216, "users", [
         ("id", "PK"), ("username, email", "UQ"), ("password_hash", ""), ("role", "USER·ADMIN·OWNER"),
         ("email_verified", ""), ("session_version", ""), ("totp_secret", "AES-GCM"), ("totp_enabled", ""),
-        ("totp_last_step", ""), ("pending_email", "UNTIL CONFIRMED"), ("suspended_at", "SUSPENSION")],
+        ("totp_last_step", ""), ("pending_email", "UNTIL CONFIRMED"), ("suspended_at", "SUSPENSION"),
+        ("version", "OPTIMISTIC")],
         kind="box-focal")
-    table(d, 252, 300, 216, "known_devices", [
+    table(d, 252, 316, 216, "known_devices", [
         ("user_id", "FK"), ("token_hash", "SHA-256 · UQ"), ("device, network", "FALLBACK"),
         ("last_seen_at", "LOOKBACK")])
-    table(d, 252, 440, 216, "mail_broadcasts", [
-        ("id", "PK"), ("category, subject, body", ""), ("queued, suppressed", ""), ("created_by", "SET NULL")])
-    table(d, 34, 626, 310, "email_outbox", [
+    table(d, 252, 448, 216, "mail_broadcasts", [
+        ("id", "PK"), ("category, subject, body", ""), ("queued, suppressed", ""),
+        ("last_user_id", "RESUME"), ("progress_at", ""), ("created_by", "SET NULL")])
+    table(d, 516, 622, 190, "webhook_deliveries", [
+        ("id", "PK"), ("endpoint_id", "FK"), ("message_id, payload", ""), ("status", "PENDING·SENT·FAILED"),
+        ("attempts", ""), ("next_attempt_at", "DUE")])
+    table(d, 34, 824, 310, "email_outbox", [
         ("id", "PK"), ("recipient, subject", ""), ("body, html_body", "HTML OPTIONAL"),
         ("attempts, next_attempt_at", "INDEX"), ("last_error, unsubscribe_token", ""),
-        ("broadcast_id", "BROADCASTS LAST")])
-    table(d, 376, 626, 310, "audit_events", [
+        ("failed_at", "DEAD LETTER"), ("broadcast_id", "BROADCASTS LAST")])
+    table(d, 376, 824, 310, "audit_events", [
         ("id", "PK"), ("occurred_at, action", ""), ("user_id", "NO FK"), ("actor_id, client_ip", ""),
         ("details", "JSONB")], note="APPEND-ONLY")
     for i, line in enumerate(["audit_events refuses UPDATE, DELETE and TRUNCATE through a trigger;",
-                              "only purge_audit_events() removes rows older than 90 days.",
+                              "only purge_audit_events() removes rows older than 90 days, in batches.",
                               "With no foreign key, the trail outlives a deleted user."]):
-        d.text(360, 792 + 20 * i, line, anchor="middle")
-    d.legend(884, [("wire", "user_id → users.id, ON DELETE CASCADE"), ("box-focal", "parent of eight tables")])
+        d.text(360, 1008 + 20 * i, line, anchor="middle")
+    d.legend(1100, [("wire", "foreign key, ON DELETE CASCADE"), ("box-focal", "parent of nine tables")])
     d.save()
 
 
