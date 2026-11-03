@@ -43,6 +43,9 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
   parallel, each about 19 MiB, follows the pod's CPU instead of the node's. The migration Job's pods carry
   `app.kubernetes.io/component: migrate` instead of the app's name label, so the HPA, PDB and topology spread no longer
   count them, and have their own NetworkPolicy (DNS and PostgreSQL only).
+- CI runs each check once: the jobs that compile the code wait for *Build and test*, and *Windows scripts* also waits
+  for *Documentation*, so one failure shows up in the job that owns it instead of in several. `static-analysis.yml` is
+  removed; the CI build already runs the same Error Prone and SpotBugs checks.
 
 ### Fixed
 
@@ -70,6 +73,11 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 - Broadcasts ran one preference query per recipient, and the outbox gauges counted the whole queue on every scrape.
 - Kubernetes: Kustomize's `includeSelectors` added the app's label to the NetworkPolicy's DNS selector, which then
   matched no DNS pod.
+- Documentation:
+  - The diagrams showed neither personal access tokens nor webhooks. The architecture, request pipeline, data model,
+    package dependencies, Kubernetes, email outbox and session invalidation diagrams now match the code.
+  - The steps for removing two-factor authentication deleted `SecretCipher`, which webhooks use to encrypt their
+    signing secrets; they now move it to `common/`.
 
 ### Security
 
