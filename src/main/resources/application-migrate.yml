@@ -7,3 +7,9 @@ spring:
     lazy-initialization: true
   flyway:
     enabled: true
+  datasource:
+    hikari:
+      data-source-properties:
+        # As in application.yml, plus lock_timeout: a migration waiting for a table lock would queue every app query
+        # on that table behind it, so it fails after DB_MIGRATE_LOCK_TIMEOUT instead.
+        options: "-c statement_timeout=${DB_STATEMENT_TIMEOUT:30s} -c idle_in_transaction_session_timeout=${DB_IDLE_IN_TRANSACTION_TIMEOUT:60s} -c lock_timeout=${DB_MIGRATE_LOCK_TIMEOUT:5s}"

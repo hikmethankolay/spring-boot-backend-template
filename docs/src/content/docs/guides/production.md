@@ -114,7 +114,9 @@ Kustomize base:
   Kubernetes.
 - **Migrations as a Job:** `migrate-job.yaml` runs the Flyway migrations with the schema owner's role (profile
   `migrate`: no web server, nothing else starts) and exits; the pods run with `FLYWAY_ENABLED=false` and a role that
-  may only read and write rows. Run the Job before every rollout.
+  may only read and write rows. Run the Job before every rollout. Its pods do not carry the app's
+  `app.kubernetes.io/name` label, so the HPA, PDB and Service ignore them; their own NetworkPolicy in the same file
+  allows DNS and PostgreSQL only.
 - **Pinned and signed image:** `kustomization.yaml` pins the release by tag and digest, so a moved tag cannot change
   what runs. With the [Sigstore policy-controller](https://docs.sigstore.dev/policy-controller/overview/) installed,
   `deploy/kubernetes/policy/` admits only images this repository's release workflow signed. It needs policy-controller
@@ -197,7 +199,9 @@ On one server with 2 CPUs and 4 GB shared by the app, PostgreSQL and Redis, the
   limit on: it stops a flood of logins before it uses up the database connections.
 
 The Kubernetes manifests size pods differently (a 250m CPU request and a 768 MiB memory limit) and scale out on CPU
-with the HorizontalPodAutoscaler, so load test your own pods before relying on these numbers.
+with the HorizontalPodAutoscaler, so load test your own pods before relying on these numbers. Without a CPU limit the
+JVM would see every core of the node and hash that many passwords at once (19 MiB each), so the Deployment sets
+`JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2`; raise it together with the memory limit.
 
 ### Database connections
 
@@ -303,6 +307,10 @@ send from a separate subdomain so the reputation of broadcasts cannot hurt passw
   it expires, at most `JWT_ACCESS_TOKEN_TTL`. Keep that value short.
 - **Concurrent refreshes.** Two simultaneous refreshes with the same token count as reuse and end the session. Clients
   must serialise refreshes (see [Security](../security/#rotation-and-reuse-detection)).
+- **Audit trail after account deletion.** `audit_events` keeps each event's `user_id` and `client_ip` for
+  `AUDIT_RETENTION` (365 days, at least 90) by design, also after the account is deleted: the table is append-only
+  and only the retention job removes rows. Name this period and its purpose (security, abuse investigation) in your
+  privacy notice, or shorten `AUDIT_RETENTION`.
 - **Single sign-on.** For SSO or many services, consider an external identity provider and keep only the
   resource-server part.
 - **Dependency overrides.** When a security fix lands before Spring Boot manages it, pin the patched version in

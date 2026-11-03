@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ScheduledFuture;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.config.ConnectionConfig;
@@ -16,17 +19,28 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
 import org.springframework.stereotype.Component;
 
 /**
  * Posts signed webhook messages. Redirects are not followed (the Standard Webhooks spec counts them as failures),
  * nothing is retried here (the dispatcher schedules retries), the response body is never read, and every connection
- * goes through {@link WebhookAddressPolicy#resolve}, so only public addresses are reached.
+ * goes through {@link WebhookAddressPolicy#resolve}, so only public addresses are reached. Each request is aborted
+ * after {@code connect-timeout + response-timeout} in total, so a receiver that answers one byte at a time cannot
+ * hold a sender.
  */
 @Component
 public class WebhookSender implements DisposableBean {
 
     private final CloseableHttpClient client;
+
+    /**
+     * Aborts requests that run past their deadline. Its own scheduler, not the application's: with virtual threads off,
+     * Boot's scheduler has one thread, which the {@code @Scheduled} dispatcher calling {@link #send} is holding.
+     */
+    private final SimpleAsyncTaskScheduler scheduler = new SimpleAsyncTaskScheduler();
+
+    private final Duration deadline;
 
     /**
      * Creates the sender.
@@ -35,6 +49,9 @@ public class WebhookSender implements DisposableBean {
      * @param addresses  refuses non-public addresses when connecting
      */
     public WebhookSender(WebhookProperties properties, WebhookAddressPolicy addresses) {
+        scheduler.setVirtualThreads(true);
+        scheduler.setThreadNamePrefix("webhook-deadline-");
+        this.deadline = properties.connectTimeout().plus(properties.responseTimeout());
         DnsResolver resolver = new DnsResolver() {
             @Override
             public InetAddress[] resolve(String host) throws UnknownHostException {
@@ -87,12 +104,20 @@ public class WebhookSender implements DisposableBean {
         post.setHeader("webhook-timestamp", Long.toString(timestamp));
         post.setHeader("webhook-signature", signature);
         post.setEntity(new StringEntity(body, ContentType.APPLICATION_JSON.withCharset(StandardCharsets.UTF_8)));
+        // The timeouts above are per read: a receiver sending a byte now and then would never trip them.
+        ScheduledFuture<?> abort =
+                scheduler.schedule(post::cancel, Instant.now().plus(deadline));
         // Closing the response without reading it drops the connection: a receiver cannot keep us busy with a body.
         try (ClassicHttpResponse response = client.executeOpen(null, post, null)) {
             return new Result(response.getCode(), null);
         } catch (IOException ex) {
+            if (post.isCancelled()) {
+                return new Result(null, "No answer within " + deadline.toSeconds() + " seconds");
+            }
             String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             return new Result(null, message);
+        } finally {
+            abort.cancel(false);
         }
     }
 
@@ -103,6 +128,7 @@ public class WebhookSender implements DisposableBean {
      */
     @Override
     public void destroy() throws IOException {
+        scheduler.close();
         client.close();
     }
 

@@ -143,6 +143,22 @@ class UserIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void regularUserCannotSetAnotherUsersPassword() throws Exception {
+        String token = registerAndLogin(uniqueUsername());
+        String victim = uniqueUsername();
+        long victimId = register(victim);
+
+        mockMvc.perform(patch("/api/v1/users/{id}", victimId)
+                        .with(bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"password":"Taken#over-passphrase"}"""))
+                .andExpect(status().isForbidden());
+
+        login(victim, PASSWORD);
+    }
+
+    @Test
     void adminCanManageUsers() throws Exception {
         String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
         long userId = register(uniqueUsername());
@@ -247,6 +263,13 @@ class UserIntegrationTest extends IntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("""
                                 {"role":"USER","currentPassword":"%s"}""", ADMIN_PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:own-account"));
+        mockMvc.perform(patch("/api/v1/users/{id}", ownerId)
+                        .with(bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"role":"USER"}"""))
                 .andExpect(status().isConflict());
         mockMvc.perform(delete("/api/v1/users/me")
                         .with(bearer(ownerToken))
@@ -267,6 +290,29 @@ class UserIntegrationTest extends IntegrationTest {
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/v1/users/me").with(bearer(ownerToken)))
                 .andExpect(jsonPath("$.role").value("OWNER"));
+    }
+
+    @Test
+    void adminCannotChangeOwnAccountThroughTheAdminEndpoint() throws Exception {
+        String adminToken = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        long adminId = ((Number) JsonPath.read(
+                        mockMvc.perform(get("/api/v1/users/me").with(bearer(adminToken)))
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "$.id"))
+                .longValue();
+
+        // Without the current password /users/me would ask for, a stolen access token could take the account over.
+        mockMvc.perform(patch("/api/v1/users/{id}", adminId)
+                        .with(bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"password":"Taken#over-passphrase"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:own-account"));
+
+        login(ADMIN_USERNAME, ADMIN_PASSWORD);
     }
 
     @Test

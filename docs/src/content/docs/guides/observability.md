@@ -105,7 +105,8 @@ loses it:
 2. If SMTP fails, it is retried every `MAIL_OUTBOX_POLL_INTERVAL` with exponential backoff from `MAIL_RETRY_DELAY`
    (30 s, 1 min, 2 min, … up to 1 hour).
 3. After `MAIL_MAX_ATTEMPTS` attempts it is given up, an error is logged and `mail_outbox_dropped_total` grows. The
-   row stays as a dead letter (`failed_at` set): no longer sent, but there to re-queue after a long outage (see the
+   row stays as a dead letter (`failed_at` set): no longer sent, but there to re-queue after a long outage (a
+   transactional email loses its body, which holds a one-time link, so only optional emails can be re-queued; see the
    [runbook](../runbooks/#emailsdropped)) until `MAIL_DEAD_LETTER_RETENTION` (7 days) has passed.
 
 Rows are deleted once sent, and dead letters after their retention, so links with tokens do not stay in the database

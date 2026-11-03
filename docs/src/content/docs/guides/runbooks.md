@@ -218,7 +218,10 @@ They are kept in `email_outbox` as dead letters (`failed_at` set) for `MAIL_DEAD
 1. Check the SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `SPRING_MAIL_USERNAME`) and the provider's status. A log line
    with `STARTTLS is required but host does not support STARTTLS` means the server offers no TLS on that port: use
    the provider's TLS port (see [Mail encryption](../production/#mail-encryption)).
-2. Once SMTP works again, re-queue the dead letters; the dispatcher sends them within `MAIL_OUTBOX_POLL_INTERVAL`:
+2. Once SMTP works again, re-queue the dead letters; the dispatcher sends them within `MAIL_OUTBOX_POLL_INTERVAL`.
+   Only optional emails (broadcasts, product updates) are sent again: transactional ones lose their body when given
+   up, because it holds a one-time link, and are dropped when re-queued, so their users must request them again
+   (step 3):
 
    ```sql
    -- Check first: SELECT id, recipient, subject, attempts, last_error, failed_at FROM email_outbox

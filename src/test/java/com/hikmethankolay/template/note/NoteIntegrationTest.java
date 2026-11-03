@@ -1,5 +1,7 @@
 package com.hikmethankolay.template.note;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,12 +11,65 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
+import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.note.dto.NoteRequest;
 import com.jayway.jsonpath.JsonPath;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class NoteIntegrationTest extends IntegrationTest {
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private NoteService notes;
+
+    @Autowired
+    private NoteProperties properties;
+
+    @Autowired
+    private PlatformTransactionManager transactions;
+
+    @Test
+    void concurrentCreatesStayWithinTheNoteLimit() throws Exception {
+        long userId = register(uniqueUsername());
+        jdbc.update(
+                "insert into notes (user_id, title, body) select ?, 't', 'b' from generate_series(1, ?)",
+                userId,
+                properties.maxPerUser() - 1);
+        NoteRequest request = new NoteRequest("last", "b");
+        CountDownLatch created = new CountDownLatch(1);
+
+        // The last free slot is taken but not yet committed while a second create counts.
+        CompletableFuture<Void> first =
+                CompletableFuture.runAsync(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    notes.create(userId, request);
+                    created.countDown();
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                }));
+        assertThat(created.await(5, TimeUnit.SECONDS)).isTrue();
+
+        assertThatThrownBy(() -> notes.create(userId, request))
+                .isInstanceOfSatisfying(
+                        ApiException.class,
+                        ex -> assertThat(ex.getBody().getType()).hasToString("urn:problem:note-limit-reached"));
+        first.get(10, TimeUnit.SECONDS);
+        assertThat(jdbc.queryForObject("select count(*) from notes where user_id = ?", Long.class, userId))
+                .isEqualTo(properties.maxPerUser());
+    }
 
     @Test
     void ownerCanCreateReadUpdateAndDeleteANote() throws Exception {
@@ -121,6 +176,13 @@ class NoteIntegrationTest extends IntegrationTest {
         mockMvc.perform(get("/api/v1/notes").param("sort", "body").with(bearer(token)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("urn:problem:invalid-sort"));
+        // An offset past Integer.MAX_VALUE would fail in Spring Data JPA as a 500.
+        mockMvc.perform(get("/api/v1/notes")
+                        .param("page", "21474837")
+                        .param("size", "100")
+                        .with(bearer(token)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:page-too-large"));
         // Spring's own errors carry the documented generic type too.
         mockMvc.perform(get("/api/v1/notes/abc").with(bearer(token)))
                 .andExpect(status().isBadRequest())

@@ -6,7 +6,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** Unit tests of {@link OutboxEmail#recordFailure}. */
+/** Unit tests of {@link OutboxEmail#recordFailure} and {@link OutboxEmail#markFailed}. */
 class OutboxEmailTest {
 
     private final Instant next = Instant.parse("2026-10-26T12:00:00Z");
@@ -41,6 +41,26 @@ class OutboxEmailTest {
 
         email.recordFailure("y".repeat(501), next);
         assertThat(lastError(email)).isEqualTo("y".repeat(500));
+    }
+
+    @Test
+    void transactionalDeadLetterLosesItsOneTimeLinks() {
+        OutboxEmail email = new OutboxEmail("a@acme.test", "Reset", "https://x/reset?token=t", "<a>t</a>");
+
+        email.markFailed(next);
+
+        assertThat(email.getBody()).isEmpty();
+        assertThat(email.getHtmlBody()).isNull();
+    }
+
+    @Test
+    void optionalDeadLetterKeepsItsBody() {
+        OutboxEmail email = new OutboxEmail("a@acme.test", "News", "Body", "<p>Body</p>", "unsubscribe-token");
+
+        email.markFailed(next);
+
+        assertThat(email.getBody()).isEqualTo("Body");
+        assertThat(email.getHtmlBody()).isEqualTo("<p>Body</p>");
     }
 
     private static String lastError(OutboxEmail email) {

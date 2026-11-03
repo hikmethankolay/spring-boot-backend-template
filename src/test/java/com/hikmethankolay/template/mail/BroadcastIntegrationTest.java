@@ -142,6 +142,19 @@ class BroadcastIntegrationTest extends IntegrationTest {
         }
     }
 
+    /** A null role must never reach the audience query, where it would fail with a 500. */
+    @Test
+    void nullRoleIsRejected() throws Exception {
+        String owner = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+
+        mockMvc.perform(post(BROADCASTS + "/preview")
+                        .with(bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"category":"product-updates","subject":"s","title":"t","body":"b","roles":[null],"verifiedOnly":false}"""))
+                .andExpect(status().isBadRequest());
+    }
+
     /** The only test that sends: broadcasts are limited to one a minute. */
     @Test
     void broadcastReachesOptedInUsersAfterTheTransactionalEmailsWaiting() throws Exception {

@@ -3,6 +3,7 @@ package com.hikmethankolay.template.mail.dto;
 import com.hikmethankolay.template.user.Role;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
 
@@ -23,6 +24,6 @@ public record BroadcastRequest(
         @NotBlank @Size(max = 200) String subject,
         @NotBlank @Size(max = 200) String title,
         @NotBlank @Size(max = 16_000) String body,
-        @NotEmpty Set<Role> roles,
+        @NotEmpty Set<@NotNull Role> roles,
         boolean verifiedOnly,
         @Size(max = 128) String currentPassword) {}

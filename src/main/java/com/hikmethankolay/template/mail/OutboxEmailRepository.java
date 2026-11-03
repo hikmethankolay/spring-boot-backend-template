@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.mail;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -52,6 +53,16 @@ public interface OutboxEmailRepository extends JpaRepository<OutboxEmail, Long> 
     @Modifying
     @Query(value = "delete from email_outbox where failed_at < :before", nativeQuery = true)
     int deleteFailedBefore(Instant before);
+
+    /**
+     * Deletes the emails to some addresses, waiting or given up.
+     *
+     * @param recipients the addresses
+     * @return the number of emails deleted
+     */
+    @Modifying
+    @Query(value = "delete from email_outbox where recipient in (:recipients)", nativeQuery = true)
+    int deleteByRecipientIn(Collection<String> recipients);
 
     /**
      * Locks one email, unless another instance is sending it.

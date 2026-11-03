@@ -232,6 +232,28 @@ class MfaIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void guessingTheLoginCodeRunsIntoItsOwnLowerLimit() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        confirm(token, Totp.code(secret, step));
+        String challenge = passwordStep(username, "10.0.10.1");
+        String wrong = wrongCode(secret, step);
+
+        // The test profile allows 4 wrong codes, fewer than the account's 5 failed logins; a new IP each time
+        // keeps the IP limit (3) out of the way.
+        for (int attempt = 0; attempt < 4; attempt++) {
+            mockMvc.perform(mfaLogin(challenge, wrong, "10.0.10." + (10 + attempt)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.type").value("urn:problem:invalid-mfa-code"));
+        }
+        mockMvc.perform(mfaLogin(challenge, Totp.code(secret, step + 1), "10.0.10.20"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("urn:problem:login-locked"));
+    }
+
+    @Test
     void guessingTheCodeToTurnTwoFactorOffRunsIntoTheLockout() throws Exception {
         String token = registerAndLogin(uniqueUsername());
         byte[] secret = enroll(token);

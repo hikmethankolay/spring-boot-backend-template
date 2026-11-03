@@ -1,9 +1,11 @@
 package com.hikmethankolay.template.user;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -29,6 +31,16 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      * @return the matching user, if any
      */
     Optional<User> findByEmail(String email);
+
+    /**
+     * Finds a user and locks its row until the transaction ends, so changes that must not interleave with a password
+     * change or the end of the user's sessions wait for it.
+     *
+     * @param id user id
+     * @return the user, if any
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<User> findLockedById(long id);
 
     /**
      * Finds the users waiting to change their email to an address. Pending addresses are not unique: two users may

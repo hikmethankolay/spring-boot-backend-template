@@ -195,12 +195,18 @@ public class OutboxEmail {
     }
 
     /**
-     * Gives the email up: the dispatcher skips it from now on, and the retention cleanup deletes it.
+     * Gives the email up: the dispatcher skips it from now on, and the retention cleanup deletes it. A transactional
+     * email (no unsubscribe token) loses its bodies, which may hold one-time links such as a password reset; the
+     * category is not stored, so security alerts lose theirs too.
      *
      * @param now the time it was given up
      */
     public void markFailed(Instant now) {
         this.failedAt = now;
+        if (unsubscribeToken == null) {
+            this.body = "";
+            this.htmlBody = null;
+        }
     }
 
     /**

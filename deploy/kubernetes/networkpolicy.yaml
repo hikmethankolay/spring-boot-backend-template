@@ -26,14 +26,15 @@ spec:
       ports:
         - port: management
   egress:
-    # DNS, to the cluster's DNS service only.
+    # DNS, to the cluster's DNS service only. matchExpressions, not matchLabels: Kustomize's includeSelectors adds the
+    # app label to every egress podSelector.matchLabels, which would match no DNS pod and break name resolution.
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
           podSelector:
-            matchLabels:
-              k8s-app: kube-dns
+            matchExpressions:
+              - {key: k8s-app, operator: In, values: [kube-dns]}
       ports:
         - port: 53
           protocol: UDP
@@ -47,7 +48,8 @@ spec:
     - ports:
         - port: 587
         - port: 465
-    # HTTPS: GitHub and Google for social login. A NetworkPolicy cannot name hosts; restrict this further with an
-    # egress gateway or a CNI that supports FQDN policies if you need to.
+    # HTTPS: GitHub and Google for social login, and webhook deliveries (endpoint URLs are restricted to port 443, so
+    # this rule covers them all). A NetworkPolicy cannot name hosts; restrict this further with an egress gateway or a
+    # CNI that supports FQDN policies if you need to.
     - ports:
         - port: 443

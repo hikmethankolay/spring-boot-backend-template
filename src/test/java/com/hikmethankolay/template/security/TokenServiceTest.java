@@ -28,6 +28,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtTypeValidator;
+import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 class TokenServiceTest {
@@ -75,6 +76,15 @@ class TokenServiceTest {
                 forged("at+jwt", List.of("another-service")))) {
             assertThatThrownBy(() -> decoder.decode(token)).isInstanceOf(JwtException.class);
         }
+    }
+
+    /** Past the default 60-second clock skew of {@code JwtTimestampValidator}. */
+    @Test
+    void expiredTokenIsRejected() {
+        String expired =
+                forged("at+jwt", List.of(TestProperties.AUDIENCE), Instant.now().minus(Duration.ofMinutes(2)));
+
+        assertThatThrownBy(() -> decoder.decode(expired)).isInstanceOf(JwtValidationException.class);
     }
 
     @Test
@@ -256,6 +266,10 @@ class TokenServiceTest {
      * @return the signed token
      */
     private String forged(String type, List<String> audience) {
+        return forged(type, audience, Instant.now().plusSeconds(60));
+    }
+
+    private String forged(String type, List<String> audience, Instant expiresAt) {
         JwsHeader.Builder header = JwsHeader.with(JwtKeys.algorithm(properties.jwt()));
         if (type != null) {
             header.type(type);
@@ -263,8 +277,8 @@ class TokenServiceTest {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(TestProperties.ISSUER)
                 .subject("1")
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(60));
+                .issuedAt(expiresAt.minusSeconds(60))
+                .expiresAt(expiresAt);
         if (audience != null) {
             claims.audience(audience);
         }

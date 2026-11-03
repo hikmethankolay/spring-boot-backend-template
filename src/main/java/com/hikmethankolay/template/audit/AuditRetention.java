@@ -21,6 +21,9 @@ public class AuditRetention {
     /** The database keeps events at least this long (purge_audit_events, V12). */
     static final Duration MINIMUM = Duration.ofDays(90);
 
+    /** Events removed per statement, so one statement stays well inside statement_timeout (V22). */
+    static final int BATCH_SIZE = 10_000;
+
     private static final Logger log = LoggerFactory.getLogger(AuditRetention.class);
 
     private final JdbcTemplate jdbc;
@@ -42,14 +45,17 @@ public class AuditRetention {
         this.retention = retention;
     }
 
-    /** Removes the events older than the retention. */
+    /** Removes the events older than the retention, {@value #BATCH_SIZE} per statement (each its own transaction). */
     @Scheduled(cron = "0 15 3 * * *")
     public void purge() {
-        Integer removed = jdbc.queryForObject(
-                "SELECT purge_audit_events(?)",
-                Integer.class,
-                Timestamp.from(Instant.now().minus(retention)));
-        if (removed != null && removed > 0) {
+        Timestamp cutoff = Timestamp.from(Instant.now().minus(retention));
+        long removed = 0;
+        Integer batch;
+        do {
+            batch = jdbc.queryForObject("SELECT purge_audit_events(?, ?)", Integer.class, cutoff, BATCH_SIZE);
+            removed += batch == null ? 0 : batch;
+        } while (batch != null && batch == BATCH_SIZE);
+        if (removed > 0) {
             log.info("Removed {} audit events older than {}", removed, retention);
         }
     }

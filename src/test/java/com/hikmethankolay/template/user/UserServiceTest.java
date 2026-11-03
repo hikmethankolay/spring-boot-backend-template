@@ -72,7 +72,8 @@ class UserServiceTest {
                         mock(PlatformTransactionManager.class),
                         JsonMapper.builder().build()),
                 mock(SecurityMailer.class),
-                loginAttempts);
+                loginAttempts,
+                mock(PlatformTransactionManager.class));
         lenient()
                 .when(loginAttempts.checkReentered(anyLong(), any()))
                 .thenAnswer(
@@ -205,9 +206,19 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         assertProblem(
-                () -> userService.setPassword(1L, "Password123456"),
+                () -> userService.encodeNewPassword(userService.hasTwoFactor(1L), "Password123456"),
                 HttpStatus.BAD_REQUEST,
                 "urn:problem:password-breached");
+        assertThat(user.getPasswordHash()).isEqualTo("hashed");
+    }
+
+    @Test
+    void aResetPasswordCheckedWithTwoFactorIsRefusedOnceTwoFactorIsOff() {
+        // An 8-character password was allowed because two-factor was on; it was turned off while the hash ran.
+        User user = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertProblem(() -> userService.setPassword(1L, "new-hash", true), HttpStatus.CONFLICT, "urn:problem:conflict");
         assertThat(user.getPasswordHash()).isEqualTo("hashed");
     }
 
@@ -339,15 +350,45 @@ class UserServiceTest {
     }
 
     @Test
-    void ownerCannotBeDemotedEvenByThemselves() {
+    void ownerCannotBeDemoted() {
         User owner = owner();
         when(userRepository.findById(9L)).thenReturn(Optional.of(owner));
 
         assertProblem(
-                () -> userService.update(9L, 9L, new AdminUpdateUserRequest(null, null, null, Role.USER, "Owner#123")),
+                () -> userService.update(9L, 5L, new AdminUpdateUserRequest(null, null, null, Role.USER, "Admin#123")),
                 HttpStatus.CONFLICT,
                 "urn:problem:owner-protected");
         assertThat(owner.getRole()).isEqualTo(Role.OWNER);
+    }
+
+    @Test
+    void adminEndpointCannotChangeTheRequestersOwnAccount() {
+        // /users/me asks for the current password; the admin endpoint must not be a way around it.
+        assertProblem(
+                () -> userService.update(
+                        9L,
+                        9L,
+                        new AdminUpdateUserRequest(null, "mine@example.com", "Taken#over-passphrase", null, null)),
+                HttpStatus.BAD_REQUEST,
+                "urn:problem:own-account");
+        verify(userRepository, never()).findById(anyLong());
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    void aPasswordChangeIsRefusedIfTheUserChangedWhileItWasHashed() {
+        User read = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        User changed = withId(new User("alice", "alice@example.com", "hashed", Role.USER), 1L);
+        ReflectionTestUtils.setField(changed, "version", 1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(read), Optional.of(changed));
+        when(passwordEncoder.matches("current", "hashed")).thenReturn(true);
+        when(passwordEncoder.encode(PASSPHRASE)).thenReturn("new-hash");
+
+        assertProblem(
+                () -> userService.changePassword(1L, new ChangePasswordRequest("current", PASSPHRASE)),
+                HttpStatus.CONFLICT,
+                "urn:problem:conflict");
+        assertThat(changed.getPasswordHash()).isEqualTo("hashed");
     }
 
     @Test

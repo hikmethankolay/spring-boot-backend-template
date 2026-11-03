@@ -19,6 +19,9 @@ public enum ProblemType {
     /** The {@code sort} parameter names a property that cannot be sorted by. */
     INVALID_SORT("invalid-sort", "The `sort` parameter names a property that cannot be sorted by"),
 
+    /** The {@code page} parameter is so large that the page would start past the last row the database can skip. */
+    PAGE_TOO_LARGE("page-too-large", "The `page` parameter times `size` is too large"),
+
     /** Wrong login credentials, or a refresh token that is missing, invalid, expired or already used. */
     INVALID_CREDENTIALS(
             "invalid-credentials",
@@ -82,14 +85,19 @@ public enum ProblemType {
             "The owner account cannot be deleted, demoted or suspended, and the OWNER role cannot be assigned, through "
                     + "the API"),
 
-    /** An administrator tried to delete or suspend their own account through the admin endpoints. */
-    OWN_ACCOUNT("own-account", "Administrators cannot delete or suspend their own account through the admin endpoints"),
+    /** An administrator tried to change, delete or suspend their own account through the admin endpoints. */
+    OWN_ACCOUNT(
+            "own-account",
+            "Administrators cannot change, delete or suspend their own account through the admin endpoints"),
 
     /** No user has the requested id. */
     USER_NOT_FOUND("user-not-found", "No user has this id"),
 
     /** The caller has no note with the requested id; other users' notes look the same as missing ones. */
     NOTE_NOT_FOUND("note-not-found", "The caller has no note with this id"),
+
+    /** The caller already has {@code app.notes.max-per-user} notes. */
+    NOTE_LIMIT_REACHED("note-limit-reached", "Delete a note before creating another"),
 
     /** The caller has no session with the requested id; other users' sessions look the same as missing ones. */
     SESSION_NOT_FOUND("session-not-found", "The caller has no session with this id"),
@@ -112,6 +120,9 @@ public enum ProblemType {
 
     /** The endpoint has no delivery with the requested id. */
     WEBHOOK_DELIVERY_NOT_FOUND("webhook-delivery-not-found", "The webhook endpoint has no delivery with this id"),
+
+    /** The delivery is still queued or being sent; only sent and failed deliveries can be sent again. */
+    WEBHOOK_DELIVERY_PENDING("webhook-delivery-pending", "The webhook delivery is still queued or being sent"),
 
     /** The endpoint URL is malformed, not HTTPS where required, or does not resolve to a public address. */
     WEBHOOK_URL_INVALID("webhook-url-invalid", "The webhook URL is invalid or points to a non-public address"),

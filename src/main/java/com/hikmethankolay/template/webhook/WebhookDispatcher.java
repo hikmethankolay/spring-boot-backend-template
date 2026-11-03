@@ -109,6 +109,7 @@ public class WebhookDispatcher {
         this.meterRegistry = meterRegistry;
         this.transaction = new TransactionTemplate(transactions);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        // Longer than WebhookSender's hard deadline (connect + response timeout), so a lease never expires mid-send.
         this.lease =
                 properties.connectTimeout().plus(properties.responseTimeout()).plusMinutes(1);
     }
@@ -129,8 +130,11 @@ public class WebhookDispatcher {
      */
     public int deliverDue(Instant now) {
         int handled = 0;
+        Instant started = Instant.now();
         while (handled < BATCH_SIZE) {
-            Optional<Attempt> attempt = transaction.execute(status -> claim(now));
+            // A batch of slow sends takes minutes: lease and back off from the current time, not the batch's start.
+            Instant claimedAt = now.plus(Duration.between(started, Instant.now()));
+            Optional<Attempt> attempt = transaction.execute(status -> claim(claimedAt));
             if (attempt == null || attempt.isEmpty()) {
                 break;
             }
@@ -141,7 +145,8 @@ public class WebhookDispatcher {
             }
             WebhookSender.Result result = sender.send(
                     claimed.url(), claimed.messageId(), claimed.timestamp(), claimed.signature(), claimed.payload());
-            transaction.executeWithoutResult(status -> record(claimed.deliveryId(), result, now));
+            Instant answeredAt = now.plus(Duration.between(started, Instant.now()));
+            transaction.executeWithoutResult(status -> record(claimed.deliveryId(), result, answeredAt));
         }
         return handled;
     }
@@ -202,7 +207,8 @@ public class WebhookDispatcher {
         WebhookDelivery delivery = deliveries.findById(deliveryId).orElse(null);
         WebhookEndpoint endpoint = delivery == null
                 ? null
-                : endpoints.findById(delivery.getEndpointId()).orElse(null);
+                // Locked: another instance recording a result for the same endpoint must not lose this count.
+                : endpoints.lockById(delivery.getEndpointId()).orElse(null);
         if (endpoint == null) {
             return; // Deleted while the request ran.
         }

@@ -35,9 +35,14 @@ public final class SortAllowList {
      * @param pageable the requested page
      * @return the page request, ending with {@code id} so rows with equal sort values keep a stable order across
      *         pages
-     * @throws ApiException 400 naming the rejected property and the allowed ones
+     * @throws ApiException 400 naming the rejected property and the allowed ones, or if the page starts past
+     *                      {@link Integer#MAX_VALUE} rows, which the JPA offset cannot hold
      */
     public Pageable check(Pageable pageable) {
+        if (pageable.isPaged() && pageable.getOffset() > Integer.MAX_VALUE) {
+            throw ApiException.badRequest(
+                    ProblemType.PAGE_TOO_LARGE, "The page starts too far into the list; request a smaller page.");
+        }
         Sort sort = pageable.getSort();
         for (Sort.Order order : sort) {
             if (!allowed.contains(order.getProperty())) {

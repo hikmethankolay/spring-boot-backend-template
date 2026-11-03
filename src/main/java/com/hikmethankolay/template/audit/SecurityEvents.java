@@ -3,13 +3,13 @@ package com.hikmethankolay.template.audit;
 import com.hikmethankolay.template.audit.dto.SecurityEventResponse;
 import com.hikmethankolay.template.common.SortAllowList;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +22,9 @@ public class SecurityEvents {
 
     /** Properties the events can be sorted by. */
     public static final String SORTABLE_PROPERTIES = "occurredAt";
+
+    /** Shown as the actor of events another user (an administrator) caused, so their id is not revealed. */
+    static final String OTHER_ACTOR = "admin";
 
     private static final SortAllowList SORTING = new SortAllowList(List.of(SORTABLE_PROPERTIES));
 
@@ -58,7 +61,7 @@ public class SecurityEvents {
         Sort.Order order = pageable.getSort().getOrderFor(SORTABLE_PROPERTIES);
         String query = order != null && order.isAscending() ? PAGE_OLDEST_FIRST : PAGE_NEWEST_FIRST;
         List<SecurityEventResponse> events =
-                jdbc.query(query, SecurityEvents::map, userId, pageable.getPageSize(), pageable.getOffset());
+                jdbc.query(query, mapper(userId), userId, pageable.getPageSize(), pageable.getOffset());
         return PageableExecutionUtils.getPage(events, pageable, () -> count(userId));
     }
 
@@ -69,8 +72,7 @@ public class SecurityEvents {
      * @return the events
      */
     public List<SecurityEventResponse> allForUser(long userId) {
-        return jdbc.query(
-                COLUMNS + "WHERE user_id = ? ORDER BY occurred_at DESC, id DESC", SecurityEvents::map, userId);
+        return jdbc.query(COLUMNS + "WHERE user_id = ? ORDER BY occurred_at DESC, id DESC", mapper(userId), userId);
     }
 
     private long count(long userId) {
@@ -78,11 +80,21 @@ public class SecurityEvents {
         return count == null ? 0 : count;
     }
 
-    private static SecurityEventResponse map(ResultSet row, int rowNumber) throws SQLException {
-        return new SecurityEventResponse(
-                row.getTimestamp("occurred_at").toInstant(),
-                row.getString("action"),
-                row.getString("actor_id"),
-                row.getString("client_ip"));
+    /**
+     * Maps rows about one user; an actor other than the user is shown as {@value #OTHER_ACTOR}, never by id.
+     *
+     * @param userId the user the events are about
+     * @return the row mapper
+     */
+    private static RowMapper<SecurityEventResponse> mapper(long userId) {
+        String self = String.valueOf(userId);
+        return (ResultSet row, int rowNumber) -> {
+            String actor = row.getString("actor_id");
+            return new SecurityEventResponse(
+                    row.getTimestamp("occurred_at").toInstant(),
+                    row.getString("action"),
+                    actor == null || actor.equals(self) ? actor : OTHER_ACTOR,
+                    row.getString("client_ip"));
+        };
     }
 }

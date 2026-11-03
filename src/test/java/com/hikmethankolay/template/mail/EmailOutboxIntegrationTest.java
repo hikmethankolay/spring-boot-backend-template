@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
+import com.hikmethankolay.template.user.UserService;
+import com.hikmethankolay.template.user.dto.DeleteAccountRequest;
 import jakarta.mail.Multipart;
 import jakarta.mail.internet.MimeMessage;
 import java.time.Instant;
@@ -33,6 +35,9 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private UserService users;
 
     @AfterEach
     void stopOutage() {
@@ -166,8 +171,9 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
                 .orElseThrow();
     }
 
+    /** A transactional email may hold a one-time link: its dead letter keeps no body, so a re-queue drops it. */
     @Test
-    void emailIsKeptAsADeadLetterAfterTheLastAttemptAndCanBeRequeued() {
+    void transactionalDeadLetterLosesItsBodyAndIsDroppedWhenRequeued() {
         mail.failNext(100);
         enqueue("outbox-drop@example.com");
 
@@ -179,6 +185,7 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
         OutboxEmail dead = row("outbox-drop@example.com");
         assertThat(dead.getAttempts()).isEqualTo(10);
         assertThat(dead.getFailedAt()).isNotNull();
+        assertThat(dead.getBody()).isEmpty();
         mail.failNext(0);
         outbox.sendDue(Instant.now().plus(30, ChronoUnit.HOURS));
         assertThat(mail.latest("outbox-drop@example.com", "Outbox test")).isEmpty();
@@ -189,8 +196,28 @@ class EmailOutboxIntegrationTest extends IntegrationTest {
                 dead.getId());
         outbox.sendDue(Instant.now().plus(30, ChronoUnit.HOURS));
 
-        assertThat(mail.latest("outbox-drop@example.com", "Outbox test")).isPresent();
+        assertThat(mail.latest("outbox-drop@example.com", "Outbox test")).isEmpty();
         assertThat(queued("outbox-drop@example.com")).isFalse();
+    }
+
+    /** Before the fix, a deleted user's emails stayed queued and were sent, and dead letters kept their data. */
+    @Test
+    void deletingAUserDeletesTheirEmails() throws Exception {
+        String username = uniqueUsername();
+        long id = register(username);
+        String address = username + "@example.com";
+        String pending = username + "-new@example.com";
+        jdbc.update("UPDATE users SET pending_email = ? WHERE id = ?", pending, id);
+        transaction.executeWithoutResult(status -> {
+            outbox.enqueueDeferred(address, new RenderedMail("Outbox test", "Hello", null));
+            outbox.enqueueDeferred(pending, new RenderedMail("Outbox test", "Hello", null));
+        });
+        jdbc.update("UPDATE email_outbox SET failed_at = now() WHERE recipient = ?", address);
+
+        users.deleteOwnAccount(id, new DeleteAccountRequest(PASSWORD));
+
+        assertThat(queued(address)).isFalse();
+        assertThat(queued(pending)).isFalse();
     }
 
     @Test

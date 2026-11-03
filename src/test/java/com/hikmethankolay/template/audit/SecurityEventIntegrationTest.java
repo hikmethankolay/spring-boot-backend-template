@@ -65,6 +65,23 @@ class SecurityEventIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void anotherUsersIdIsNotShownAsTheActor() throws Exception {
+        String username = uniqueUsername();
+        long id = register(username);
+        String token = login(username, PASSWORD);
+        String insert = "INSERT INTO audit_events (action, user_id, actor_id) VALUES (?, ?, ?)";
+        jdbc.update(insert, "admin.user_updated", id, "999999");
+        jdbc.update(insert, "user.password_changed", id, String.valueOf(id));
+
+        mockMvc.perform(get("/api/v1/users/me/security-events").with(bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].event").value("user.password_changed"))
+                .andExpect(jsonPath("$.content[0].actorId").value(String.valueOf(id)))
+                .andExpect(jsonPath("$.content[1].event").value("admin.user_updated"))
+                .andExpect(jsonPath("$.content[1].actorId").value(SecurityEvents.OTHER_ACTOR));
+    }
+
+    @Test
     void onlyTheTimeCanBeSortedBy() throws Exception {
         String token = registerAndLogin(uniqueUsername());
 

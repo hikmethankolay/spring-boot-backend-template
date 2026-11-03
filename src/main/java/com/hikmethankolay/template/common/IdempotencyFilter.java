@@ -24,6 +24,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -58,8 +59,8 @@ import org.springframework.web.util.pattern.PathPatternParser;
  *   <li>A {@code 5xx} response is not kept, so the request can be retried; nor is a {@code 408}, {@code 409} or
  *       {@code 429}, which say "try again" rather than answer the request ({@link #keeps(int)}).</li>
  *   <li>Anonymous requests (login, sign-up) are not covered: a replayed login would give its tokens to anyone who
- *       knows the key. Nor are the {@link #UNCOVERED_PATHS}, whose responses hold secrets (the two-factor secret and
- *       recovery codes) that must not be copied to Redis.</li>
+ *       knows the key. Nor are the {@link #UNCOVERED_PATHS}, whose responses hold secrets (two-factor secrets,
+ *       access tokens, webhook signing secrets) that must not be copied to Redis.</li>
  *   <li>A body larger than {@value #MAX_BODY_BYTES} bytes is not buffered for the fingerprint: such a request runs
  *       without the key.</li>
  *   <li>Without Redis the header is ignored and requests run as usual (ADR 2).</li>
@@ -89,11 +90,21 @@ public class IdempotencyFilter extends OncePerRequestFilter {
      * Keeps the response and extends the claim in one step, so a failure half-way cannot leave a response without a
      * TTL (Redis runs with {@code noeviction}). ARGV: TTL in ms, fingerprint, then the hash's field/value pairs.
      */
-    private static final RedisScript<Long> STORE = RedisScript.of("""
+    static final RedisScript<Long> STORE = RedisScript.of("""
             redis.call('HSET', KEYS[2], unpack(ARGV, 3))
             redis.call('PEXPIRE', KEYS[2], ARGV[1])
             redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[1])
             return 1""", Long.class);
+
+    /**
+     * Releases a claim only if it is still this request's: once {@link #IN_PROGRESS_TTL} lapsed, a retry may have
+     * claimed the key, and its claim must stay. ARGV: the claim value this request set.
+     */
+    static final RedisScript<Long> RELEASE = RedisScript.of("""
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+                return redis.call('DEL', KEYS[1])
+            end
+            return 0""", Long.class);
 
     /** 4xx statuses that ask the client to try again later (timeout, conflict, rate limit): never replayed. */
     private static final Set<Integer> TRANSIENT_STATUSES = Set.of(408, 409, 429);
@@ -103,8 +114,15 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     /** Largest body read into memory for the fingerprint; the template's own requests are a few kilobytes. */
     static final int MAX_BODY_BYTES = 1024 * 1024;
 
-    /** Signed-in POST paths not covered because their responses hold secrets. */
-    public static final List<String> UNCOVERED_PATHS = List.of("/api/v1/users/me/mfa/**");
+    /**
+     * Signed-in POST paths not covered because their responses hold secrets: two-factor secrets and recovery codes,
+     * new personal access tokens, and webhook signing secrets.
+     */
+    public static final List<String> UNCOVERED_PATHS = List.of(
+            "/api/v1/users/me/mfa/**",
+            "/api/v1/users/me/access-tokens",
+            "/api/v1/webhooks",
+            "/api/v1/webhooks/*/secret");
 
     private static final List<PathPattern> UNCOVERED = UNCOVERED_PATHS.stream()
             .map(PathPatternParser.defaultInstance::parse)
@@ -191,9 +209,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         String claimKey = keyPrefix + "{" + caller() + "}:" + SecureTokens.hash(key);
         String responseKey = claimKey + ":response";
 
+        // Unique per request, so only this request can release its claim; storing the response replaces it.
+        String claim = fingerprint + ":" + UUID.randomUUID();
         Boolean claimed;
         try {
-            claimed = redis.opsForValue().setIfAbsent(claimKey, fingerprint, IN_PROGRESS_TTL);
+            claimed = redis.opsForValue().setIfAbsent(claimKey, claim, IN_PROGRESS_TTL);
         } catch (DataAccessException ex) {
             log.warn("Idempotency keys unavailable, running the request without one: {}", ex.getMessage());
             chain.doFilter(cached, response);
@@ -213,7 +233,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             }
         } finally {
             if (!kept) {
-                release(claimKey);
+                release(claimKey, claim);
             }
             recorded.copyBodyToResponse();
         }
@@ -306,9 +326,9 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
     }
 
-    private void release(String claimKey) {
+    private void release(String claimKey, String claim) {
         try {
-            redis.delete(claimKey);
+            redis.execute(RELEASE, List.of(claimKey), claim);
         } catch (DataAccessException ex) {
             log.warn("Could not release an Idempotency-Key: {}", ex.getMessage());
         }

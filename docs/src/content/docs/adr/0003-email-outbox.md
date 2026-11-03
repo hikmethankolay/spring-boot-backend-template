@@ -15,7 +15,9 @@ process stops between commit and send.
 
 Emails are written to the `email_outbox` table in the same transaction as the change. A scheduled dispatcher sends
 them with retries and backoff, and gives up after a fixed number of attempts. An email given up is kept in the table
-as a dead letter (`failed_at` set), which the dispatcher skips, so it can be re-queued after a long SMTP outage; dead
+as a dead letter (`failed_at` set), which the dispatcher skips, so it can be re-queued after a long SMTP outage. A
+transactional dead letter (verification, password reset, security alert) loses its body, so its one-time link does
+not stay in the database; re-queuing it drops it and the user requests a new one. Dead
 letters are deleted after a retention period (`app.mail.dead-letter-retention`, 7 days by default). Any exception from
 the send counts as a failed attempt, so a bug in one email cannot make the dispatcher retry it forever.
 

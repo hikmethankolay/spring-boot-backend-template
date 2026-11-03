@@ -170,7 +170,7 @@ public class AuthService {
      * @throws BadCredentialsException if the credentials are wrong (mapped to 401)
      */
     public LoginResult login(LoginRequest request, String clientIp) {
-        String identifier = request.identifier().trim();
+        String identifier = request.identifier().strip();
         Long accountId = userRepository
                 .findByUsernameOrEmail(identifier, identifier.toLowerCase(Locale.ROOT))
                 .map(User::getId)
@@ -253,7 +253,9 @@ public class AuthService {
      * Finishes a login with the second factor.
      *
      * <p>Wrong codes count as failed logins of the IP and the account, so guessing codes runs into the same
-     * lockout as guessing passwords, however many MFA tokens are requested.</p>
+     * lockout as guessing passwords, however many MFA tokens are requested. They also count against the account's
+     * own, much lower {@code app.login.mfa-max-attempts}: the attacker already has the password here, and a
+     * six-digit code falls to far fewer guesses than the account limit allows.</p>
      *
      * @param mfaToken the token from the login response
      * @param code     an authenticator code or a recovery code
@@ -268,7 +270,13 @@ public class AuthService {
                 challenges.find(mfaToken).orElseThrow(AuthService::mfaChallengeExpired);
         String accountKey = "account:" + challenge.userId();
         String ipKey = "ip:" + ClientIp.limitKey(clientIp);
-        if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
+        String mfaKey = "mfa:" + challenge.userId();
+        boolean acquired = loginAttempts.tryAcquire(ipKey, accountKey);
+        if (acquired && !loginAttempts.tryAcquire(mfaKey, loginAttempts.mfaMaxAttempts())) {
+            loginAttempts.giveBack(ipKey, accountKey);
+            acquired = false;
+        }
+        if (!acquired) {
             audit.record(AuditEvent.LOGIN_BLOCKED, challenge.userId());
             throw ApiException.tooManyRequests(
                     ProblemType.LOGIN_LOCKED,
@@ -286,6 +294,7 @@ public class AuthService {
             // The code could not be checked (database or Redis down): no failed attempt.
             if (!checked) {
                 loginAttempts.giveBack(ipKey, accountKey);
+                loginAttempts.release(mfaKey);
             }
         }
         if (!verified) {
@@ -297,6 +306,7 @@ public class AuthService {
             throw mfaChallengeExpired();
         }
         loginAttempts.reset(accountKey);
+        loginAttempts.reset(mfaKey);
         loginAttempts.release(ipKey);
         User user = userRepository.findById(challenge.userId()).orElseThrow(AuthService::mfaChallengeExpired);
         if (user.getSuspendedAt() != null) {
@@ -377,10 +387,24 @@ public class AuthService {
         // Issued first: it fails if the password or role changed since it was checked.
         RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokens.issue(userId, sessionVersion, rememberMe);
         audit.record(AuditEvent.LOGIN_SUCCEEDED, userId, "rememberMe", rememberMe, "method", method);
-        return new AuthTokens(
-                tokenService.issue(userId, username, role, refreshToken.sessionId()),
-                refreshToken,
-                knownDevices.recordLogin(userId));
+        TokenService.IssuedToken accessToken = tokenService.issue(userId, username, role, refreshToken.sessionId());
+        requireCurrent(userId, sessionVersion);
+        return new AuthTokens(accessToken, refreshToken, knownDevices.recordLogin(userId));
+    }
+
+    /**
+     * Rejects an access token just minted for sessions that ended meanwhile. A password change revokes access
+     * tokens with a cut-off set after it commits; a token minted after that cut-off would escape it, but by then the
+     * new session version is committed and seen here.
+     *
+     * @param userId         owner of the token
+     * @param sessionVersion the session version the token was issued under
+     * @throws BadCredentialsException if the user's sessions ended since (mapped to 401)
+     */
+    private void requireCurrent(long userId, int sessionVersion) {
+        if (!refreshTokens.isCurrent(userId, sessionVersion)) {
+            throw new BadCredentialsException(RefreshTokenService.INVALID_REFRESH_TOKEN);
+        }
     }
 
     private static ApiException accountSuspended() {
@@ -407,7 +431,7 @@ public class AuthService {
         }
         RefreshTokenService.Rotation rotation = refreshTokens.rotate(refreshToken);
         // The user cannot be missing: deleting a user deletes its refresh tokens.
-        return userRepository
+        AuthTokens tokens = userRepository
                 .findById(rotation.userId())
                 .map(user -> new AuthTokens(
                         tokenService.issue(
@@ -418,6 +442,8 @@ public class AuthService {
                         rotation.successor(),
                         null))
                 .orElseThrow(() -> new BadCredentialsException(RefreshTokenService.INVALID_REFRESH_TOKEN));
+        requireCurrent(rotation.userId(), rotation.sessionVersion());
+        return tokens;
     }
 
     /**

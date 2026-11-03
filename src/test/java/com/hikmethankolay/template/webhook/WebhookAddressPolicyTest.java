@@ -108,6 +108,16 @@ class WebhookAddressPolicyTest {
         assertThat(development.resolve("[::1]")).hasSize(1);
     }
 
+    @Test
+    void productionOnlyAcceptsTheDefaultHttpsPort() {
+        // A public literal, so only the port decides.
+        assertThatThrownBy(() -> production.validate("https://93.184.216.34:8443/hook"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The URL must use the default HTTPS port 443.");
+        assertThat(production.validate("https://93.184.216.34:443/hook")).isEqualTo("https://93.184.216.34:443/hook");
+        assertThat(production.validate("https://93.184.216.34/hook")).isEqualTo("https://93.184.216.34/hook");
+    }
+
     private static String bracketed(String address) {
         return address.contains(":") ? "[" + address + "]" : address;
     }

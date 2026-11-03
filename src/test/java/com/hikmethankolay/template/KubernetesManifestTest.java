@@ -50,6 +50,14 @@ class KubernetesManifestTest {
     }
 
     @Test
+    void kustomizeCannotRewriteTheDnsSelector() throws IOException {
+        // includeSelectors adds the app label to egress podSelector.matchLabels, so kube-dns must use matchExpressions.
+        assertThat(Files.readString(NETWORK_POLICY))
+                .doesNotContainPattern("matchLabels:\\s*\\n\\s*k8s-app: kube-dns")
+                .contains("{key: k8s-app, operator: In, values: [kube-dns]}");
+    }
+
+    @Test
     void secretsAreMountedAsFilesNotEnvironmentVariables() throws IOException {
         for (Path manifest : new Path[] {DEPLOYMENT, MIGRATE_JOB}) {
             String text = Files.readString(manifest);

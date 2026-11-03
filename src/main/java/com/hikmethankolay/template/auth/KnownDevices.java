@@ -101,6 +101,8 @@ public class KnownDevices {
         // A private address may be a proxy's, shared by every client: then only the cookie recognizes a device.
         String network = ClientIp.isPublic(ip) ? ClientIp.network(ip) : null;
         Cookie cookie = request == null ? null : WebUtils.getCookie(request, cookieName);
+        // Two parallel logins of a new device would both miss the updates below, both insert and both send the mail.
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended('known_devices', ?))", userId);
         // A known cookie only refreshes its row: the device and network stay those of the first login, which a
         // cookieless client on the same device and network is matched against.
         if (cookie != null

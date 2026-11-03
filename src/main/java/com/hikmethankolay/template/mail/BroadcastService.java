@@ -62,8 +62,10 @@ public class BroadcastService {
     private static final long START_LOCK = 7_401_002L;
 
     /** Users in the comma-separated roles of the first parameter, verified unless the second is false. */
-    private static final String AUDIENCE =
-            " FROM users u WHERE u.role = ANY (string_to_array(?, ',')) AND (u.email_verified OR NOT ?)";
+    private static final String AUDIENCE_FILTER =
+            " WHERE u.role = ANY (string_to_array(?, ',')) AND (u.email_verified OR NOT ?)";
+
+    private static final String AUDIENCE = " FROM users u" + AUDIENCE_FILTER;
 
     /** The audience minus the users who turned the category of the third parameter off. */
     private static final String RECIPIENTS = AUDIENCE + " AND NOT EXISTS (SELECT 1 FROM email_preferences p "
@@ -283,8 +285,12 @@ public class BroadcastService {
             try {
                 while (true) {
                     List<Recipient> batch = jdbc.query(
-                            "SELECT u.id, u.email" + AUDIENCE + " AND u.id > ? ORDER BY u.id LIMIT ?",
-                            (row, i) -> new Recipient(row.getLong(1), row.getString(2)),
+                            // The preference comes with the recipient: no query per recipient.
+                            "SELECT u.id, u.email, coalesce(p.enabled, true) FROM users u "
+                                    + "LEFT JOIN email_preferences p ON p.user_id = u.id AND p.category = ?"
+                                    + AUDIENCE_FILTER + " AND u.id > ? ORDER BY u.id LIMIT ?",
+                            (row, i) -> new Recipient(row.getLong(1), row.getString(2), row.getBoolean(3)),
+                            category.key(),
                             roles,
                             verifiedOnly,
                             lastId,
@@ -296,7 +302,14 @@ public class BroadcastService {
                     Integer sent = newTransaction.execute(status -> {
                         int count = (int) batch.stream()
                                 .filter(recipient -> outbox.enqueueBroadcast(
-                                        id, recipient.id(), recipient.email(), category, TEMPLATE, subject, model))
+                                        id,
+                                        recipient.id(),
+                                        recipient.email(),
+                                        category,
+                                        TEMPLATE,
+                                        subject,
+                                        model,
+                                        recipient.enabled()))
                                 .count();
                         if (jdbc.update(
                                         "UPDATE mail_broadcasts SET last_user_id = ?, queued = queued + ?, "
@@ -357,5 +370,5 @@ public class BroadcastService {
         return Map.of("title", title, "paragraphs", paragraphs);
     }
 
-    private record Recipient(long id, String email) {}
+    private record Recipient(long id, String email, boolean enabled) {}
 }

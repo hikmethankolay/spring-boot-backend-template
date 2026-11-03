@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.webhook;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -10,6 +11,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
+import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.webhook.dto.WebhookRequest;
+import com.hikmethankolay.template.webhook.dto.WebhookUpdateRequest;
 import com.jayway.jsonpath.JsonPath;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -24,6 +28,9 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +44,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Events reach a real HTTP receiver, signed per Standard Webhooks, with retries and automatic turn-off. */
 class WebhookIntegrationTest extends IntegrationTest {
@@ -48,6 +57,15 @@ class WebhookIntegrationTest extends IntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private WebhookService webhooks;
+
+    @Autowired
+    private WebhookProperties properties;
+
+    @Autowired
+    private PlatformTransactionManager transactions;
 
     private HttpServer receiver;
 
@@ -375,6 +393,170 @@ class WebhookIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void aPendingDeliveryCannotBeSentAgain() throws Exception {
+        String session = registerAndLogin(uniqueUsername());
+        long endpoint = endpointId(create(session, "note.created"));
+        createNote(session);
+
+        mockMvc.perform(post(WEBHOOKS + "/" + endpoint + "/deliveries/" + deliveryId(session, endpoint) + "/retry")
+                        .with(bearer(session)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:problem:webhook-delivery-pending"));
+    }
+
+    @Test
+    void anotherUsersDeliveriesAreNotFound() throws Exception {
+        String alice = registerAndLogin(uniqueUsername());
+        long aliceEndpoint = endpointId(create(alice, "note.created"));
+        String bob = registerAndLogin(uniqueUsername());
+        long bobEndpoint = endpointId(create(bob, "note.created"));
+        createNote(bob);
+        long bobDelivery = deliveryId(bob, bobEndpoint);
+
+        mockMvc.perform(get(WEBHOOKS + "/" + bobEndpoint + "/deliveries").with(bearer(alice)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("urn:problem:webhook-not-found"));
+        mockMvc.perform(post(WEBHOOKS + "/" + aliceEndpoint + "/deliveries/" + bobDelivery + "/retry")
+                        .with(bearer(alice)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("urn:problem:webhook-delivery-not-found"));
+    }
+
+    @Test
+    void aDeliveryBeingSentIsNotDueForAnotherInstance() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        CountDownLatch arrived = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        HttpServer slow = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        slow.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        slow.createContext("/hook", exchange -> {
+            requests.incrementAndGet();
+            arrived.countDown();
+            try {
+                // Under the test profile's 2s response timeout, so the held request still succeeds.
+                release.await(1500, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        slow.start();
+        try {
+            String session = registerAndLogin(uniqueUsername());
+            long endpoint =
+                    endpointId(create(session, "note.created", slow.getAddress().getPort()));
+            createNote(session);
+
+            CompletableFuture<Integer> first =
+                    CompletableFuture.supplyAsync(() -> dispatcher.deliverDue(Instant.now()));
+            assertThat(arrived.await(5, TimeUnit.SECONDS)).isTrue();
+            dispatcher.deliverDue(Instant.now());
+            release.countDown();
+            first.get(10, TimeUnit.SECONDS);
+
+            assertThat(requests).hasValue(1);
+            mockMvc.perform(get(WEBHOOKS + "/" + endpoint + "/deliveries").with(bearer(session)))
+                    .andExpect(jsonPath("$.content[0].status").value("SENT"));
+        } finally {
+            slow.stop(0);
+        }
+    }
+
+    @Test
+    void failuresRecordedAtTheSameTimeByTwoInstancesAreBothCounted() throws Exception {
+        String session = registerAndLogin(uniqueUsername());
+        long endpoint = endpointId(create(session, "note.created"));
+        answer.set(500);
+        createNote(session);
+        CountDownLatch locked = new CountDownLatch(1);
+
+        // Another instance recording a failure for the same endpoint, still uncommitted while this one records its own.
+        CompletableFuture<Void> other =
+                CompletableFuture.runAsync(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    jdbc.update(
+                            "update webhook_endpoints set consecutive_failures = consecutive_failures + 1 where id = ?",
+                            endpoint);
+                    locked.countDown();
+                    try {
+                        next();
+                        Thread.sleep(500);
+                    } catch (InterruptedException ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                }));
+        assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+        dispatcher.deliverDue(Instant.now());
+        other.get(10, TimeUnit.SECONDS);
+
+        assertThat(jdbc.queryForObject(
+                        "select consecutive_failures from webhook_endpoints where id = ?", Integer.class, endpoint))
+                .isEqualTo(2);
+    }
+
+    @Test
+    void anOwnerTurningAnEndpointOnWhileASenderTurnsItOffEndsUpOn() throws Exception {
+        String session = registerAndLogin(uniqueUsername());
+        long endpoint = endpointId(create(session, "note.created"));
+        long userId = jdbc.queryForObject("select user_id from webhook_endpoints where id = ?", Long.class, endpoint);
+        CountDownLatch disabled = new CountDownLatch(1);
+
+        // A sender giving up on the endpoint, not yet committed while its owner turns it on.
+        CompletableFuture<Void> sender =
+                CompletableFuture.runAsync(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    jdbc.update(
+                            "update webhook_endpoints set enabled = false, disabled_reason = 'gave up' where id = ?",
+                            endpoint);
+                    disabled.countDown();
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                }));
+        assertThat(disabled.await(5, TimeUnit.SECONDS)).isTrue();
+        webhooks.update(userId, endpoint, new WebhookUpdateRequest(null, null, null, true));
+        sender.get(10, TimeUnit.SECONDS);
+
+        assertThat(jdbc.queryForObject("select enabled from webhook_endpoints where id = ?", Boolean.class, endpoint))
+                .isTrue();
+    }
+
+    @Test
+    void concurrentRegistrationsStayWithinTheEndpointLimit() throws Exception {
+        long userId = register(uniqueUsername());
+        WebhookRequest request = new WebhookRequest(
+                "http://127.0.0.1:" + receiver.getAddress().getPort() + "/hook", null, List.of("note.created"));
+        for (int i = 1; i < properties.maxEndpointsPerUser(); i++) {
+            webhooks.create(userId, request);
+        }
+        CountDownLatch created = new CountDownLatch(1);
+
+        // The last free slot is taken but not yet committed while a second registration counts.
+        CompletableFuture<Void> first =
+                CompletableFuture.runAsync(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    webhooks.create(userId, request);
+                    created.countDown();
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                }));
+        assertThat(created.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThatThrownBy(() -> webhooks.create(userId, request))
+                .isInstanceOfSatisfying(
+                        ApiException.class,
+                        ex -> assertThat(ex.getBody().getType().toString())
+                                .isEqualTo("urn:problem:webhook-limit-reached"));
+        first.get(10, TimeUnit.SECONDS);
+
+        assertThat(jdbc.queryForObject(
+                        "select count(*) from webhook_endpoints where user_id = ?", Integer.class, userId))
+                .isEqualTo(properties.maxEndpointsPerUser());
+    }
+
+    @Test
     void anUndecryptableSecretTurnsTheEndpointOffWithoutBlockingOtherDeliveries() throws Exception {
         String broken = registerAndLogin(uniqueUsername());
         long brokenEndpoint = endpointId(create(broken, "note.created"));
@@ -411,12 +593,24 @@ class WebhookIntegrationTest extends IntegrationTest {
     }
 
     private ResultActions create(String bearer, String eventType) throws Exception {
+        return create(bearer, eventType, receiver.getAddress().getPort());
+    }
+
+    private ResultActions create(String bearer, String eventType, int port) throws Exception {
         return mockMvc.perform(post(WEBHOOKS)
                 .with(bearer(bearer))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json(
                         "{\"url\":\"http://127.0.0.1:%d/hook\",\"description\":\"test\",\"eventTypes\":[\"%s\"]}",
-                        receiver.getAddress().getPort(), eventType)));
+                        port, eventType)));
+    }
+
+    private long deliveryId(String session, long endpoint) throws Exception {
+        return ((Number) JsonPath.read(
+                        body(mockMvc.perform(
+                                get(WEBHOOKS + "/" + endpoint + "/deliveries").with(bearer(session)))),
+                        "$.content[0].id"))
+                .longValue();
     }
 
     private long createNote(String session) throws Exception {

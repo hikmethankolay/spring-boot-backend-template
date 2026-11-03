@@ -22,6 +22,8 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `DB_POOL_SIZE` / `DB_CONNECTION_TIMEOUT_MS` | `10` / `5000` | Connections per instance; how long a request waits for one |
 | `DB_STATEMENT_TIMEOUT` / `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `30s` / `60s` | PostgreSQL cancels longer queries and idle transactions (`0` disables) |
 | `FLYWAY_ENABLED` | `true` | Run the migrations at startup; `false` when a separate migration Job (profile `migrate`) owns the schema, see [Production](../production/#kubernetes) |
+| `FLYWAY_BASELINE_ON_MIGRATE` | `false` | `true` once, to baseline a database created before Flyway (it already has the `users` table) at version 1 |
+| `DB_MIGRATE_LOCK_TIMEOUT` | `5s` | The migration Job (profile `migrate`) gives up on a lock it waits for longer, instead of blocking the app's queries queued behind it |
 | `REDIS_HOST`, `REDIS_PORT` | `localhost`, `6379` | Redis: cache, lockout, rate limit, token revocation, `Idempotency-Key` responses |
 | `REDIS_PASSWORD` / `REDIS_SSL_ENABLED` | *(none)* / `false` | Managed Redis with authentication and TLS; add `SPRING_DATA_REDIS_USERNAME` for an ACL user |
 | `CACHE_TTL` | `10m` | How long cached entries live |
@@ -51,6 +53,8 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `COOKIE_SECURE` | `false` (`true` in prod) | Send the auth cookies over HTTPS only |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins (*prod: must change*) |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_ACCOUNT_MAX_ATTEMPTS` / `LOGIN_LOCK_DURATION` | `10` / `100` / `1h` | Brute-force lockout: failed logins per IP, per account, and how long a block lasts ([details](../security/#brute-force-protection)) |
+| `LOGIN_MFA_MAX_ATTEMPTS` | `10` | Wrong two-factor codes per account at login before it is locked for `LOGIN_LOCK_DURATION` |
+| `NOTES_MAX_PER_USER` | `1000` | Notes one user may keep; creating more gives 409 |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | `true` / `120` | Per-IP API rate limit |
 | `REQUIRE_VERIFIED_EMAIL` | `false` (`true` in prod) | Block login until a changed email address is confirmed (sign-ups are verified by their link) |
 | `AUDIT_RETENTION` | `365d` | How long the `audit_events` table keeps security events (at least 90 days) |
@@ -83,7 +87,8 @@ and the production overrides are in
 ## Database migrations
 
 The schema is managed by Flyway (`src/main/resources/db/migration`), and Hibernate only validates that the entities
-match it. Databases created before Flyway was introduced are baselined at version 1 instead of failing.
+match it. A database created before Flyway was introduced fails the migration; start once with
+`FLYWAY_BASELINE_ON_MIGRATE=true` to baseline it at version 1.
 
 <figure>
   <img class="dark:sl-hidden" src="../../diagrams/data-model-light.svg" width="720" height="900" alt="Database tables: account_tokens, recovery_codes, notes, refresh_tokens, social_identities, email_preferences and known_devices point to users through user_id with ON DELETE CASCADE; mail_broadcasts keeps its sender as a nullable reference; email_outbox, whose broadcast emails are sent last, and the append-only audit_events have no foreign key to users." />
@@ -92,4 +97,5 @@ match it. Databases created before Flyway was introduced are baselined at versio
 
 Migrations run with the same `statement_timeout` as the application. For a migration that needs longer (a large
 backfill or index), start that release once with `DB_STATEMENT_TIMEOUT=0`, or use `SET LOCAL statement_timeout` inside
-the migration.
+the migration. The migration Job also sets `lock_timeout` (`DB_MIGRATE_LOCK_TIMEOUT`, 5s): a migration waiting for a
+table lock fails instead of queueing every query on that table behind it; run the Job again when traffic is lower.

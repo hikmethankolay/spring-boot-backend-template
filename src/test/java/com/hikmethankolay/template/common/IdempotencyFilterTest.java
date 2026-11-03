@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -95,6 +96,35 @@ class IdempotencyFilterTest {
         assertThat(filter.shouldNotFilter(enroll)).isTrue();
         assertThat(filter.shouldNotFilter(confirm)).isTrue();
         verifyNoInteractions(redis);
+        // New access tokens and webhook signing secrets are shown once and must not sit in Redis either.
+        assertThat(IdempotencyFilter.covers("/api/v1/users/me/access-tokens")).isFalse();
+        assertThat(IdempotencyFilter.covers("/api/v1/webhooks")).isFalse();
+        assertThat(IdempotencyFilter.covers("/api/v1/webhooks/12/secret")).isFalse();
+        assertThat(IdempotencyFilter.covers("/api/v1/webhooks/{id}/secret")).isFalse();
+        assertThat(IdempotencyFilter.covers("/api/v1/webhooks/12/test")).isTrue();
+        assertThat(IdempotencyFilter.covers("/api/v1/notes")).isTrue();
+    }
+
+    @Test
+    void aRequestReleasesOnlyItsOwnClaim() throws Exception {
+        // The claim expires while a slow request runs; a retry may then hold it, and must keep it.
+        ArgumentCaptor<String> claim = ArgumentCaptor.forClass(String.class);
+        when(values.setIfAbsent(anyString(), claim.capture(), any(Duration.class)))
+                .thenReturn(true);
+
+        filter.doFilter(
+                request(),
+                new MockHttpServletResponse(),
+                (req, res) -> ((HttpServletResponse) res).setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value()));
+
+        verify(redis).execute(eq(IdempotencyFilter.RELEASE), anyList(), eq(claim.getValue()));
+        verify(redis, never()).delete(anyString());
+        filter.doFilter(
+                request(),
+                new MockHttpServletResponse(),
+                (req, res) -> ((HttpServletResponse) res).setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value()));
+        assertThat(claim.getAllValues().get(1))
+                .isNotEqualTo(claim.getAllValues().get(0));
     }
 
     @Test
@@ -156,8 +186,8 @@ class IdempotencyFilterTest {
                 new MockHttpServletResponse(),
                 (req, res) -> ((HttpServletResponse) res).setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value()));
 
-        verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
-        verify(redis).delete(anyString());
+        verify(redis, never()).execute(eq(IdempotencyFilter.STORE), anyList(), any(Object[].class));
+        verify(redis).execute(eq(IdempotencyFilter.RELEASE), anyList(), any(Object[].class));
     }
 
     @ParameterizedTest
@@ -168,8 +198,8 @@ class IdempotencyFilterTest {
         filter.doFilter(
                 request(), new MockHttpServletResponse(), (req, res) -> ((HttpServletResponse) res).setStatus(status));
 
-        verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
-        verify(redis).delete(anyString());
+        verify(redis, never()).execute(eq(IdempotencyFilter.STORE), anyList(), any(Object[].class));
+        verify(redis).execute(eq(IdempotencyFilter.RELEASE), anyList(), any(Object[].class));
     }
 
     @Test
@@ -190,7 +220,7 @@ class IdempotencyFilterTest {
     @Test
     void aResponseThatCannotBeKeptReleasesTheKey() throws Exception {
         when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+        when(redis.execute(eq(IdempotencyFilter.STORE), anyList(), any(Object[].class)))
                 .thenThrow(new RedisConnectionFailureException("down"));
 
         filter.doFilter(
@@ -198,20 +228,20 @@ class IdempotencyFilterTest {
                 new MockHttpServletResponse(),
                 (req, res) -> ((HttpServletResponse) res).setStatus(HttpStatus.NO_CONTENT.value()));
 
-        verify(redis).delete(anyString());
+        verify(redis).execute(eq(IdempotencyFilter.RELEASE), anyList(), any(Object[].class));
     }
 
     @Test
     void aResponseWithoutBodyTypeOrLocationIsReplayedAsItWas() throws Exception {
         // First request: kept without Content-Type or Location.
-        ArgumentCaptor<String> fingerprint = ArgumentCaptor.forClass(String.class);
-        when(values.setIfAbsent(anyString(), fingerprint.capture(), any(Duration.class)))
-                .thenReturn(true);
+        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+        AtomicReference<Object> fingerprint = new AtomicReference<>();
         Map<Object, Object> kept = new HashMap<>();
         when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
                 .thenAnswer(invocation -> {
                     // ARGV: TTL, fingerprint, then the hash's field/value pairs.
                     Object[] args = (Object[]) invocation.getRawArguments()[2];
+                    fingerprint.set(args[1]);
                     for (int i = 2; i < args.length; i += 2) {
                         kept.put(args[i], args[i + 1]);
                     }
@@ -225,7 +255,7 @@ class IdempotencyFilterTest {
 
         // The retry gets it back.
         when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
-        when(values.get(anyString())).thenReturn(fingerprint.getValue());
+        when(values.get(anyString())).thenReturn((String) fingerprint.get());
         when(hashes.entries(anyString())).thenReturn(kept);
         MockHttpServletResponse replay = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);

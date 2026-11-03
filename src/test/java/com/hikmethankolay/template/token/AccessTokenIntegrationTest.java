@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -11,13 +12,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hikmethankolay.template.IntegrationTest;
+import com.hikmethankolay.template.common.ApiException;
+import com.hikmethankolay.template.token.dto.CreateAccessTokenRequest;
+import com.hikmethankolay.template.user.UserService;
+import com.hikmethankolay.template.user.dto.ChangePasswordRequest;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class AccessTokenIntegrationTest extends IntegrationTest {
 
@@ -26,6 +37,18 @@ class AccessTokenIntegrationTest extends IntegrationTest {
     private static final String NOTES = "/api/v1/notes";
 
     private static final String NOTE = "{\"title\":\"t\",\"body\":\"b\"}";
+
+    @Autowired
+    private AccessTokenService accessTokens;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private PlatformTransactionManager transactions;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private static final String NEW_PASSWORD = "{\"currentPassword\":\"%s\",\"newPassword\":\"Other#123-passphrase\"}";
 
@@ -51,6 +74,28 @@ class AccessTokenIntegrationTest extends IntegrationTest {
                 .andExpect(jsonPath("$[0].scope").value("WRITE"))
                 .andExpect(jsonPath("$[0].lastUsedAt").exists())
                 .andExpect(jsonPath("$[0].token").doesNotExist());
+    }
+
+    @Test
+    void aTokenCreatedDuringAPasswordChangeDoesNotOutliveIt() throws Exception {
+        long userId = register(uniqueUsername());
+        CompletableFuture<?>[] create = new CompletableFuture<?>[1];
+
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            userService.changePassword(userId, new ChangePasswordRequest(PASSWORD, "Other#123-passphrase"));
+            // Started while the change is not committed: it must wait for it instead of slipping past the revocation.
+            create[0] = CompletableFuture.runAsync(() -> accessTokens.create(
+                    userId, new CreateAccessTokenRequest("script", AccessTokenScope.WRITE, 30, PASSWORD)));
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        assertThatThrownBy(() -> create[0].get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM access_tokens WHERE user_id = ?", Long.class, userId))
+                .isZero();
     }
 
     @Test

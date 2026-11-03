@@ -37,19 +37,16 @@ public class LoginAttemptService {
     private static final Logger log = LoggerFactory.getLogger(LoginAttemptService.class);
 
     /**
-     * Atomically checks every key against its limit ({@code KEYS[i]} against {@code ARGV[i + 1]}) and,
-     * if none is blocked, counts one attempt on each and (re)sets its expiry. Returns 1 if the attempt
-     * may go ahead, 0 if a key is blocked (nothing is counted then). Counting before the password
-     * check means concurrent requests cannot all pass a stale check.
+     * Atomically checks one key against its limit ({@code ARGV[2]}) and, if it is not blocked, counts one attempt
+     * and (re)sets its expiry ({@code ARGV[1]}). Returns 1 if the attempt may go ahead, 0 if the key is blocked
+     * (nothing is counted then). Counting before the password check means concurrent requests cannot all pass a
+     * stale check. One key per script, so it runs on Redis Cluster, where an IP and an account key sit in different
+     * slots.
      */
     private static final RedisScript<Long> ACQUIRE = RedisScript.of("""
-            for i, key in ipairs(KEYS) do
-              if tonumber(redis.call('GET', key) or '0') >= tonumber(ARGV[i + 1]) then return 0 end
-            end
-            for _, key in ipairs(KEYS) do
-              redis.call('INCR', key)
-              redis.call('PEXPIRE', key, ARGV[1])
-            end
+            if tonumber(redis.call('GET', KEYS[1]) or '0') >= tonumber(ARGV[2]) then return 0 end
+            redis.call('INCR', KEYS[1])
+            redis.call('PEXPIRE', KEYS[1], ARGV[1])
             return 1""", Long.class);
 
     private static final RedisScript<Long> RELEASE = RedisScript.of(
@@ -66,22 +63,27 @@ public class LoginAttemptService {
 
     private final Duration lockDuration;
 
+    private final int mfaMaxAttempts;
+
     /**
      * Creates the service.
      *
      * @param redis           Redis access
      * @param properties      application properties holding the limits
      * @param applicationName value of {@code spring.application.name}, used to namespace keys
+     * @param mfaMaxAttempts  wrong second-factor codes after which an account's MFA step is blocked
      */
     public LoginAttemptService(
             StringRedisTemplate redis,
             AppProperties properties,
-            @Value("${spring.application.name}") String applicationName) {
+            @Value("${spring.application.name}") String applicationName,
+            @Value("${app.login.mfa-max-attempts:10}") int mfaMaxAttempts) {
         this.redis = redis;
         this.keyPrefix = applicationName + ":login-failures:";
         this.maxAttempts = properties.login().maxAttempts();
         this.accountMaxAttempts = properties.login().accountMaxAttempts();
         this.lockDuration = properties.login().lockDuration();
+        this.mfaMaxAttempts = mfaMaxAttempts;
     }
 
     /**
@@ -94,13 +96,34 @@ public class LoginAttemptService {
      * @throws ApiException if Redis is unavailable (mapped to 503)
      */
     public boolean tryAcquire(String ipKey, String accountKey) {
+        if (!tryAcquire(ipKey, maxAttempts)) {
+            return false;
+        }
+        // shortcut: a blocked account takes the IP's attempt back only afterwards, so for that moment a concurrent
+        // login from the IP sees one attempt too many; one atomic script would need both keys in one cluster slot.
+        boolean allowed = false;
+        try {
+            allowed = tryAcquire(accountKey, accountMaxAttempts);
+        } finally {
+            if (!allowed) {
+                release(ipKey);
+            }
+        }
+        return allowed;
+    }
+
+    /**
+     * Counts an attempt against a single key with its own limit, unless the key is already blocked.
+     *
+     * @param key   the key to count against
+     * @param limit attempts after which the key is blocked for {@code app.login.lock-duration}
+     * @return {@code true} if the attempt may go ahead, {@code false} if the key is blocked
+     * @throws ApiException if Redis is unavailable (mapped to 503)
+     */
+    public boolean tryAcquire(String key, int limit) {
         try {
             Long allowed = redis.execute(
-                    ACQUIRE,
-                    List.of(keyPrefix + ipKey, keyPrefix + accountKey),
-                    Long.toString(lockDuration.toMillis()),
-                    Integer.toString(maxAttempts),
-                    Integer.toString(accountMaxAttempts));
+                    ACQUIRE, List.of(keyPrefix + key), Long.toString(lockDuration.toMillis()), Integer.toString(limit));
             return allowed == null || allowed == 1;
         } catch (DataAccessException ex) {
             // The keys are not logged: an unknown account's key holds the raw login identifier.
@@ -196,6 +219,15 @@ public class LoginAttemptService {
         return RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
                 ? attributes.getRequest().getRemoteAddr()
                 : "none";
+    }
+
+    /**
+     * Returns the number of wrong second-factor codes after which an account's MFA step is blocked.
+     *
+     * @return {@code app.login.mfa-max-attempts}
+     */
+    public int mfaMaxAttempts() {
+        return mfaMaxAttempts;
     }
 
     /**
