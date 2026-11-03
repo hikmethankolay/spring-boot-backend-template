@@ -103,6 +103,11 @@ public class NoteController {
                             description = "URL of the new note",
                             schema = @Schema(type = "string", format = "uri")),
             content = @Content(schema = @Schema(implementation = NoteResponse.class)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "You already have the most notes allowed, or a request with the same `Idempotency-Key` is "
+                    + "still running",
+            content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public ResponseEntity<NoteResponse> create(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody NoteRequest request) {
         NoteResponse note = noteService.create(TokenService.userId(jwt), request);

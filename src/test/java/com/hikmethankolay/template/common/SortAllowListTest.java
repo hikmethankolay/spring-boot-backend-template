@@ -35,6 +35,17 @@ class SortAllowListTest {
     }
 
     @Test
+    void refusesAPageStartingPastTheLargestJpaOffset() {
+        // The JPA offset is an int: a larger one would fail in the query as a 500.
+        assertThatThrownBy(() -> sorting.check(PageRequest.of(21_474_837, 100)))
+                .isInstanceOfSatisfying(
+                        ApiException.class,
+                        ex -> assertThat(ex.getBody().getType()).hasToString("urn:problem:page-too-large"));
+        assertThat(sorting.check(PageRequest.of(21_474_836, 100)).getPageNumber())
+                .isEqualTo(21_474_836);
+    }
+
+    @Test
     void leavesUnpagedRequestsAlone() {
         assertThat(sorting.check(Pageable.unpaged())).isEqualTo(Pageable.unpaged());
     }

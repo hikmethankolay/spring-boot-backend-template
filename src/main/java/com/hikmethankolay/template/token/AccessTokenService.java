@@ -127,6 +127,8 @@ public class AccessTokenService {
                     ProblemType.ACCESS_TOKEN_LIFETIME_TOO_LONG,
                     "A token may live at most " + properties.maxLifetime().toDays() + " days.");
         }
+        // Serializes with a password change and with other creates: the check, count and insert below see its result.
+        users.findLockedById(userId);
         userService.confirmPassword(userId, request.currentPassword());
         Instant now = Instant.now();
         if (tokens.countByUserIdAndExpiresAtAfter(userId, now) >= properties.maxPerUser()) {
@@ -179,6 +181,9 @@ public class AccessTokenService {
      */
     @EventListener
     public void revokeAll(SessionsInvalidated event) {
+        // The changed user row is written only at commit: lock it now, so a create in flight finishes first and its
+        // token is deleted below, or starts after the change and sees it.
+        users.findLockedById(event.userId());
         int revoked = tokens.deleteAllByUserId(event.userId());
         if (revoked > 0) {
             audit.record(AuditEvent.ACCESS_TOKENS_REVOKED, event.userId(), "accessTokens", revoked);

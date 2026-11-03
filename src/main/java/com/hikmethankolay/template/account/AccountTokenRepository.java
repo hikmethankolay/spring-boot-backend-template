@@ -24,6 +24,16 @@ public interface AccountTokenRepository extends JpaRepository<AccountToken, Long
     Optional<AccountToken> findByTokenHashAndTypeIn(String tokenHash, Collection<AccountTokenType> types);
 
     /**
+     * Finds a token by its hash and purpose without locking it, to check it before a transaction starts; redeeming it
+     * still goes through {@link #findByTokenHashAndTypeIn}.
+     *
+     * @param tokenHash hex SHA-256 of the token
+     * @param type      the purpose it must have
+     * @return the token, if it exists
+     */
+    Optional<AccountToken> findByTokenHashAndType(String tokenHash, AccountTokenType type);
+
+    /**
      * Tells whether a token of a user for one purpose was created after the given time.
      *
      * @param userId owner of the tokens

@@ -45,10 +45,18 @@ spring:
     # the schema owner's credentials) migrates and the app runs with FLYWAY_ENABLED=false and a role that may only
     # read and write rows (see the Production guide).
     enabled: ${FLYWAY_ENABLED:true}
-    # Databases created before Flyway was introduced (they already have the users table) are
-    # baselined at version 1 instead of failing; fresh databases run every migration.
-    baseline-on-migrate: true
+    # Set FLYWAY_BASELINE_ON_MIGRATE=true once to adopt a database created before Flyway was introduced (it already
+    # has the users table): it is baselined at version 1 instead of failing. Off by default, so a database pointed at
+    # by mistake (another app's, or one whose history table was lost) fails instead of being marked as migrated.
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
     baseline-version: 1
+  jackson:
+    factory:
+      constraints:
+        read:
+          # Longest JSON document read (request bodies included), the 1 MiB the idempotency filter buffers. Jackson
+          # reads any length by default, so one huge string would be held in memory before validation rejects it.
+          max-document-length: 1048576
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -183,6 +191,8 @@ app:
     max-attempts: ${LOGIN_MAX_ATTEMPTS:10}
     account-max-attempts: ${LOGIN_ACCOUNT_MAX_ATTEMPTS:100}
     lock-duration: ${LOGIN_LOCK_DURATION:1h}
+    # Wrong second-factor codes per account; the password is already known at that step, so far fewer than above.
+    mfa-max-attempts: ${LOGIN_MFA_MAX_ATTEMPTS:10}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     requests-per-minute: ${RATE_LIMIT_PER_MINUTE:120}
@@ -218,6 +228,9 @@ app:
     allow-write-scope: ${ACCESS_TOKENS_ALLOW_WRITE:true}
     max-lifetime: ${ACCESS_TOKENS_MAX_LIFETIME:365d}
     max-per-user: ${ACCESS_TOKENS_MAX_PER_USER:20}
+  notes:
+    # Bounds what one user can store, and with it the size of their personal data export.
+    max-per-user: ${NOTES_MAX_PER_USER:1000}
   webhooks:
     # Outbound webhooks (Standard Webhooks signatures). false stops queuing and sending and refuses the endpoints.
     enabled: ${WEBHOOKS_ENABLED:true}
@@ -235,7 +248,7 @@ app:
     max-endpoints-per-user: ${WEBHOOKS_MAX_ENDPOINTS_PER_USER:10}
     connect-timeout: ${WEBHOOKS_CONNECT_TIMEOUT:5s}
     response-timeout: ${WEBHOOKS_RESPONSE_TIMEOUT:10s}
-    # Attempts per delivery (backoff 30s, 2m, 10m, 1h, 6h, then daily: 8 attempts span about 3 days).
+    # Attempts per delivery (backoff 30s, 2m, 10m, 1h, 6h, then daily: 8 attempts span about 2 days and 7 hours).
     max-attempts: ${WEBHOOKS_MAX_ATTEMPTS:8}
     # Failed attempts in a row after which an endpoint is turned off and its owner emailed.
     disable-after-failures: ${WEBHOOKS_DISABLE_AFTER_FAILURES:24}

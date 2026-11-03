@@ -28,13 +28,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Self-service sign-up, email verification and password reset.
@@ -79,6 +82,10 @@ public class AccountService {
 
     private final Counter cooldownFailOpen;
 
+    private final JdbcTemplate jdbc;
+
+    private final TransactionTemplate transaction;
+
     /**
      * Creates the service.
      *
@@ -92,6 +99,7 @@ public class AccountService {
      * @param redis       throttles sign-up emails per address
      * @param applicationName prefix of the Redis keys
      * @param meterRegistry registry for the fail-open counter
+     * @param jdbc        takes the advisory lock that serializes token emails per user
      */
     public AccountService(
             AccountTokenRepository tokens,
@@ -103,7 +111,9 @@ public class AccountService {
             AuditLog audit,
             StringRedisTemplate redis,
             @Value("${spring.application.name}") String applicationName,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            JdbcTemplate jdbc,
+            PlatformTransactionManager transactions) {
         this.tokens = tokens;
         this.signUpTokens = signUpTokens;
         this.users = users;
@@ -114,6 +124,8 @@ public class AccountService {
         this.redis = redis;
         this.signUpCooldownPrefix = applicationName + ":sign-up-cooldown:";
         this.cooldownFailOpen = FailOpen.counter(meterRegistry, "sign-up-email-cooldown");
+        this.jdbc = jdbc;
+        this.transaction = new TransactionTemplate(transactions);
     }
 
     /**
@@ -197,13 +209,13 @@ public class AccountService {
      * @throws ApiException 400 if the token is forged or expired or the password is too short or breached, 409 if
      *                      the username is taken or the address already has an account (e.g. the link was used)
      */
-    @Transactional
     public UserResponse completeSignUp(String token, String username, String rawPassword) {
         String address = signUpTokens
                 .verify(token)
                 .orElseThrow(() -> ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN));
-        UserResponse user =
-                userService.registerConfirmed(username, address, userService.encodeNewPassword(false, rawPassword));
+        // Hashed outside any transaction, so the slow hash and breach lookup hold no database connection.
+        String passwordHash = userService.encodeNewPassword(false, rawPassword);
+        UserResponse user = userService.registerConfirmed(username, address, passwordHash);
         signUpTokens.markUsed(token);
         return user;
     }
@@ -340,11 +352,19 @@ public class AccountService {
      * @param newPassword the new password
      * @throws ApiException 400 if the token is unknown, already used or expired
      */
-    @Transactional
     public void resetPassword(String token, String newPassword) {
-        long userId = consume(token, AccountTokenType.PASSWORD_RESET).getUserId();
-        userService.setPassword(userId, newPassword);
-        audit.record(AuditEvent.PASSWORD_RESET_COMPLETED, userId);
+        // The token is checked, and the password checked and hashed, before a transaction holds a pooled connection.
+        long userId = tokens.findByTokenHashAndType(SecureTokens.hash(token), AccountTokenType.PASSWORD_RESET)
+                .filter(candidate -> !candidate.isExpired(Instant.now()))
+                .orElseThrow(() -> ApiException.badRequest(ProblemType.INVALID_TOKEN, INVALID_TOKEN))
+                .getUserId();
+        boolean twoFactor = userService.hasTwoFactor(userId);
+        String passwordHash = userService.encodeNewPassword(twoFactor, newPassword);
+        transaction.executeWithoutResult(status -> {
+            long redeemedBy = consume(token, AccountTokenType.PASSWORD_RESET).getUserId();
+            userService.setPassword(redeemedBy, passwordHash, twoFactor);
+            audit.record(AuditEvent.PASSWORD_RESET_COMPLETED, redeemedBy);
+        });
     }
 
     /** Deletes expired tokens once an hour. Safe to run on several instances at once. */
@@ -378,6 +398,8 @@ public class AccountService {
      * @return {@code true} if another email must not be sent yet
      */
     private boolean recentlyIssued(long userId, AccountTokenType type) {
+        // Held until the commit, so parallel requests for one user see each other's token instead of all sending one.
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "account-tokens:" + userId);
         return tokens.existsByUserIdAndTypeAndCreatedAtAfter(
                 userId, type, Instant.now().minus(RESEND_COOLDOWN));
     }

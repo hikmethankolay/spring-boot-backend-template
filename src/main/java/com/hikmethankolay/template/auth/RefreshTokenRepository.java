@@ -90,17 +90,6 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     int deleteAllByUserIdExceptFamily(long userId, UUID familyId);
 
     /**
-     * Removes the used tokens of a session except one.
-     *
-     * @param familyId  the session
-     * @param tokenHash hash of the used token to keep
-     */
-    @Modifying
-    @Query(
-            "delete from RefreshToken t where t.familyId = :familyId and t.usedAt is not null and t.tokenHash <> :tokenHash")
-    void deleteUsedInFamilyExcept(UUID familyId, String tokenHash);
-
-    /**
      * Deletes every token of a user, ending all their sessions.
      *
      * @param userId owner of the tokens

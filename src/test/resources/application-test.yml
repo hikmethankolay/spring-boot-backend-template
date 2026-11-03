@@ -4,6 +4,8 @@ app:
   login:
     max-attempts: 3
     account-max-attempts: 5
+    # Below account-max-attempts, so MfaIntegrationTest reaches it first.
+    mfa-max-attempts: 4
   rate-limit:
     # High enough for the whole suite (all requests come from 127.0.0.1); RateLimitIntegrationTest lowers it.
     requests-per-minute: 5000

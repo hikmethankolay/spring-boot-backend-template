@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -282,6 +283,90 @@ class AccountIntegrationTest extends IntegrationTest {
                 .cause()
                 .hasMessageContaining("invalid");
         login(username, "First#4567-passphrase");
+    }
+
+    @Test
+    void parallelResetRequestsSendOneEmail() throws Exception {
+        String username = uniqueUsername();
+        long userId = register(username);
+        String address = username + "@example.com";
+
+        CountDownLatch firstIssued = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        AtomicReference<String> issued = new AtomicReference<>();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        CompletableFuture<Void> first = CompletableFuture.runAsync(() -> transaction.executeWithoutResult(status -> {
+            accounts.requestPasswordReset(address);
+            issued.set(resetTokenHash(userId));
+            firstIssued.countDown();
+            await(commit);
+        }));
+        assertThat(firstIssued.await(10, TimeUnit.SECONDS)).isTrue();
+        CompletableFuture<Void> second = CompletableFuture.runAsync(() -> accounts.requestPasswordReset(address));
+        // The second request must wait for the first to commit, then see its token, instead of sending another.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .until(() -> jdbc.queryForObject(
+                                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'"
+                                        + " AND query ILIKE '%pg_advisory_xact_lock%'",
+                                Integer.class)
+                        > 0);
+        commit.countDown();
+        first.get(10, TimeUnit.SECONDS);
+        second.get(10, TimeUnit.SECONDS);
+
+        assertThat(resetTokenHash(userId)).isEqualTo(issued.get());
+    }
+
+    private String resetTokenHash(long userId) {
+        return jdbc.queryForObject(
+                "SELECT token_hash FROM account_tokens WHERE user_id = ? AND type = 'PASSWORD_RESET'",
+                String.class,
+                userId);
+    }
+
+    @Test
+    void aTokenOnlyWorksForItsOwnPurpose() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        postJson("/api/v1/auth/password-reset", json("""
+                {"email":"%s@example.com"}""", username), 202);
+        String resetToken = CapturingMailSender.token(latestMail(username, "Reset your password"));
+        String newAddress = "moved-" + username + "@example.com";
+        changeEmail(token, newAddress);
+        String verificationToken = CapturingMailSender.token(mail.latest(newAddress, "Confirm your email")
+                .orElseThrow(() -> new AssertionError("No verification email for " + newAddress)));
+
+        postJson("/api/v1/auth/verify-email", json("""
+                {"token":"%s"}""", resetToken), 400);
+        postJson("/api/v1/auth/password-reset/confirm", json("""
+                {"token":"%s","newPassword":"Reset#4567-passphrase"}""", verificationToken), 400);
+
+        login(username, PASSWORD);
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.pendingEmail").value(newAddress));
+    }
+
+    @Test
+    void anEmailChangeDoesNotTellWhetherTheAddressIsTaken() throws Exception {
+        String taken = uniqueUsername();
+        register(taken);
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        String takenAddress = taken + "@example.com";
+
+        // Same answer as for a free address; the conflict only shows to whoever opens the link sent to it.
+        changeEmail(token, takenAddress);
+        String link = CapturingMailSender.token(mail.latest(takenAddress, "Confirm your email")
+                .orElseThrow(() -> new AssertionError("No verification email for " + takenAddress)));
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json("""
+                                {"token":"%s"}""", link)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:problem:email-taken"));
+
+        login(username + "@example.com", PASSWORD);
     }
 
     private static void await(CountDownLatch latch) {

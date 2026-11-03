@@ -10,7 +10,8 @@ import java.time.Instant;
  *
  * @param occurredAt when it happened (ISO-8601, UTC)
  * @param event      what happened, e.g. {@code auth.login_succeeded}; see the audit log in the Security guide
- * @param actorId    id of the signed-in user who caused it (the user, or an administrator); absent if none
+ * @param actorId    who caused it: the user's own id, or {@code admin} for anyone else (another user's id is not
+ *                   shown); absent if no one was signed in
  * @param clientIp   address of the request; absent for events outside a request
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)

@@ -28,7 +28,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * User management: registration, lookups, profile and password changes, administration.
@@ -44,6 +47,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Lookups by id are cached in {@link CacheNames#USERS}; every method that changes a user
  * evicts its entry. Evictions take effect after the transaction commits (see {@code CacheConfig}).</p>
+ *
+ * <p>Methods that hash a new password do it, with the breached-password lookup, before their write transaction
+ * starts, so the slow hash and HTTP call do not hold a pooled database connection.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -74,6 +80,8 @@ public class UserService {
 
     private final LoginAttemptService loginAttempts;
 
+    private final TransactionTemplate transactions;
+
     /**
      * Creates the service.
      *
@@ -84,6 +92,7 @@ public class UserService {
      * @param audit             records security events
      * @param securityMailer    tells users about password and email changes
      * @param loginAttempts     counts wrong confirmation passwords as failed logins
+     * @param transactions      runs the writes that follow a password hash
      */
     public UserService(
             UserRepository userRepository,
@@ -92,7 +101,8 @@ public class UserService {
             ApplicationEventPublisher events,
             AuditLog audit,
             SecurityMailer securityMailer,
-            LoginAttemptService loginAttempts) {
+            LoginAttemptService loginAttempts,
+            PlatformTransactionManager transactions) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.breachedPasswords = breachedPasswords;
@@ -100,6 +110,7 @@ public class UserService {
         this.audit = audit;
         this.securityMailer = securityMailer;
         this.loginAttempts = loginAttempts;
+        this.transactions = new TransactionTemplate(transactions);
     }
 
     /**
@@ -114,12 +125,15 @@ public class UserService {
      * @throws ApiException 400 if the password is too short or breached, 409 if the username or email is
      *                      already taken
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS)
     public UserResponse register(String username, String email, String rawPassword, Role role, boolean emailVerified) {
         String normalizedEmail = normalizeEmail(email);
-        ensureUsernameAvailable(username);
-        ensureEmailAvailable(normalizedEmail);
-        return create(username, normalizedEmail, encodeNewPassword(false, rawPassword), role, emailVerified);
+        String passwordHash = encodeNewPassword(false, rawPassword);
+        return transactions.execute(status -> {
+            ensureUsernameAvailable(username);
+            ensureEmailAvailable(normalizedEmail);
+            return create(username, normalizedEmail, passwordHash, role, emailVerified);
+        });
     }
 
     /**
@@ -175,18 +189,35 @@ public class UserService {
     }
 
     /**
-     * Sets a new password without checking the old one, e.g. after a verified password reset.
-     * Ends all of the user's sessions.
+     * Tells whether a user has two-factor authentication, which decides the password length rule.
      *
-     * @param id          user id
-     * @param rawPassword the new plain password, stored hashed
-     * @throws ApiException 400 if the password is too short or breached, 404 if the user does not exist
+     * @param id user id
+     * @return whether two-factor authentication is on
+     * @throws ApiException 404 if the user does not exist
+     */
+    public boolean hasTwoFactor(long id) {
+        return findUser(id).isTotpEnabled();
+    }
+
+    /**
+     * Sets a new password without checking the old one, e.g. after a verified password reset.
+     * Ends all of the user's sessions. The caller hashes the password with {@link #encodeNewPassword} beforehand, so
+     * the slow hash does not run while this transaction holds a database connection.
+     *
+     * @param id           user id
+     * @param passwordHash the new password, already checked and hashed
+     * @param twoFactor    the two-factor state the password was checked against
+     * @throws ApiException 404 if the user does not exist, 409 if two-factor was turned on or off meanwhile
      */
     @Transactional
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
-    public void setPassword(long id, String rawPassword) {
+    public void setPassword(long id, String passwordHash, boolean twoFactor) {
         User user = findUser(id);
-        user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), rawPassword));
+        // The length rule depends on two-factor: a password checked for a 2FA account may be too short without it.
+        if (user.isTotpEnabled() != twoFactor) {
+            throw ApiException.conflict(ProblemType.CONFLICT, "Two-factor authentication changed; try again.");
+        }
+        user.setPasswordHash(passwordHash);
         securityMailer.passwordChanged(user.getEmail());
         endSessions(user);
     }
@@ -276,7 +307,7 @@ public class UserService {
      * @param ifMatch the {@code If-Match} header, or {@code null} to update whatever the current version is
      * @return the updated user and its new version, for the {@code ETag}
      * @throws ApiException 400 if the email changes without the correct current password, 404 if the user does not
-     *                      exist, 409 if the new username or email is taken, 412 if {@code ifMatch} does not match,
+     *                      exist, 409 if the new username is taken, 412 if {@code ifMatch} does not match,
      *                      429 if failed passwords locked the IP or account
      */
     @Transactional
@@ -287,7 +318,7 @@ public class UserService {
         String email = request.email() == null ? null : normalizeEmail(request.email());
         if (email != null && !email.equals(user.getEmail())) {
             confirmPassword(user, request.currentPassword());
-            ensureEmailAvailable(email);
+            // Not checked here, where a 409 would tell which addresses have accounts; applyPendingEmail checks it.
             user.setPendingEmail(email);
             audit.record(AuditEvent.EMAIL_CHANGE_REQUESTED, id);
             events.publishEvent(new EmailChangeRequested(id));
@@ -332,19 +363,24 @@ public class UserService {
      * @param id      user id
      * @param request current and new password
      * @throws ApiException 404 if the user does not exist, 400 if the current password is wrong or the
-     *                      new one is too short or breached, 429 if failed passwords locked the IP or account
+     *                      new one is too short or breached, 409 if the user changed meanwhile, 429 if failed
+     *                      passwords locked the IP or account
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS)
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public void changePassword(long id, ChangePasswordRequest request) {
-        User user = findUser(id);
-        if (!passwordMatches(user, request.currentPassword())) {
+        User current = findUser(id);
+        if (!passwordMatches(current, request.currentPassword())) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
         }
-        user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.newPassword()));
-        audit.record(AuditEvent.PASSWORD_CHANGED, id);
-        securityMailer.passwordChanged(user.getEmail());
-        endSessions(user);
+        String passwordHash = encodeNewPassword(current.isTotpEnabled(), request.newPassword());
+        transactions.executeWithoutResult(status -> {
+            User user = findUnchanged(id, current.getVersion());
+            user.setPasswordHash(passwordHash);
+            audit.record(AuditEvent.PASSWORD_CHANGED, id);
+            securityMailer.passwordChanged(user.getEmail());
+            endSessions(user);
+        });
     }
 
     /**
@@ -359,14 +395,44 @@ public class UserService {
      * @param requesterId id of the administrator making the request
      * @param request     the changes
      * @return the updated user
-     * @throws ApiException 400 if a role change is not confirmed with the requester's current password or
-     *                      the new password is too short or breached, 403 if the change needs the owner, 404 if the user does not exist, 409 if the
-     *                      new username or email is taken or the change would assign or remove the OWNER role, 429 if failed passwords locked the IP or account
+     * @throws ApiException 400 if the requester changes their own account (that needs {@code /users/me}, which asks
+     *                      for the current password), a role change is not confirmed with the requester's current
+     *                      password or the new password is too short or breached, 403 if the change needs the owner,
+     *                      404 if the user does not exist, 409 if the new username or email is taken, the change would
+     *                      assign or remove the OWNER role or the user changed while the new password was hashed, 429
+     *                      if failed passwords locked the IP or account
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS)
     @CacheEvict(cacheNames = CacheNames.USERS, key = "#id")
     public UserResponse update(long id, long requesterId, AdminUpdateUserRequest request) {
-        User user = findUser(id);
+        if (id == requesterId) {
+            throw ApiException.badRequest(ProblemType.OWN_ACCOUNT, "Use /users/me to change your own account.");
+        }
+        if (request.password() == null) {
+            return transactions.execute(status -> {
+                User user = findUser(id);
+                authorizeAdminUpdate(user, requesterId, request);
+                return applyAdminUpdate(user, request, null);
+            });
+        }
+        User before = findUser(id);
+        authorizeAdminUpdate(before, requesterId, request);
+        String passwordHash = encodeNewPassword(before.isTotpEnabled(), request.password());
+        return transactions.execute(
+                status -> applyAdminUpdate(findUnchanged(id, before.getVersion()), request, passwordHash));
+    }
+
+    /**
+     * Checks that the requester may make an administrator's changes to a user.
+     *
+     * @param user        the user to change
+     * @param requesterId id of the administrator making the request
+     * @param request     the changes
+     * @throws ApiException 400 if a role change is not confirmed with the owner's password, 403 if the change needs
+     *                      the owner, 409 if it would assign or remove the OWNER role, 429 if failed passwords locked
+     *                      the IP or account
+     */
+    private void authorizeAdminUpdate(User user, long requesterId, AdminUpdateUserRequest request) {
         boolean roleChanged = request.role() != null && request.role() != user.getRole();
         if (roleChanged && (request.role() == Role.OWNER || user.getRole() == Role.OWNER)) {
             throw ApiException.conflict(ProblemType.OWNER_PROTECTED, "The OWNER role cannot be assigned or removed.");
@@ -377,13 +443,26 @@ public class UserService {
                 confirmPassword(owner, request.currentPassword());
             }
         }
+    }
+
+    /**
+     * Applies an administrator's changes {@link #authorizeAdminUpdate} allowed, inside the transaction.
+     *
+     * @param user         the user to change
+     * @param request      the changes
+     * @param passwordHash the new password, hashed, or {@code null} to keep the current one
+     * @return the updated user
+     */
+    private UserResponse applyAdminUpdate(User user, AdminUpdateUserRequest request, String passwordHash) {
+        long id = user.getId();
+        boolean roleChanged = request.role() != null && request.role() != user.getRole();
         String oldUsername = user.getUsername();
         String oldEmail = user.getEmail();
         applyIdentityChanges(user, request.username(), request.email());
         boolean identityChanged =
                 !user.getUsername().equals(oldUsername) || !user.getEmail().equals(oldEmail);
-        if (request.password() != null) {
-            user.setPasswordHash(encodeNewPassword(user.isTotpEnabled(), request.password()));
+        if (passwordHash != null) {
+            user.setPasswordHash(passwordHash);
         }
         if (identityChanged || request.password() != null) {
             audit.record(
@@ -503,7 +582,7 @@ public class UserService {
         }
         userRepository.delete(user);
         audit.record(AuditEvent.USER_DELETED_BY_ADMIN, id);
-        events.publishEvent(new UserDeleted(id));
+        events.publishEvent(new UserDeleted(id, user.getEmail(), user.getPendingEmail()));
         events.publishEvent(new SessionsInvalidated(id));
     }
 
@@ -528,7 +607,7 @@ public class UserService {
         }
         userRepository.delete(user);
         audit.record(AuditEvent.ACCOUNT_DELETED, id);
-        events.publishEvent(new UserDeleted(id));
+        events.publishEvent(new UserDeleted(id, user.getEmail(), user.getPendingEmail()));
         events.publishEvent(new SessionsInvalidated(id));
     }
 
@@ -639,6 +718,23 @@ public class UserService {
         return userRepository
                 .findById(id)
                 .orElseThrow(() -> ApiException.notFound(ProblemType.USER_NOT_FOUND, "User " + id + " not found."));
+    }
+
+    /**
+     * Loads a user again after a password was checked and hashed outside the transaction, and checks that nobody
+     * changed it since (e.g. turned two-factor authentication off, which the length rule depends on).
+     *
+     * @param id      user id
+     * @param version the version read before hashing
+     * @return the entity
+     * @throws ApiException 404 if the user no longer exists, 409 if it changed
+     */
+    private User findUnchanged(long id, long version) {
+        User user = findUser(id);
+        if (user.getVersion() != version) {
+            throw ApiException.conflict(ProblemType.CONFLICT, "The account changed meanwhile; retry the request.");
+        }
+        return user;
     }
 
     /**

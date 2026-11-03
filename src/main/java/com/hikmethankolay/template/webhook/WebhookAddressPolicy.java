@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Keeps webhook deliveries away from internal networks (server-side request forgery): an endpoint URL must be
- * {@code https} (or {@code http} unless {@code app.webhooks.require-https}), and every address its host resolves to
+ * {@code https} on port 443 (or {@code http} on any port unless {@code app.webhooks.require-https}), and every address its host resolves to
  * must be public. The check runs when an endpoint is saved and again on every connection, inside the HTTP client's
  * DNS resolver, so a host that later resolves to an internal address (DNS rebinding) is refused too.
  */
@@ -54,6 +54,10 @@ public class WebhookAddressPolicy {
         }
         if (uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawFragment() != null) {
             throw new IllegalArgumentException("The URL needs a host and must not contain credentials or a fragment.");
+        }
+        // Production egress (the Kubernetes NetworkPolicy) only allows port 443.
+        if (requireHttps && uri.getPort() != -1 && uri.getPort() != 443) {
+            throw new IllegalArgumentException("The URL must use the default HTTPS port 443.");
         }
         try {
             resolve(uri.getHost());

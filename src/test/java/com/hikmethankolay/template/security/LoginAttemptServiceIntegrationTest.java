@@ -64,6 +64,20 @@ class LoginAttemptServiceIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void aBlockedAccountDoesNotCountAgainstTheIp() {
+        String account = uniqueKey("account");
+        for (int i = 0; i < 5; i++) {
+            service.tryAcquire(uniqueKey("ip"), account);
+        }
+        String ip = uniqueKey("ip");
+        for (int i = 0; i < 3; i++) {
+            assertThat(service.tryAcquire(ip, account)).isFalse();
+        }
+
+        assertThat(service.tryAcquire(ip, uniqueKey("account"))).isTrue();
+    }
+
+    @Test
     void oneIpCannotLockAnAccount() {
         String ip = uniqueKey("ip");
         String account = uniqueKey("account");

@@ -1,6 +1,7 @@
 package com.hikmethankolay.template.mail;
 
 import com.hikmethankolay.template.config.AppProperties;
+import com.hikmethankolay.template.user.UserDeleted;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -11,10 +12,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.mail.MailException;
 import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.SimpleMailMessage;
@@ -50,7 +54,8 @@ import org.springframework.web.util.UriComponentsBuilder;
  * without is sent as plain text.</p>
  *
  * <p>Sent emails are deleted, and dead letters after their retention, so links with tokens are not kept in the
- * database longer than needed. Metrics: {@code mail.outbox.sent}, {@code mail.outbox.failures},
+ * database longer than needed; transactional dead letters lose their bodies at once, so re-queuing one drops it. A
+ * deleted user's emails are deleted with the account. Metrics: {@code mail.outbox.sent}, {@code mail.outbox.failures},
  * {@code mail.outbox.dropped} and the gauge {@code mail.outbox.pending}.</p>
  */
 @Service
@@ -58,9 +63,9 @@ public class EmailOutbox {
 
     private static final Logger log = LoggerFactory.getLogger(EmailOutbox.class);
 
-    private static final int BATCH_SIZE = 50;
-
     private static final Duration MAX_RETRY_DELAY = Duration.ofHours(1);
+
+    private static final Duration QUEUE_SIZES_MAX_AGE = Duration.ofSeconds(30);
 
     /**
      * Allows one immediate send at a time. A request that sends holds database connections while
@@ -90,6 +95,8 @@ public class EmailOutbox {
     private final Counter failures;
 
     private final Counter dropped;
+
+    private volatile QueueSizes queueSizes;
 
     /**
      * Creates the outbox and registers its metrics.
@@ -129,16 +136,43 @@ public class EmailOutbox {
         this.dropped = Counter.builder("mail.outbox.dropped")
                 .description("Emails given up")
                 .register(meterRegistry);
-        Gauge.builder("mail.outbox.pending", outbox, OutboxEmailRepository::countByBroadcastIdIsNullAndFailedAtIsNull)
+        Gauge.builder("mail.outbox.pending", this, self -> self.queueSizes().pending())
                 .description("Emails waiting to be sent, broadcasts not included")
                 .register(meterRegistry);
         Gauge.builder(
                         "mail.outbox.broadcast.pending",
-                        outbox,
-                        OutboxEmailRepository::countByBroadcastIdIsNotNullAndFailedAtIsNull)
+                        this,
+                        self -> self.queueSizes().broadcastPending())
                 .description("Broadcast emails waiting to be sent")
                 .register(meterRegistry);
     }
+
+    /**
+     * Returns the queue sizes for the gauges, counted at most every {@link #QUEUE_SIZES_MAX_AGE}: each count scans
+     * the queue, and every scrape of every instance would run it.
+     *
+     * @return the latest counts
+     */
+    private QueueSizes queueSizes() {
+        QueueSizes sizes = queueSizes;
+        if (sizes == null || System.nanoTime() - sizes.countedAt() > QUEUE_SIZES_MAX_AGE.toNanos()) {
+            sizes = new QueueSizes(
+                    outbox.countByBroadcastIdIsNullAndFailedAtIsNull(),
+                    outbox.countByBroadcastIdIsNotNullAndFailedAtIsNull(),
+                    System.nanoTime());
+            queueSizes = sizes;
+        }
+        return sizes;
+    }
+
+    /**
+     * Emails waiting, as counted for the gauges.
+     *
+     * @param pending          waiting emails that belong to no broadcast
+     * @param broadcastPending waiting broadcast emails
+     * @param countedAt        {@link System#nanoTime()} of the count
+     */
+    record QueueSizes(long pending, long broadcastPending, long countedAt) {}
 
     /**
      * Queues an email in the current transaction and sends it once the transaction commits, unless
@@ -195,7 +229,7 @@ public class EmailOutbox {
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean enqueue(
             long userId, String to, MailCategory category, String template, String subject, Map<String, Object> model) {
-        return enqueue(null, userId, to, category, template, subject, model);
+        return enqueue(null, userId, to, category, template, subject, model, preferences.isEnabled(userId, category));
     }
 
     /**
@@ -210,6 +244,7 @@ public class EmailOutbox {
      * @param template    template name without extension
      * @param subject     subject line
      * @param model       template variables
+     * @param enabled     whether the user receives the category, read with the recipients to save a query each
      * @return {@code false} if the user turned the category off and nothing was queued
      */
     boolean enqueueBroadcast(
@@ -219,8 +254,9 @@ public class EmailOutbox {
             MailCategory category,
             String template,
             String subject,
-            Map<String, Object> model) {
-        return enqueue(broadcastId, userId, to, category, template, subject, model);
+            Map<String, Object> model,
+            boolean enabled) {
+        return enqueue(broadcastId, userId, to, category, template, subject, model, enabled);
     }
 
     private boolean enqueue(
@@ -230,8 +266,9 @@ public class EmailOutbox {
             MailCategory category,
             String template,
             String subject,
-            Map<String, Object> model) {
-        if (!preferences.isEnabled(userId, category)) {
+            Map<String, Object> model,
+            boolean enabled) {
+        if (!enabled) {
             countSuppressed(category);
             return false;
         }
@@ -291,16 +328,16 @@ public class EmailOutbox {
     public void sendDue(Instant now) {
         // One transaction per email: a batch idles in its transaction while SMTP works, and when PostgreSQL ends it
         // (idle_in_transaction_session_timeout) the emails already sent are sent again and failures are not counted.
-        for (int i = 0; i < BATCH_SIZE; i++) {
-            Boolean found = newTransaction.execute(status -> {
+        // Sends while emails are due, for at most one poll interval so the scheduler thread is not held forever.
+        long deadline = System.nanoTime() + properties.outboxPollInterval().toNanos();
+        Boolean found;
+        do {
+            found = newTransaction.execute(status -> {
                 List<OutboxEmail> due = outbox.lockDue(now, 1);
                 due.forEach(email -> send(email, now));
                 return !due.isEmpty();
             });
-            if (!Boolean.TRUE.equals(found)) {
-                return;
-            }
-        }
+        } while (Boolean.TRUE.equals(found) && System.nanoTime() - deadline < 0);
     }
 
     /**
@@ -314,6 +351,15 @@ public class EmailOutbox {
             outbox.delete(email);
             return;
         }
+        if (email.getBody().isEmpty()) {
+            // A re-queued dead letter whose one-time links were cleared; the user has to request a new email.
+            log.warn(
+                    "Dropping email {} '{}': its body was cleared when it was given up",
+                    email.getId(),
+                    email.getSubject());
+            outbox.delete(email);
+            return;
+        }
         try {
             if (email.getHtmlBody() == null) {
                 mailSender.send(plainMessage(email));
@@ -324,6 +370,7 @@ public class EmailOutbox {
             sent.increment();
         } catch (RuntimeException ex) {
             // Not only MailException: anything else would roll back the attempt count and retry this row first forever.
+            // The full text, which can name recipients, stays in last_error, deleted with the row; logs get the type.
             String error = ex instanceof MailException ? ex.getMessage() : ex.toString();
             failures.increment();
             email.recordFailure(error, now.plus(retryDelay(email.getAttempts())));
@@ -335,7 +382,7 @@ public class EmailOutbox {
                         email.getId(),
                         email.getSubject(),
                         email.getAttempts(),
-                        error);
+                        ex.getClass().getSimpleName());
             } else {
                 log.warn(
                         "Could not send email {} '{}' (attempt {}), retrying at {}: {}",
@@ -343,7 +390,7 @@ public class EmailOutbox {
                         email.getSubject(),
                         email.getAttempts(),
                         email.getNextAttemptAt(),
-                        error);
+                        ex.getClass().getSimpleName());
             }
         }
     }
@@ -356,6 +403,19 @@ public class EmailOutbox {
         if (deleted > 0) {
             log.info("Deleted {} emails given up more than {} ago", deleted, properties.deadLetterRetention());
         }
+    }
+
+    /**
+     * Deletes the emails to a deleted user's addresses in the deleting transaction, waiting or given up: nothing more
+     * is sent to them, and dead letters do not keep their data.
+     *
+     * @param event the deleted user
+     */
+    @EventListener
+    public void userDeleted(UserDeleted event) {
+        outbox.deleteByRecipientIn(Stream.of(event.email(), event.pendingEmail())
+                .filter(Objects::nonNull)
+                .toList());
     }
 
     /**

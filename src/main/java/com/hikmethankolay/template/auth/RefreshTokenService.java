@@ -143,11 +143,11 @@ public class RefreshTokenService {
             tokens.deleteAllByFamilyId(current.getFamilyId());
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
+        // Used tokens stay until they expire so any replay of an older one is still caught.
         current.markUsed(now);
-        // Only the newest used token is needed to detect reuse; older ones would pile up until they expire.
-        tokens.deleteUsedInFamilyExcept(current.getFamilyId(), current.getTokenHash());
         return new Rotation(
                 current.getUserId(),
+                current.getSessionVersion(),
                 issue(
                         current.getUserId(),
                         current.getFamilyId(),
@@ -265,7 +265,7 @@ public class RefreshTokenService {
      * @param sessionVersion the version they were issued under
      * @return {@code false} if the user is gone or their sessions ended since
      */
-    private boolean isCurrent(long userId, int sessionVersion) {
+    boolean isCurrent(long userId, int sessionVersion) {
         return users.findById(userId)
                 .map(User::getSessionVersion)
                 .filter(version -> version == sessionVersion)
@@ -342,10 +342,11 @@ public class RefreshTokenService {
     /**
      * Result of a successful exchange.
      *
-     * @param userId    owner of the session
-     * @param successor the token that replaces the exchanged one
+     * @param userId         owner of the session
+     * @param sessionVersion the user's session version the session was issued under
+     * @param successor      the token that replaces the exchanged one
      */
-    public record Rotation(long userId, IssuedRefreshToken successor) {}
+    public record Rotation(long userId, int sessionVersion, IssuedRefreshToken successor) {}
 
     /**
      * An active session, as listed by {@code GET /api/v1/users/me/sessions} and in the personal data export.

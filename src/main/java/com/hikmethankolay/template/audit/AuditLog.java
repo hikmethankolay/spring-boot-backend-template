@@ -3,6 +3,7 @@ package com.hikmethankolay.template.audit;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
+import java.sql.Savepoint;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -10,6 +11,8 @@ import java.util.StringJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,9 +37,10 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Each entry is also stored in the append-only {@code audit_events} table (V12), which the app's
  * database role cannot change or delete from, so the trail survives a compromised app or a lost log.
- * Inside a transaction the entry is written only after the commit, so actions that are rolled
- * back never appear in the audit trail. The row is stored in a transaction of its own; if that
- * fails, the error is logged and the request is not affected.</p>
+ * Inside a writable transaction the row is stored with it, behind a savepoint, and the log line is
+ * written after the commit, so actions that are rolled back never appear in the audit trail. Otherwise
+ * the row is stored in a transaction of its own (after the commit of a read-only transaction). If
+ * storing fails, the error is logged and the request is not affected.</p>
  */
 @Service
 public class AuditLog {
@@ -51,8 +55,10 @@ public class AuditLog {
 
     private static final Logger errors = LoggerFactory.getLogger(AuditLog.class);
 
-    private static final String INSERT = "INSERT INTO audit_events (action, user_id, actor_id, client_ip, details) "
-            + "VALUES (?, ?, ?, ?, CAST(? AS jsonb))";
+    // clock_timestamp(), not the column default now(): inside a transaction now() is when the transaction began.
+    private static final String INSERT =
+            "INSERT INTO audit_events (occurred_at, action, user_id, actor_id, client_ip, details) "
+                    + "VALUES (clock_timestamp(), ?, ?, ?, ?, CAST(? AS jsonb))";
 
     /** Fields stored in their own columns; the rest go to {@code details}. */
     private static final Set<String> COLUMNS = Set.of("event", "userId", "actorId", "clientIp");
@@ -70,7 +76,7 @@ public class AuditLog {
      *
      * @param meterRegistry registry for the event counters
      * @param jdbc          stores the events
-     * @param transactions  runs each insert in a transaction of its own
+     * @param transactions  runs an insert outside a writable transaction in a transaction of its own
      * @param json          writes the details as JSON
      */
     public AuditLog(
@@ -112,15 +118,27 @@ public class AuditLog {
             fields.put(String.valueOf(details[i]), details[i + 1]);
         }
 
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && !TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            // The transaction's own connection: storing after the commit would hold a second one from the pool.
+            store(event, fields, true);
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
                     write(event, fields);
                 }
             });
+        } else if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    write(event, fields);
+                    store(event, fields, false);
+                }
+            });
         } else {
             write(event, fields);
+            store(event, fields, false);
         }
     }
 
@@ -140,7 +158,6 @@ public class AuditLog {
             message.add(field.getKey() + "=" + text);
         }
         entry.log(message.toString());
-        store(event, fields);
         Counter.builder(METRIC_NAME)
                 .description("Security audit events")
                 .tag("event", event.action())
@@ -149,30 +166,43 @@ public class AuditLog {
     }
 
     /**
-     * Returns the id of the authenticated caller.
-     *
-     * @return the authenticated principal's name (the user id for JWTs), or {@code null} if anonymous
-     */
-    /**
      * Stores an entry in {@code audit_events}.
      *
-     * @param event  what happened
-     * @param fields the entry's fields
+     * @param event       what happened
+     * @param fields      the entry's fields
+     * @param inTransaction {@code true} to store it in the current transaction behind a savepoint, {@code false} for a
+     *                      transaction of its own
      */
-    private void store(AuditEvent event, Map<String, Object> fields) {
+    private void store(AuditEvent event, Map<String, Object> fields, boolean inTransaction) {
         Map<String, Object> details = new LinkedHashMap<>(fields);
         details.keySet().removeAll(COLUMNS);
         try {
             String detailsJson = json.writeValueAsString(details);
-            ownTransaction.executeWithoutResult(status -> jdbc.update(
+            Runnable insert = () -> jdbc.update(
                     INSERT,
                     event.action(),
                     fields.get("userId"),
                     fields.get("actorId"),
                     fields.get("clientIp"),
-                    detailsJson));
+                    detailsJson);
+            if (inTransaction) {
+                // A JDBC savepoint: JpaTransactionManager does not support PROPAGATION_NESTED with Hibernate.
+                jdbc.execute((ConnectionCallback<Void>) connection -> {
+                    Savepoint savepoint = connection.setSavepoint();
+                    try {
+                        insert.run();
+                    } catch (DataAccessException ex) {
+                        connection.rollback(savepoint);
+                        throw ex;
+                    }
+                    connection.releaseSavepoint(savepoint);
+                    return null;
+                });
+            } else {
+                ownTransaction.executeWithoutResult(status -> insert.run());
+            }
         } catch (RuntimeException ex) {
-            // The log line above still has the event; a request must not fail because its audit row did.
+            // The log line still has the event; a request must not fail because its audit row did.
             errors.error(
                     "Could not store audit event {}: {}",
                     event.action(),
@@ -180,6 +210,11 @@ public class AuditLog {
         }
     }
 
+    /**
+     * Returns the id of the authenticated caller.
+     *
+     * @return the authenticated principal's name (the user id for JWTs), or {@code null} if anonymous
+     */
     private static String currentActor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null

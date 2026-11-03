@@ -32,15 +32,19 @@ public class NoteService {
 
     private final WebhookEvents webhookEvents;
 
+    private final NoteProperties properties;
+
     /**
      * Creates the service.
      *
      * @param notes         note data access
      * @param webhookEvents publishes note events to the user's webhook endpoints
+     * @param properties    the per-user note limit
      */
-    public NoteService(NoteRepository notes, WebhookEvents webhookEvents) {
+    public NoteService(NoteRepository notes, WebhookEvents webhookEvents, NoteProperties properties) {
         this.notes = notes;
         this.webhookEvents = webhookEvents;
+        this.properties = properties;
     }
 
     /**
@@ -73,9 +77,16 @@ public class NoteService {
      * @param userId  the caller
      * @param request title and text
      * @return the created note
+     * @throws ApiException 409 if the caller already has {@code app.notes.max-per-user} notes
      */
     @Transactional
     public NoteResponse create(long userId, NoteRequest request) {
+        notes.lockUser(userId);
+        if (notes.countByUserId(userId) >= properties.maxPerUser()) {
+            throw ApiException.conflict(
+                    ProblemType.NOTE_LIMIT_REACHED,
+                    "You have " + properties.maxPerUser() + " notes; delete one before creating another.");
+        }
         Note note = notes.save(new Note(userId, request.title(), request.body()));
         // Thin payload: receivers fetch the note through the API, so it never travels to a stale endpoint.
         webhookEvents.publish(WebhookEventType.NOTE_CREATED, userId, Map.of("id", note.getId()));

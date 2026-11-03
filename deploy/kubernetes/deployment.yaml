@@ -47,6 +47,11 @@ spec:
           envFrom:
             - configMapRef:
                 name: app-config
+          env:
+            # There is no CPU limit, so the JVM would size itself to every core of the node: each core runs a
+            # virtual-thread carrier, and each carrier an Argon2 hash with 19 MiB, past the memory limit on big nodes.
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:ActiveProcessorCount=2
           resources:
             requests:
               cpu: 250m

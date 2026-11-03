@@ -131,15 +131,6 @@ public class RefreshToken {
     }
 
     /**
-     * Returns the hex SHA-256 of the token.
-     *
-     * @return the token hash
-     */
-    public String getTokenHash() {
-        return tokenHash;
-    }
-
-    /**
      * Returns the user's session version when the session started.
      *
      * @return the session version

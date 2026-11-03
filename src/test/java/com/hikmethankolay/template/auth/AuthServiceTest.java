@@ -3,7 +3,10 @@ package com.hikmethankolay.template.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,8 +31,10 @@ import com.hikmethankolay.template.social.SocialProfileClient;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.User;
 import com.hikmethankolay.template.user.UserRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,13 +62,14 @@ class AuthServiceTest {
     private final SocialLoginProviders socialProviders = mock(SocialLoginProviders.class);
     private final SocialProfileClient socialProfiles = mock(SocialProfileClient.class);
     private final SocialAccountService socialAccounts = mock(SocialAccountService.class);
+    private final RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
     private final AuthService service = new AuthService(
             authenticationManager,
             loginAttempts,
             mock(TokenService.class),
             mock(AccountService.class),
             users,
-            mock(RefreshTokenService.class),
+            refreshTokens,
             mock(JwtDecoder.class),
             TestProperties.create(),
             audit,
@@ -77,6 +83,7 @@ class AuthServiceTest {
     @BeforeEach
     void allowAttempts() {
         when(loginAttempts.tryAcquire(anyString(), anyString())).thenReturn(true);
+        when(loginAttempts.tryAcquire(anyString(), anyInt())).thenReturn(true);
         when(users.findByUsernameOrEmail(anyString(), anyString())).thenReturn(Optional.empty());
     }
 
@@ -88,6 +95,30 @@ class AuthServiceTest {
                 .isInstanceOf(BadCredentialsException.class);
         verify(loginAttempts, never()).giveBack(anyString(), anyString());
         verify(loginAttempts, never()).release(anyString());
+    }
+
+    @Test
+    void theIdentifierIsLookedUpWithoutSurroundingWhitespace() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad"));
+
+        // An em space, which String.trim() would keep.
+        assertThatThrownBy(() -> service.login(new LoginRequest("\u2003Alice ", "wrong", false), CLIENT_IP))
+                .isInstanceOf(BadCredentialsException.class);
+        verify(users).findByUsernameOrEmail("Alice", "alice");
+    }
+
+    @Test
+    void anAccessTokenMintedAfterTheSessionsEndedIsNotHandedOut() {
+        RefreshTokenService.IssuedRefreshToken successor =
+                new RefreshTokenService.IssuedRefreshToken("refresh", Duration.ofDays(1), false, UUID.randomUUID());
+        when(refreshTokens.rotate("refresh")).thenReturn(new RefreshTokenService.Rotation(42L, 1, successor));
+        User alice = new User("alice", "alice@example.com", "hash", Role.USER);
+        ReflectionTestUtils.setField(alice, "id", 42L);
+        when(users.findById(42L)).thenReturn(Optional.of(alice));
+        // A password change committed while the token was minted: its revocation cut-off came too early to catch it.
+        when(refreshTokens.isCurrent(42L, 1)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.refresh("refresh")).isInstanceOf(BadCredentialsException.class);
     }
 
     @Test
@@ -159,5 +190,20 @@ class AuthServiceTest {
         assertThatThrownBy(() -> service.loginWithMfa("mfa-token", "123456", CLIENT_IP))
                 .isInstanceOf(DataAccessResourceFailureException.class);
         verify(loginAttempts).giveBack(IP_KEY, "account:42");
+        verify(loginAttempts).release("mfa:42");
+    }
+
+    @Test
+    void aBlockByTheCodeLimitDoesNotSpendTheIpAndAccountAttempts() {
+        // Otherwise guessing codes past their own limit would also lock the account's password logins.
+        when(challenges.find("mfa-token")).thenReturn(Optional.of(new MfaChallengeService.Challenge(42, 1, false)));
+        when(loginAttempts.tryAcquire(eq("mfa:42"), anyInt())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.loginWithMfa("mfa-token", "123456", CLIENT_IP))
+                .isInstanceOfSatisfying(
+                        ApiException.class,
+                        ex -> assertThat(ex.getBody().getType()).hasToString("urn:problem:login-locked"));
+        verify(loginAttempts).giveBack(IP_KEY, "account:42");
+        verify(mfa, never()).verifyLogin(anyLong(), anyString());
     }
 }

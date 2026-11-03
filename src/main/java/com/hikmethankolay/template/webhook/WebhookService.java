@@ -21,7 +21,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Lets users register, change and remove webhook endpoints, rotate their secrets, send a test event and inspect and
@@ -54,6 +56,8 @@ public class WebhookService {
 
     private final WebhookProperties properties;
 
+    private final TransactionTemplate transaction;
+
     /**
      * Creates the service.
      *
@@ -65,6 +69,7 @@ public class WebhookService {
      * @param webhookSecrets encrypts the signing secrets
      * @param audit      records changes
      * @param properties limits and switches
+     * @param transactions runs the changes that check URLs after the check, so no connection waits on DNS
      */
     public WebhookService(
             WebhookEndpointRepository endpoints,
@@ -74,7 +79,8 @@ public class WebhookService {
             UserRepository users,
             WebhookSecrets webhookSecrets,
             AuditLog audit,
-            WebhookProperties properties) {
+            WebhookProperties properties,
+            PlatformTransactionManager transactions) {
         this.endpoints = endpoints;
         this.deliveries = deliveries;
         this.events = events;
@@ -83,6 +89,7 @@ public class WebhookService {
         this.webhookSecrets = webhookSecrets;
         this.audit = audit;
         this.properties = properties;
+        this.transaction = new TransactionTemplate(transactions);
     }
 
     /**
@@ -120,11 +127,15 @@ public class WebhookService {
      * @throws ApiException 400 if the URL or an event is invalid, 403 if webhooks are off or an event needs a higher
      *                      role, 409 if the caller has too many endpoints
      */
-    @Transactional
     public WebhookSecretResponse create(long userId, WebhookRequest request) {
         requireEnabled();
         String url = validUrl(request.url());
+        return transaction.execute(status -> create(userId, url, request));
+    }
+
+    private WebhookSecretResponse create(long userId, String url, WebhookRequest request) {
         List<String> types = validEventTypes(userId, request.eventTypes());
+        endpoints.lockUser(userId); // Concurrent registrations would otherwise all pass the count below.
         if (endpoints.countByUserId(userId) >= properties.maxEndpointsPerUser()) {
             throw ApiException.conflict(
                     ProblemType.WEBHOOK_LIMIT_REACHED,
@@ -148,17 +159,24 @@ public class WebhookService {
      * @throws ApiException 400 if the URL or an event is invalid, 403 if an event needs a higher role, 404 if the caller
      *                      has no such endpoint
      */
-    @Transactional
     public WebhookResponse update(long userId, long id, WebhookUpdateRequest request) {
         requireEnabled();
-        WebhookEndpoint endpoint = find(userId, id);
+        String url = request.url() != null ? validUrl(request.url()) : null;
+        return transaction.execute(status -> update(userId, id, url, request));
+    }
+
+    private WebhookResponse update(long userId, long id, String url, WebhookUpdateRequest request) {
+        WebhookEndpoint endpoint = endpoints
+                .lockByIdAndUserId(id, userId)
+                .orElseThrow(() -> ApiException.notFound(
+                        ProblemType.WEBHOOK_NOT_FOUND, "You have no webhook endpoint with this id."));
         // The subscriptions the endpoint ends up with are checked even when unchanged: otherwise a caller who may no
         // longer receive application-wide events could point an existing subscription to them at a new URL.
         List<String> types =
                 request.eventTypes() != null ? validEventTypes(userId, request.eventTypes()) : endpoint.getEventTypes();
         requireMayReceive(userId, types);
-        if (request.url() != null) {
-            endpoint.setUrl(validUrl(request.url()));
+        if (url != null) {
+            endpoint.setUrl(url);
         }
         if (request.description() != null) {
             endpoint.setDescription(blankToNull(request.description()));
@@ -246,7 +264,7 @@ public class WebhookService {
      * @param deliveryId the delivery
      * @return the queued delivery
      * @throws ApiException 403 if webhooks are off, 404 if the caller has no such endpoint or delivery, 409 if the
-     *                      endpoint is turned off
+     *                      endpoint is turned off or the delivery is still pending
      */
     @Transactional
     public WebhookDeliveryResponse retry(long userId, long id, long deliveryId) {
@@ -258,6 +276,11 @@ public class WebhookService {
                 .findByIdAndEndpointId(deliveryId, id)
                 .orElseThrow(() -> ApiException.notFound(
                         ProblemType.WEBHOOK_DELIVERY_NOT_FOUND, "This endpoint has no delivery with this id."));
+        if (delivery.getStatus() == WebhookDelivery.Status.PENDING) {
+            // It may be leased and being sent right now: requeuing it would send it twice.
+            throw ApiException.conflict(
+                    ProblemType.WEBHOOK_DELIVERY_PENDING, "This delivery is still queued or being sent.");
+        }
         delivery.requeue(Instant.now());
         return toResponse(delivery);
     }

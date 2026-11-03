@@ -19,8 +19,9 @@ spec:
   template:
     metadata:
       labels:
-        # Matched by networkpolicy.yaml, which lets it reach PostgreSQL and DNS.
-        app.kubernetes.io/name: spring-boot-template
+        # Not app.kubernetes.io/name: the Deployment, HPA, PDB and Service select the app's pods by it. Matched by
+        # the NetworkPolicy below.
+        app.kubernetes.io/part-of: spring-boot-template
         app.kubernetes.io/component: migrate
     spec:
       restartPolicy: Never
@@ -69,3 +70,31 @@ spec:
           secret:
             secretName: app-migrator-secrets
             defaultMode: 0440
+---
+# The Job's own policy (the app's in networkpolicy.yaml selects app.kubernetes.io/name): DNS and PostgreSQL only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: migrate
+  namespace: backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: spring-boot-template
+      app.kubernetes.io/component: migrate
+  policyTypes: ["Ingress", "Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - ports:
+        - port: 5432

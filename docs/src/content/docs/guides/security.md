@@ -186,7 +186,8 @@ created, into the owner.
 
 Each refresh token can be exchanged **once**. Every token issued from one login belongs to the same family (the
 session). If an already exchanged token is presented again, someone has copied it: the whole session is revoked,
-including its access tokens, both parties must log in again, and an `auth.refresh_token_reused` audit event is written.
+including its access tokens, both parties must log in again, and an `auth.refresh_token_reused` audit event is written. Exchanged
+tokens are kept until they expire, so replaying any of them, not only the latest, is caught.
 
 Two requests refreshing the same token at the same time (for example two browser tabs, or a client that retries a
 refresh whose answer it did not receive) look the same as reuse and end the session. This is deliberate: a grace
@@ -436,7 +437,9 @@ erasure request, state the period in your privacy policy, and lower `AUDIT_RETEN
 Failed logins are counted per client IP and per account in Redis. An IP is blocked after `LOGIN_MAX_ATTEMPTS`
 failures (default 10), an account after `LOGIN_ACCOUNT_MAX_ATTEMPTS` (default 100). While either is blocked, the login
 is rejected with `429` and `Retry-After`, even with the right password, until `LOGIN_LOCK_DURATION` has passed without
-new failures. A successful login only resets the account counter, not the IP counter.
+new failures. A successful login only resets the account counter, not the IP counter. Wrong two-factor codes at login
+also count against a separate per-account limit, `LOGIN_MFA_MAX_ATTEMPTS` (default 10): whoever reaches that step
+already has the password, and a six-digit code needs far fewer guesses than the account limit would allow.
 
 Each attempt is counted before the password is checked, so concurrent requests cannot all pass a stale count, and a
 successful one takes its attempt back. So at most `LOGIN_MAX_ATTEMPTS` logins from one IP can be in progress at once.
@@ -536,13 +539,14 @@ Every entry is also stored in the `audit_events` table (columns for the event, u
 JSON in `details`). The table is append-only: a trigger refuses changes and removals from every role but the table
 owner, so the app's role (see [Production](../production/#database-roles)) cannot alter the trail even if the app is
 compromised. Rows older than `AUDIT_RETENTION` (365 days) are removed daily through the database function
-`purge_audit_events`, which keeps the last 90 days whoever calls it. If storing a row fails, the error is logged and
+`purge_audit_events`, in batches of 10,000, which keeps the last 90 days whoever calls it. If storing a row fails, the error is logged and
 the request goes on; the log line still has the event.
 
 ### Reading the audit log through the API
 
 `GET /api/v1/users/me/security-events` shows a user their own events, newest first and paginated: each has
-`occurredAt`, `event`, `clientIp` and `actorId` (the signed-in user who caused it: the user, or an administrator).
+`occurredAt`, `event`, `clientIp` and `actorId` (who caused it: the user's own id, or `admin` when an administrator
+did, whose id is not shown).
 A "recent activity" page built on it lets users spot a login or failed logins they do not recognize.
 `GET /api/v1/users/{id}/security-events` gives administrators the same view of any user, also of a deleted one (the
 events outlive the account). The event-specific fields are left out, since `identifierHash` may hash a mistyped

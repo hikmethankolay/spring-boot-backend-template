@@ -277,7 +277,9 @@ public class WebhookController {
     @Operation(
             operationId = "retryWebhookDelivery",
             summary = "Send a delivery again",
-            description = "Queues the same message (same `webhook-id`) with a fresh set of attempts.")
+            description =
+                    "Queues a sent or failed delivery again: the same message (same `webhook-id`) with a fresh set "
+                            + "of attempts.")
     @ApiResponse(
             responseCode = "202",
             description = "Delivery queued",
@@ -292,7 +294,7 @@ public class WebhookController {
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     @ApiResponse(
             responseCode = "409",
-            description = "The endpoint is turned off",
+            description = "The endpoint is turned off, or the delivery is still queued or being sent",
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public WebhookDeliveryResponse retry(
             @AuthenticationPrincipal Jwt jwt, @PathVariable long id, @PathVariable long deliveryId) {

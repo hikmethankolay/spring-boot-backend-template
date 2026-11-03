@@ -356,7 +356,7 @@ public class AuthController {
                             description = "Expires both auth cookies",
                             schema = @Schema(type = "string")))
     public ResponseEntity<Void> logout(
-            @RequestBody(required = false) RefreshRequest request, HttpServletRequest httpRequest) {
+            @Valid @RequestBody(required = false) RefreshRequest request, HttpServletRequest httpRequest) {
         String accessToken;
         try {
             accessToken = bearerTokenResolver.resolve(httpRequest);
