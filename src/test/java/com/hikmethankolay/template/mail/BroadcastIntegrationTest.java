@@ -164,6 +164,9 @@ class BroadcastIntegrationTest extends IntegrationTest {
         String optedOut = uniqueUsername();
         long optedOutId = register(optedOut);
         preferences.update(optedOutId, Map.of("product-updates", false));
+        String suspended = uniqueUsername();
+        long suspendedId = register(suspended);
+        jdbc.update("UPDATE users SET suspended_at = now() WHERE id = ?", suspendedId);
         String owner = login(ADMIN_USERNAME, ADMIN_PASSWORD);
 
         mockMvc.perform(broadcast(BROADCASTS, owner, "product-updates", "wrong-password-here"))
@@ -202,6 +205,7 @@ class BroadcastIntegrationTest extends IntegrationTest {
                         id,
                         optedOut + "@example.com"))
                 .isZero();
+        assertThat(queuedTo(id, suspended + "@example.com")).isZero();
         mockMvc.perform(get(BROADCASTS).with(bearer(owner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(id))

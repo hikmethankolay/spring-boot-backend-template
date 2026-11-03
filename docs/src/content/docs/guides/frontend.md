@@ -11,7 +11,7 @@ This page lists what the frontend has to do; [Security](../security/) explains w
 | Variable | Locally | In production |
 |----------|---------|---------------|
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Your frontend's origin, e.g. `https://app.example.com` |
-| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email`, `/reset-password`, `/unsubscribe` and `/settings/emails` pages |
+| `MAIL_LINK_BASE_URL` | `http://localhost:3000` | Your frontend's URL; emails link to its `/sign-up`, `/verify-email`, `/reset-password`, `/unsubscribe`, `/settings/emails` and `/settings/sessions` pages |
 | `OAUTH2_REDIRECT_URI` | `http://localhost:3000/oauth2/callback` | Your callback page, registered at GitHub and Google |
 
 With `SPRING_PROFILES_ACTIVE=prod` the app refuses to start while any of these still points to localhost
@@ -68,12 +68,15 @@ language; see [Clients in other languages](../api/#clients-in-other-languages).
 | Recent activity | `GET /api/v1/users/me/security-events`: logins, failed logins, password and email changes, with time and IP |
 | Sessions | `GET /api/v1/users/me/sessions`; show the `userAgent`, `ipAddress` and `lastUsedAt`, label the `current` one, and offer `DELETE /api/v1/users/me/sessions/{id}` for the others and `DELETE /api/v1/users/me/sessions` to sign out all of them at once |
 | Linked accounts | `GET /api/v1/users/me/social-accounts`; offer `DELETE /api/v1/users/me/social-accounts/{id}` with `{"currentPassword": "…"}` to unlink one |
+| Access tokens | `GET /api/v1/users/me/access-tokens`; create with `POST` and `{"name", "scope", "expiresInDays", "currentPassword"}` and show the returned `token` (`pat_…`) once, it cannot be read again; revoke with `DELETE /api/v1/users/me/access-tokens/{id}`. See [personal access tokens](../security/#personal-access-tokens) |
+| Webhooks | `GET`/`POST /api/v1/webhooks` with `{"url", "description", "eventTypes"}`; show the returned `secret` (`whsec_…`) once. Offer `PATCH`, `DELETE`, `POST …/{id}/test`, `POST …/{id}/secret` and the delivery log `GET …/{id}/deliveries` with a retry button; see [Webhooks](../webhooks/) |
 | `/unsubscribe?token=…` | No login. `GET /api/v1/mail/unsubscribe?token=…` returns `{"category": "product-updates", "categoryName": "Product updates", "enabled": true}`; ask to confirm, then `POST /api/v1/mail/unsubscribe?token=…` (no body), or `POST …/unsubscribe/all?token=…` for every optional email. Never change anything on load: mail scanners open links. Serve the page with `Referrer-Policy: no-referrer`, since the token does not expire |
 | `/settings/emails` | `GET /api/v1/users/me/email-preferences` lists `[{"category", "name", "description", "enabled"}]`; save with `PUT` and `{"product-updates": false}`. Account and security emails are not listed and cannot be turned off |
 | `/settings/sessions` | Security alert emails link here: the Sessions page above, where a user ends the sessions they do not recognize |
 | Broadcasts (owner only) | `POST /api/v1/admin/mail/broadcasts/preview` with `{"category": "product-updates", "subject", "title", "body", "roles": ["USER"], "verifiedOnly": true}` shows `recipients` and the rendered `text`; send the same body plus `currentPassword` to `POST /api/v1/admin/mail/broadcasts` (`202`), and list the history with `GET` |
 
-Login also sets a `device` cookie (HttpOnly, path `/api/v1/auth`, one year) that recognizes the browser at its next
+Login also sets a `device` cookie (`__Secure-device` in production; HttpOnly, path `/api/v1/auth`, one year) that
+recognizes the browser at its next
 login, so it is not reported as a new device. Send login requests with credentials (`credentials: 'include'`) so the
 browser keeps and returns it.
 

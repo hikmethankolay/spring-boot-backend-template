@@ -32,7 +32,8 @@ which sends inside its transaction, a webhook receiver is untrusted and may take
 connection meanwhile would let slow receivers starve the API. A crash mid-send lets the lease expire and the delivery
 is sent again: at least once, deduplicated by `webhook-id`.
 
-**Failure policy.** Retries back off from 30 seconds to a day for about two and a half days. `410 Gone` or 24 consecutive
+**Failure policy.** Retries back off from 30 seconds to a day, over about two days and seven hours (8 attempts by
+default). `410 Gone` or 24 consecutive
 failures turn an endpoint off and email its owner, so dead receivers stop costing work.
 
 **SSRF guard on every connection.** Apache HttpClient 5 (version managed by Spring Boot) resolves hosts through

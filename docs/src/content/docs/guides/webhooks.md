@@ -20,7 +20,8 @@ curl -s -X POST localhost:8080/api/v1/webhooks -H "Authorization: Bearer $TOKEN"
 The `whsec_` secret is shown only in this response; `POST /api/v1/webhooks/{id}/secret` replaces it (the old one
 keeps signing for 24 hours). Any authenticated caller may manage their own endpoints, including a
 [personal access token](../security/#personal-access-tokens) with the `WRITE` scope, so an integration can register
-its own receiver. `POST /api/v1/webhooks/{id}/test` queues a `webhook.test` event.
+its own receiver. A user has at most `WEBHOOKS_MAX_ENDPOINTS_PER_USER` (10) endpoints.
+`POST /api/v1/webhooks/{id}/test` queues a `webhook.test` event (`data`: `{endpointId}`).
 
 | Event | Sent to | `data` |
 |---|---|---|
@@ -98,8 +99,10 @@ receiver never holds a database connection and several instances never send the 
 
 A user-supplied URL could point at internal services (`localhost`, Redis, the metrics port, cloud metadata at
 `169.254.169.254`). `WebhookAddressPolicy` refuses any host that resolves to a loopback, private, link-local, unique
-local, multicast or carrier-grade NAT address, when the endpoint is saved **and** on every connection: Apache
+local, multicast, carrier-grade NAT or other reserved address, when the endpoint is saved **and** on every connection:
+Apache
 HttpClient resolves hosts through it, so a name that later resolves to an internal address (DNS rebinding) is refused
 too. Signing secrets are encrypted in the database under `WEBHOOK_ENCRYPTION_KEY`, a key of their own. Redirects are never followed and response bodies are never read. In production keep
 `WEBHOOKS_ALLOW_PRIVATE_ADDRESSES=false` and `WEBHOOKS_REQUIRE_HTTPS=true` (the `prod` profile's default; the startup
-check warns otherwise). For defence in depth, also restrict the pod's egress with a NetworkPolicy.
+check warns otherwise), which also allows only port 443. For defence in depth, also restrict the pod's egress with a
+NetworkPolicy.

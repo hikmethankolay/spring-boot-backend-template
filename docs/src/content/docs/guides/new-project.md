@@ -18,7 +18,7 @@ description: Turn the template into your own project.
    guides, and the documentation site's address. If `origin` is missing or still the template, it stops before
    changing anything; pass your repository with `--repo owner/name`. It refuses to run twice.
 3. Add your tables as new Flyway migrations in `src/main/resources/db/migration`, numbered after the last one
-   (`V13__create_orders.sql`, ...). Never edit a migration that has already been applied.
+   (`V23__create_orders.sql` after the template's `V22`, ...). Never edit a migration that has already been applied.
 4. Add each feature as its own package next to `user/`, with its own controller, service, repository and `dto/`.
    The sample `note/` package shows all of it; see [Your first feature](../first-feature/), which also says how to
    delete it.
@@ -67,11 +67,11 @@ this turns it off for every enrolled user for good.
 
 1. Delete `social/` in `src/main` and `src/test`, and `auth/dto/SocialLoginRequest` and `SocialProviderResponse`.
 2. `AuthService`: delete the fields `socialProviders`, `socialProfiles` and `socialAccounts` (with their constructor
-   parameters) and the methods `socialLogin` and `socialProviders`.
+   parameters) and the methods `socialLogin` and `socialProviders`, and the matching mocks in `AuthServiceTest`.
 3. `AuthController`: delete `loginProviders` and `loginWithProvider`.
 4. `AppProperties`: delete the `socialLogin` component and the `SocialLogin` record. In `ProductionSettingsCheck`,
    delete the `OAUTH2_REDIRECT_URI` check, and drop the `SocialLogin` argument in `TestProperties`,
-   `ProductionSettingsCheckTest`, `AdminBootstrapTest`, `SecretCipherTest`, `CookieCsrfFilterTest` and
+   `ProductionSettingsCheckTest`, `ProductionSettingsWarningsTest`, `AdminBootstrapTest`, `CookieCsrfFilterTest` and
    `BreachedPasswordValidatorTest`; delete the `SocialLogin` tests in `AppPropertiesTest`.
 5. Delete `PROVIDER_NOT_CONFIGURED`, `SOCIAL_EMAIL_UNVERIFIED` and `SOCIAL_ACCOUNT_CONFLICT` from `ProblemType`,
    `SOCIAL_ACCOUNT_LINKED` from `AuditEvent`, and `/api/v1/auth/oauth2/*` from `SecurityConfig.PUBLIC_PATHS`.
@@ -94,13 +94,14 @@ Accounts created through GitHub or Google stay; their users set a password throu
    Then delete the rest of `mfa/` in `src/main` and `src/test`, and `auth/MfaChallengeService`, `auth/LoginResult`,
    `auth/dto/MfaLoginRequest` and `MfaChallengeResponse`. Remove `implements LoginResult` from `AuthTokens`.
 2. `AuthService`: delete the fields `mfa` and `challenges` and the methods `loginWithMfa`, `startSession` and
-   `mfaChallengeExpired`. `login` and `socialLogin` return `AuthTokens` from `issueTokens(...)`, and `login` always
+   `mfaChallengeExpired` (and their mocks and tests in `AuthServiceTest`). `login` and `socialLogin` return `AuthTokens`
+   from `issueTokens(...)`, and `login` always
    resets the account's failed-login counter after a correct password.
 3. `AuthController`: delete `loginWithMfa` and `loginResponse`; `login` and `loginWithProvider` return
    `tokenResponse(...)`, and lose their `202` responses.
 4. `User`: delete the `totp*` fields and methods. `UserResponse`: delete `mfaEnabled`.
 5. `AppProperties`: delete the `mfa` component and the `Mfa` record, and drop the argument in `TestProperties`,
-   `ProductionSettingsCheckTest`, `AdminBootstrapTest`, `SecretCipherTest`, `CookieCsrfFilterTest` and
+   `ProductionSettingsCheckTest`, `ProductionSettingsWarningsTest`, `AdminBootstrapTest`, `CookieCsrfFilterTest` and
    `BreachedPasswordValidatorTest`; delete the `Mfa` tests in `AppPropertiesTest`.
 6. Delete `INVALID_MFA_CODE`, `MFA_CHALLENGE_EXPIRED`, `TOTP_ALREADY_ENABLED` and `TOTP_NOT_ENABLED` from
    `ProblemType`, the four `MFA_*`/`RECOVERY_CODE_USED` events from `AuditEvent`, `/api/v1/auth/login/mfa` from

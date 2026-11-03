@@ -10,6 +10,7 @@ Start the app with `SPRING_PROFILES_ACTIVE=prod` to switch to:
 - ECS JSON logs
 - `Secure` cookies
 - required email verification
+- webhook endpoint URLs must use HTTPS
 - Swagger UI and API docs disabled
 - 10% trace sampling
 - Actuator on port `8081`, which must stay internal
@@ -23,7 +24,8 @@ Start the app with `SPRING_PROFILES_ACTIVE=prod` to switch to:
   without `sslmode=verify-full` or `verify-ca` (the driver's default, `prefer`, checks no certificate and may fall
   back to plain text), an empty `REDIS_PASSWORD`, `REDIS_SSL_ENABLED=false` for a Redis on another machine,
   `COOKIE_SECURE=false`, `SWAGGER_ENABLED=true`, `RATE_LIMIT_ENABLED=false`, `REQUIRE_VERIFIED_EMAIL=false`,
-  `MAIL_STARTTLS_REQUIRED=false` and `FLYWAY_ENABLED=true` (the app's role then owns the schema and could drop the
+  `MAIL_STARTTLS_REQUIRED=false`, `WEBHOOKS_ALLOW_PRIVATE_ADDRESSES=true` (SSRF), `WEBHOOKS_REQUIRE_HTTPS=false` and
+  `FLYWAY_ENABLED=true` (the app's role then owns the schema and could drop the
   trigger that keeps `audit_events` append-only; see [Database roles](#database-roles)). Search the log for
   `Production setting:`.
 - a warning, logged once, when requests come from a private address: see
@@ -107,7 +109,7 @@ Kustomize base:
   capabilities, `RuntimeDefault` seccomp).
 - **Service:** for the API port only.
 - **Scaling and disruptions:** a HorizontalPodAutoscaler on CPU and a PodDisruptionBudget.
-- **NetworkPolicy:** the API port is reachable only from the ingress controller's namespace (`ingress-nginx`; adjust it) and the management port only from the `monitoring` namespace. Outgoing traffic is limited to DNS, PostgreSQL, Redis, SMTP and HTTPS (social login), so a compromised pod cannot roam the cluster.
+- **NetworkPolicy:** the API port is reachable only from the ingress controller's namespace (`ingress-nginx`; adjust it) and the management port only from the `monitoring` namespace. Outgoing traffic is limited to DNS, PostgreSQL, Redis, SMTP and HTTPS (social login and webhook deliveries), so a compromised pod cannot roam the cluster.
 - **Secrets as files:** `app-secrets` is mounted at `/etc/app/secrets`, one file per key, and read through
   `spring.config.import` (`configtree`). Unlike environment variables, files are not inherited by child processes or
   visible in `/proc/<pid>/environ`. Environment variables still work (Docker, compose), but are deprecated for
@@ -262,8 +264,9 @@ applies at once, even to emails still waiting in the outbox. Set `MAIL_UNSUBSCRI
 HTTPS URL (providers call it server to server), and set up SPF, DKIM and DMARC for the `MAIL_FROM` domain at your
 provider. Account and security emails are transactional and carry no unsubscribe link.
 
-Owner broadcasts drain at up to 50 emails per `MAIL_OUTBOX_POLL_INTERVAL` (10 s) per instance, about 5 a second,
-after every other email waiting. Check that this stays under your provider's sending rate, and as volume grows,
+Owner broadcasts drain after every other email waiting. Each instance sends one email per transaction, as fast as
+SMTP accepts them, for at most one `MAIL_OUTBOX_POLL_INTERVAL` (10 s), then pauses for one interval; the outbox has
+no rate limit of its own. Check that this stays under your provider's sending rate, and as volume grows,
 send from a separate subdomain so the reputation of broadcasts cannot hurt password resets.
 
 ## Checklist

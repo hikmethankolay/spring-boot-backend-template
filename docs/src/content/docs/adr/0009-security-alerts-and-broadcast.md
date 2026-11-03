@@ -45,7 +45,8 @@ There is no endpoint that sends an email to an address chosen by the caller.
   application (`MAIL_SECURITY_ALERTS_ENABLED`, `MAIL_NEW_LOGIN_ALERT_ENABLED`), not by users.
 - Clearing cookies, a new browser, or a cookieless client on a new network is reported as a new device, as with
   any cookie-based scheme.
-- Broadcasts go out at the outbox's pace (50 emails per run per instance); a provider's bulk API would be faster
+- Broadcasts go out at the outbox's pace (one email at a time per instance, each in its own transaction); a provider's
+  bulk API would be faster
   but ties the template to one provider.
 - Each batch saves the last user id it queued in the same transaction as its emails. A broadcast interrupted by a
   crash or a stop longer than the shutdown wait is resumed from there by a scheduled run on one instance once it has

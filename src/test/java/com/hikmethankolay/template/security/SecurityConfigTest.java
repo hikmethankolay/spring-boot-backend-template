@@ -38,9 +38,16 @@ class SecurityConfigTest {
         assertThat(cors).isNotNull();
         assertThat(cors.getAllowedOrigins()).containsExactly("http://localhost:3000");
         assertThat(cors.getAllowedMethods()).containsExactly("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
-        assertThat(cors.getAllowedHeaders()).containsExactly("Authorization", "Content-Type", "Idempotency-Key");
+        assertThat(cors.getAllowedHeaders())
+                .containsExactly(
+                        "Authorization",
+                        "Content-Type",
+                        "Idempotency-Key",
+                        "If-Match",
+                        "If-None-Match",
+                        "X-Requested-With");
         assertThat(cors.getExposedHeaders())
-                .contains("X-Trace-Id", "Retry-After", "RateLimit-Remaining", "Idempotent-Replayed");
+                .contains("ETag", "X-Trace-Id", "Retry-After", "RateLimit-Remaining", "Idempotent-Replayed");
         assertThat(cors.getAllowCredentials()).isTrue();
         assertThat(cors.getMaxAge()).isEqualTo(3600L);
     }

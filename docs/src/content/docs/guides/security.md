@@ -14,6 +14,7 @@ Every request passes the same checks, in this order. Each rejection is an RFC 94
 ## Tokens and sessions
 
 Authentication is stateless, using JWTs and Spring Security's OAuth2 resource server, plus a refresh token per session.
+Scripts and integrations use [personal access tokens](#personal-access-tokens) instead.
 
 - `POST /api/v1/auth/login` accepts a username or an email address and returns two tokens, in the body
   (`{"accessToken", "tokenType", "expiresIn", "refreshToken"}`) and as HttpOnly `SameSite=Strict` cookies.
@@ -32,8 +33,9 @@ Authentication is stateless, using JWTs and Spring Security's OAuth2 resource se
 - Public endpoints, including `/refresh`, have their own filter chain without token processing, so an expired or stale
   access token can never block login or refresh.
 - Everything else requires a valid access token. Role checks use `@PreAuthorize("hasRole('ADMIN')")`.
-- CORS exposes every response header the API documents (`X-Trace-Id`, `RateLimit-*`, `Retry-After`, `Location`,
-  `Content-Disposition`) to the origins in `CORS_ALLOWED_ORIGINS`.
+- CORS exposes every response header the API documents (`ETag`, `X-Trace-Id`, `RateLimit-*`, `Retry-After`,
+  `Location`, `Content-Disposition`, `Idempotent-Replayed`) to the origins in `CORS_ALLOWED_ORIGINS`, and lets them
+  send `Authorization`, `Content-Type`, `Idempotency-Key`, `If-Match`, `If-None-Match` and `X-Requested-With`.
 - The cookies are `HttpOnly` and `SameSite=Strict`. With `COOKIE_SECURE=true` (prod) they are named
   `__Host-auth_token` and `__Secure-refresh_token`: browsers then accept them only over HTTPS, and the access cookie
   only for this host, so a sibling subdomain cannot set or shadow it.
@@ -98,7 +100,8 @@ curl -s localhost:8080/api/v1/notes -H "Authorization: Bearer pat_…"
   take the account over or mint more tokens. Only `GET /api/v1/users/me` is open, so a script can tell whose token it
   holds. The same applies to the token's own account by id (`/api/v1/users/{its id}/**`, such as its security
   events): only `GET /api/v1/users/{its id}` is open, while an administrator's token still reaches other accounts.
-- **Lifetime.** Every token expires (`expiresInDays`, at most `ACCESS_TOKENS_MAX_LIFETIME`). Revoking one with
+- **Lifetime.** Every token expires (`expiresInDays`, at most `ACCESS_TOKENS_MAX_LIFETIME`, 365 days), and a user
+  holds at most `ACCESS_TOKENS_MAX_PER_USER` (20). `ACCESS_TOKENS_ENABLED=false` refuses them all. Revoking one with
   `DELETE /api/v1/users/me/access-tokens/{id}` takes effect on the next request. Everything that ends a user's
   sessions (password change or reset, role change, suspension, deletion) deletes all their tokens too.
 - **Oversight.** Creating a token needs the password (wrong ones count towards the [login lockout](#brute-force-protection)),
@@ -203,6 +206,7 @@ do not retry a refresh automatically with the same token.
 | Ending a session (`DELETE /api/v1/users/me/sessions/{id}`), or all others (`DELETE /api/v1/users/me/sessions`), reused refresh token | The session's refresh tokens are deleted and its `sid` is denylisted |
 | Password change, password reset | Every session of the user ends: refresh tokens are deleted and all access tokens issued so far are rejected |
 | Admin changes a user's password, or the owner changes a role | Same, so a demoted administrator loses access immediately |
+| User suspended | Same; logins are refused until the suspension is lifted |
 | User deleted (by an admin, the owner or themselves) | Same; the refresh tokens are deleted with the user |
 
 Access-token revocation lives in Redis: denylisted session ids and per-user cut-off times are kept only until the
@@ -291,7 +295,9 @@ password or logged in on a newer version cannot log in until they reset their pa
   checks. Tokens are never logged.
 - Security alerts ([ADR 9](../../adr/0009-security-alerts-and-broadcast/)) tell a user about a sign-in from a new
   device and about changes to the password, email address (sent to the old address, without the new one), two-factor
-  authentication (including new recovery codes) and linked accounts (linked or unlinked). They are queued in the transaction of the change, cannot be turned off by
+  authentication (including new recovery codes) and linked accounts (linked or unlinked), about a new personal access
+  token, and about a webhook endpoint that was turned off. They are queued in the transaction of the change, cannot be
+  turned off by
   users, and never contain tokens, codes or new values (`MAIL_SECURITY_ALERTS_ENABLED`,
   `MAIL_NEW_LOGIN_ALERT_ENABLED`).
 - A device is recognized by a device cookie set at login (random, stored as its SHA-256, HttpOnly, sent only to
@@ -437,7 +443,8 @@ erasure request, state the period in your privacy policy, and lower `AUDIT_RETEN
 Failed logins are counted per client IP and per account in Redis. An IP is blocked after `LOGIN_MAX_ATTEMPTS`
 failures (default 10), an account after `LOGIN_ACCOUNT_MAX_ATTEMPTS` (default 100). While either is blocked, the login
 is rejected with `429` and `Retry-After`, even with the right password, until `LOGIN_LOCK_DURATION` has passed without
-new failures. A successful login only resets the account counter, not the IP counter. Wrong two-factor codes at login
+new failures. A successful login clears the account counter; the IP keeps its earlier failures and only the successful
+attempt itself is not counted. Wrong two-factor codes at login
 also count against a separate per-account limit, `LOGIN_MFA_MAX_ATTEMPTS` (default 10): whoever reaches that step
 already has the password, and a six-digit code needs far fewer guesses than the account limit would allow.
 
@@ -483,6 +490,8 @@ one; the headers then describe whichever limit is closest to running out:
 | `/api/v1/auth/login/**` (password and second factor) | 30 per minute |
 | `/api/v1/auth/refresh` | 60 per minute |
 | `/api/v1/auth/password-reset/**` | 5 per hour |
+| `/api/v1/mail/unsubscribe/**` | 60 per minute |
+| `/api/v1/admin/mail/broadcasts/**` | 30 per hour |
 
 Sign-up emails are also limited to one per address per minute, whatever the client IP.
 
@@ -505,6 +514,15 @@ Every response carries, on top of Spring Security's defaults (`X-Content-Type-Op
 
 They are set in `SecurityConfig`. If you serve HTML from the app, extend the policy there.
 
+## Outgoing webhooks
+
+[Webhooks](../webhooks/) make the server call URLs its users choose, which is a server-side request forgery surface.
+`WebhookAddressPolicy` refuses hosts that resolve to loopback, private, link-local (cloud metadata), unique local,
+multicast, carrier-grade NAT or reserved addresses, when an endpoint is saved and on every connection (DNS
+rebinding). Redirects are never followed and response bodies never read. Signing secrets are encrypted under
+`WEBHOOK_ENCRYPTION_KEY`, application-wide events (`user.*`) need `WEBHOOKS_ADMIN_EVENTS_MIN_ROLE`, and a suspended
+owner's endpoints receive nothing. See [the SSRF guard](../webhooks/#how-it-is-sent-and-the-ssrf-guard).
+
 ## Audit log
 
 Security events are written to the `audit` logger and counted in the `security_audit_events_total` metric:
@@ -518,6 +536,9 @@ Security events are written to the `audit` logger and counted in the `security_a
 | `user.registered`, `user.registration_repeated`, `user.email_verified`, `user.email_change_requested`, `user.email_changed`, `user.password_changed` | Account changes |
 | `user.password_reset_requested`, `user.password_reset_completed` | Password reset |
 | `user.account_deleted`, `user.data_exported` | Personal data requests |
+| `auth.access_token_created`, `auth.access_token_revoked`, `auth.access_tokens_revoked` | Personal access tokens created, revoked, or all deleted when the sessions end |
+| `webhook.created`, `webhook.updated`, `webhook.deleted`, `webhook.secret_rotated`, `webhook.disabled` | Webhook endpoints |
+| `user.email_preferences_changed`, `mail.broadcast_sent` | Email preferences and owner broadcasts |
 | `admin.user_updated`, `admin.role_changed`, `admin.user_deleted`, `admin.user_suspended`, `admin.user_unsuspended` | Administrator actions |
 | `admin.owner_bootstrapped` | The owner account was created at startup from `ADMIN_USERNAME`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` |
 
@@ -532,7 +553,8 @@ JSON fields, for example:
  "event":"auth.login_failed","clientIp":"203.0.113.7","identifierHash":"2bd806c97f0e","traceId":"…"}
 ```
 
-Entries are written after the transaction commits, so rolled-back actions never appear. Add an `AuditEvent` and call
+The log line is written after the transaction commits and the table row below is stored inside it, so rolled-back
+actions appear in neither. Add an `AuditEvent` and call
 `AuditLog.record(...)` for your own sensitive actions, and ship the `audit` logger to long-term storage.
 
 Every entry is also stored in the `audit_events` table (columns for the event, user, actor and IP; the other fields as

@@ -323,9 +323,16 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.cors().allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", IdempotencyFilter.HEADER));
+        cors.setAllowedHeaders(List.of(
+                HttpHeaders.AUTHORIZATION,
+                HttpHeaders.CONTENT_TYPE,
+                IdempotencyFilter.HEADER,
+                HttpHeaders.IF_MATCH,
+                HttpHeaders.IF_NONE_MATCH,
+                "X-Requested-With"));
         // Every header the OpenAPI document declares on responses, so cross-origin clients can read them.
         cors.setExposedHeaders(List.of(
+                HttpHeaders.ETAG,
                 "Location",
                 "Retry-After",
                 "X-Trace-Id",
