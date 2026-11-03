@@ -100,6 +100,7 @@ public class AccountService {
      * @param applicationName prefix of the Redis keys
      * @param meterRegistry registry for the fail-open counter
      * @param jdbc        takes the advisory lock that serializes token emails per user
+     * @param transactions runs a password reset's writes after the password is hashed
      */
     public AccountService(
             AccountTokenRepository tokens,
