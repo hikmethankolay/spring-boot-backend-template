@@ -158,7 +158,7 @@ first entry of its changelog) in your own README.
 - a controller uses a repository or a JPA entity directly
 - anything depends on a controller
 - a class in `audit` or `common` depends on a feature package (`account`, `auth`, `mail`, `mfa`, `note`, `security`,
-  `social`, `user`): every feature uses them, so they must not use a feature back
+  `social`, `token`, `user`, `webhook`): every feature uses them, so they must not use a feature back
 - a class uses field injection, `System.out` or `java.util.logging`
 
 `scripts/docs.sh` fails when a public, protected or package-private class, method or field has no Javadoc comment.
@@ -171,9 +171,11 @@ src/main/java/com/hikmethankolay/template/
 ├── account/     email verification, email change confirmation and password reset: tokens, mailer, endpoints
 ├── mfa/         two-factor authentication: TOTP enrollment, encrypted secrets, recovery codes
 ├── social/      login with GitHub and Google: profile client, linked identities
+├── token/       personal access tokens (Bearer pat_...): issuing, revocation, scope checks
 ├── user/        User entity, service, controllers, suspension, security activity, account deletion, data export,
 │                admin bootstrap
 ├── note/        sample feature: notes owned by a user (copy it, then delete it)
+├── webhook/     outbound webhooks: endpoints, signed deliveries through an outbox, retries
 ├── security/    filter chains, headers, JWT, token revocation, login lockout, rate limiting
 ├── audit/       AuditLog and AuditEvent: the security audit trail, and SecurityEvents to read it back
 ├── mail/        EmailOutbox (transactional outbox with retries), MailRenderer (templates in resources/mail/)
