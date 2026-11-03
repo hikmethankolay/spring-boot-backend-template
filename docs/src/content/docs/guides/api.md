@@ -163,6 +163,7 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 |--------|--------|------|
 | `urn:problem:validation-failed` | 400 | The body or a query or path parameter is invalid; the fields are listed in `errors`, with an empty `field` for a rule about the whole body (e.g. two fields that must match) |
 | `urn:problem:invalid-sort` | 400 | `sort` names a property that cannot be sorted by |
+| `urn:problem:page-too-large` | 400 | `page` times `size` starts past the last row the database can skip |
 | `urn:problem:wrong-password` | 400 | The caller's current password, required to confirm a change, is missing or wrong |
 | `urn:problem:invalid-token` | 400 | An email verification or password reset token is unknown, used or expired |
 | `urn:problem:unsubscribe-token-invalid` | 400 | An unsubscribe link's token is malformed or was not issued by this server |
@@ -185,6 +186,18 @@ media type, ...) use `about:blank`; everything else uses one of these (the list 
 | `urn:problem:note-not-found` | 404 | The caller has no note with this id (other users' notes look missing too) |
 | `urn:problem:session-not-found` | 404 | The caller has no session with this id (other users' sessions look missing too) |
 | `urn:problem:social-account-not-found` | 404 | The caller has no linked account with this id (other users' links look missing too) |
+| `urn:problem:note-limit-reached` | 409 | The caller already has `app.notes.max-per-user` notes |
+| `urn:problem:access-token-not-found` | 404 | The caller has no access token with this id (other users' tokens look missing too) |
+| `urn:problem:access-token-lifetime-too-long` | 400 | A new access token would outlive `app.access-tokens.max-lifetime` |
+| `urn:problem:access-token-limit-reached` | 409 | The caller already has `app.access-tokens.max-per-user` unexpired tokens |
+| `urn:problem:access-tokens-disabled` / `webhooks-disabled` | 403 | `app.access-tokens.enabled` / `app.webhooks.enabled` is `false` |
+| `urn:problem:webhook-not-found` / `webhook-delivery-not-found` | 404 | The caller has no webhook endpoint, or the endpoint no delivery, with this id |
+| `urn:problem:webhook-url-invalid` | 400 | The URL is malformed, not HTTPS where required, or not a public address |
+| `urn:problem:webhook-event-type-invalid` | 400 | There is no webhook event type with this name |
+| `urn:problem:webhook-event-not-allowed` | 403 | Application-wide events need `app.webhooks.admin-events-min-role` |
+| `urn:problem:webhook-limit-reached` | 409 | The caller already has `app.webhooks.max-endpoints-per-user` endpoints |
+| `urn:problem:webhook-endpoint-disabled` | 409 | A test or retry was sent to an endpoint that is turned off |
+| `urn:problem:webhook-delivery-pending` | 409 | Only sent and failed deliveries can be retried; this one is still queued or being sent |
 | `urn:problem:username-taken` / `email-taken` | 409 | The username or email belongs to another account (`POST /register` never answers `email-taken`) |
 | `urn:problem:password-too-short` | 400 | The new password has fewer than 15 characters (8 with two-factor authentication) |
 | `urn:problem:password-breached` | 400 | The new password is common or appeared in a data breach |
@@ -243,7 +256,9 @@ second note or queuing a second broadcast. This follows the IETF `Idempotency-Ke
 
 - Keys belong to the signed-in caller. Anonymous `POST`s (login, sign-up, password reset) ignore the header: replaying
   a login would hand its tokens to anyone who knows the key. So do the two-factor enrollment endpoints
-  (`/api/v1/users/me/mfa/**`): their answers hold the secret and the recovery codes, which are never copied to Redis.
+  (`/api/v1/users/me/mfa/**`), `POST /api/v1/users/me/access-tokens`, `POST /api/v1/webhooks` and
+  `POST /api/v1/webhooks/{id}/secret`: their answers hold secrets, recovery codes or tokens, which are never copied to
+  Redis.
 - A body over 1 MiB is not buffered for the comparison, so such a request runs without the key.
 - The same key with another path or body is refused with `422`; a retry while the first request still runs gets `409`.
 - Only final answers are kept: `2xx`, `3xx` and every `4xx` but `408`, `409` and `429`. A `5xx`, `408 Request

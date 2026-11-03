@@ -76,6 +76,10 @@ preferences endpoint, the unsubscribe links and the data export pick it up.
 | The email address of your account was changed | The user or an administrator changes it | The **old** address, without the new one |
 | Two-factor authentication was turned on / off | `confirm` / `disable` of two-factor authentication | The user |
 | A GitHub (Google) account was linked | A provider account is linked to an existing account | The user |
+| A GitHub (Google) account was unlinked | The user unlinks a provider account | The user |
+| New two-factor recovery codes were created | The user replaces their recovery codes | The user |
+| A new access token was created for your account | A personal access token is created (name, scope, expiry) | The user |
+| A webhook endpoint was turned off | `410 Gone` or too many failed deliveries in a row | The endpoint's owner |
 
 To add one, add a method to `SecurityMailer` and call it from the service, after the audit record, inside the
 transaction of the change. Never put tokens, codes or new values in an alert. The test profile turns alerts off;
@@ -85,7 +89,8 @@ transaction of the change. Never put tokens, codes or new values in an alert. Th
 
 The owner can email an announcement to users by role (`POST /api/v1/admin/mail/broadcasts`, after
 `/preview`). Broadcasts use the `broadcast/announcement` template only, in an optional category, so every one
-carries an unsubscribe link and skips users who turned the category off. The body is plain text: blank lines
+carries an unsubscribe link and skips suspended users and users who turned the category off. The body is plain
+text: blank lines
 separate paragraphs, and any markup is shown as typed. The request returns `202` with the expected recipients;
 the recipients are queued in the background and the outbox sends them after every other email waiting.
 

@@ -178,7 +178,7 @@ and every public class is documented. See [Using the template](https://hikmethan
 | Guide | Covers |
 |-------|--------|
 | [Configuration](https://hikmethankolay.github.io/spring-boot-backend-template/guides/configuration/) | Every environment variable and its default |
-| [Security](https://hikmethankolay.github.io/spring-boot-backend-template/guides/security/) | Tokens, revocation, account flows, lockout, rate limiting, security alerts, unsubscribe links |
+| [Security](https://hikmethankolay.github.io/spring-boot-backend-template/guides/security/) | Tokens, revocation, personal access tokens, account flows, lockout, rate limiting, security alerts, unsubscribe links |
 | [Email templates](https://hikmethankolay.github.io/spring-boot-backend-template/guides/email-templates/) | The emails the app sends, adding one, categories and unsubscribe, security alerts, broadcasts |
 | [Connecting a frontend](https://hikmethankolay.github.io/spring-boot-backend-template/guides/frontend/) | The pages to build, cookies or Bearer tokens, the two-factor login step, refreshing, errors |
 | [API overview](https://hikmethankolay.github.io/spring-boot-backend-template/guides/api/) and [REST API reference](https://hikmethankolay.github.io/spring-boot-backend-template/api/) | Endpoints, errors (RFC 9457), pagination, headers |

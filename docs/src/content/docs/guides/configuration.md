@@ -8,7 +8,8 @@ Docker Compose read. Tests never read `.env`: the build points `DOTENV_PATH` at 
 can use the same variable to load another file, e.g. `DOTENV_PATH=staging.env java -jar target/*.jar`. [`.env.example`](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/.env.example)
 lists the common variables, and `scripts/setup.sh` creates `.env` from it with generated secrets.
 
-The `app.*` settings are bound to a validated record (`AppProperties`), so a missing or invalid value such as a short
+The `app.*` settings are bound to validated records (`AppProperties`, plus `AccessTokenProperties`,
+`WebhookProperties` and `NoteProperties` next to their features), so a missing or invalid value such as a short
 `JWT_SECRET` or a lifetime of `0s` stops the application at startup with a clear message. The token and session
 lifetimes, `LOGIN_LOCK_DURATION`, `MFA_CHALLENGE_TTL` and the rate limit route windows must be positive, and `JWT_REMEMBER_ME_MAX_SESSION_TTL` must not be shorter than `JWT_REMEMBER_ME_TTL`.
 The `prod` profile also refuses the local defaults marked *prod: must change* below, and logs a warning for each

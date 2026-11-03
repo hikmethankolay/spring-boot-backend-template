@@ -6,6 +6,23 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Added
+
+- `ARCHITECTURE.md`: a code map of the packages, the request flow, the invariants the tests enforce, the design
+  decisions and the steps for common changes, for readers who start from the repository.
+- ADRs 12 to 18 record decisions the code already made: idempotency keys, optimistic locking with `ETag` and
+  `If-Match`, rate limiting and login lockout, problem details, the audit log, user suspension, and scheduled jobs on
+  several instances.
+- The `WebhookDeliveriesFailing` alert in `ops/prometheus/alerts.yml` fires when most webhook deliveries fail for
+  15 minutes, with a runbook.
+
+### Fixed
+
+- CORS exposes `ETag` and allows the `If-Match`, `If-None-Match` and `X-Requested-With` request headers, so a browser
+  frontend on another origin can use the `ETag` / `If-Match` checks on users and notes; before, the browser blocked
+  them.
+- Owner broadcasts skip suspended users: before, they were counted as recipients and emailed.
+
 ### Changed
 
 - `CODE_OF_CONDUCT.md` follows the Contributor Covenant 3.0 instead of 2.1: its summary now names the encouraged and

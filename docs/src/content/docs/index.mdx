@@ -5,7 +5,8 @@ template: splash
 hero:
   tagline: >-
     A production-ready starting point for REST backends: JWT authentication with revocation, two-factor
-    authentication, login with GitHub and Google, account flows, caching, rate limiting, observability and
+    authentication, login with GitHub and Google, personal access tokens, webhooks, account flows, caching, rate
+    limiting, observability and
     migrations, tested against real PostgreSQL and Redis.
   actions:
     - text: Get started
@@ -47,6 +48,10 @@ built from <code>{import.meta.env.PUBLIC_SITE_COMMIT ?? 'local'}</code> on {impo
     Login lockout per IP and account, also for password confirmations, a per-IP API rate limit shared through
     Redis, CSP and other security headers, account suspension, and an audit log of every security event that users
     can read as their recent activity.
+  </Card>
+  <Card title="API tokens and webhooks" icon="random">
+    Scoped, expiring personal access tokens (`pat_…`) for scripts, and signed (Standard Webhooks) event delivery to
+    user endpoints through an outbox, with retries, a delivery log and an SSRF guard.
   </Card>
   <Card title="Standard HTTP" icon="seti:json">
     Versioned `/api/v1` URLs, correct status codes, RFC 9457 problem details for every error, and an

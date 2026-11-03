@@ -18,12 +18,13 @@ Besides the standard JVM, HTTP (with latency histograms), HikariCP and cache met
 | `security_fail_open_total{control}` | Requests a protection let through unchecked because Redis did not answer (`rate-limit`, `token-revocation`, `sign-up-link-reuse`, `sign-up-email-cooldown`) |
 | `client_address_not_public_total` | *prod only:* requests from a private, loopback or link-local address, usually a proxy that hides the client's address (see [Client IP behind a proxy](../production/#client-ip-behind-a-proxy)) |
 | `mail_outbox_pending` | Emails waiting to be sent, broadcasts not included |
-| `mail_outbox_broadcast_pending` | Broadcast emails waiting; they drain at up to 50 per `MAIL_OUTBOX_POLL_INTERVAL` per instance |
+| `mail_outbox_broadcast_pending` | Broadcast emails waiting; they drain after every other email, as fast as SMTP accepts them |
 | `mail_security_alerts_total{alert}` | Security alert emails queued, by alert (`new-login`, `password-changed`, …) |
 | `mail_broadcast_recipients_total` | Broadcast emails queued |
 | `mail_outbox_sent_total`, `mail_outbox_failures_total`, `mail_outbox_dropped_total` | Email delivery |
 | `mail_outbox_suppressed_total{category}` | Optional emails not sent because the recipient turned their category off |
 | `mail_unsubscribe_total{category,source}` | Opt-outs, by `source`: `one-click` (mail client), `link` (unsubscribe page) or `user` (preferences page) |
+| `webhook_deliveries_total{outcome}` | Webhook delivery attempts: `sent`, `retry`, `failed` (given up) or `skipped` (endpoint off or owner suspended), see [Webhooks](../webhooks/#retries-and-the-delivery-log) |
 
 ## Alerts and dashboard
 
@@ -37,7 +38,8 @@ holds alerting rules for the things that need a human:
 | Security | more than 30 failed logins per minute, a reused refresh token, a role change, a protection failing open because Redis did not answer |
 | Logs | any `ERROR` line, more than 10 warnings per minute (usually Redis unreachable) |
 | Email | emails given up after all retries, more than 100 emails waiting |
-| Background | a `@Scheduled` job (email dispatcher, token cleanup, audit retention) throwing |
+| Webhooks | more than half of the webhook deliveries failing for 15 minutes |
+| Background | a `@Scheduled` job (email or webhook dispatcher, token cleanup, audit retention) throwing |
 | Resources | requests waiting for database connections, heap above 90%, a container OOM-killed (needs kube-state-metrics) |
 
 Each alert has a [runbook](../runbooks/).

@@ -244,13 +244,33 @@ More than 100 emails waiting for 15 minutes: SMTP is down or slow. Same checks a
 the backlog by itself once SMTP recovers. A broadcast does not trigger it: its emails are counted in
 `mail_outbox_broadcast_pending` instead, and wait behind every other email.
 
+## Webhooks
+
+### WebhookDeliveriesFailing
+
+More than half of the webhook deliveries (at least 20 in 30 minutes) failed or were scheduled for a retry for 15
+minutes. A single broken receiver rarely triggers it; a user reporting an endpoint turned off (the `webhook.disabled`
+audit event; the owner was emailed the reason) is handled with step 1 as well.
+
+1. Most failures are on the receiver's side. `GET /api/v1/webhooks/{id}/deliveries` shows each delivery's last HTTP
+   status and error; the owner fixes the receiver, turns the endpoint on again with `PATCH /api/v1/webhooks/{id}`
+   (`{"enabled": true}`) and resends what they need with `POST /api/v1/webhooks/{id}/deliveries/{deliveryId}/retry`
+   (see [Webhooks](../webhooks/#retries-and-the-delivery-log)).
+2. When every endpoint fails at once, suspect the app: the egress NetworkPolicy (port 443 only), DNS, or the SSRF
+   guard refusing an address. A reason saying the secret cannot be decrypted means its `WEBHOOK_ENCRYPTION_KEY` was
+   dropped (see [WEBHOOK_ENCRYPTION_KEY](#webhook_encryption_key)).
+3. **Impact:** receivers miss events until the deliveries are resent; failed deliveries stay in the log for
+   `WEBHOOKS_DELIVERY_RETENTION` (7 days), then are deleted.
+
 ## Background jobs
 
 ### ScheduledTaskFailing
 
-A `@Scheduled` method (email dispatcher, dead-letter cleanup, broadcast resume, expired account-token and
-refresh-token cleanup, audit retention purge) threw an exception. The `code_function` label names it. Search the logs
-for the exception; a failing cleanup only lets old rows pile up, a failing dispatcher also raises `EmailBacklog`.
+A `@Scheduled` method (email dispatcher, dead-letter cleanup, broadcast resume, expired account-token,
+refresh-token and personal-access-token cleanup, unused-device cleanup, webhook dispatcher and delivery-log cleanup,
+audit retention purge) threw an exception. The `code_function` label names it. Search the logs for the exception; a
+failing cleanup only lets old rows pile up, a failing email dispatcher also raises `EmailBacklog`, and a failing
+webhook dispatcher leaves deliveries `PENDING` (see [WebhookDeliveriesFailing](#webhookdeliveriesfailing)).
 
 A broadcast that stays unfinished (`finished_at IS NULL` in `mail_broadcasts`) blocks new ones until it is resumed;
 if resuming keeps failing, end it by hand: `UPDATE mail_broadcasts SET partial = TRUE, finished_at = now() WHERE id = …`.

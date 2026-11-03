@@ -1,6 +1,6 @@
 # Architecture
 
-How the feature packages under `src/main/java/com/hikmethankolay/template/` depend on each other and how one API request passes through the filters into a feature, for contributors adding or removing a package. Verified against `78d8397`.
+How the feature packages under `src/main/java/com/hikmethankolay/template/` depend on each other and how one API request passes through the filters into a feature, for contributors adding or removing a package. Verified against `e169ee0`.
 
 ## Overview
 
@@ -76,6 +76,13 @@ Errors from the security chain go through `security/SecurityProblemHandler.java:
 - [ADR 9: Security alerts, device recognition and owner broadcasts](docs/src/content/docs/adr/0009-security-alerts-and-broadcast.md)
 - [ADR 10: Personal access tokens](docs/src/content/docs/adr/0010-personal-access-tokens.md)
 - [ADR 11: Outbound webhooks](docs/src/content/docs/adr/0011-webhooks.md)
+- [ADR 12: Idempotency keys for POST](docs/src/content/docs/adr/0012-idempotency-keys.md)
+- [ADR 13: Optimistic locking with ETag and If-Match](docs/src/content/docs/adr/0013-optimistic-locking-etags.md)
+- [ADR 14: Rate limiting and login lockout](docs/src/content/docs/adr/0014-rate-limiting.md)
+- [ADR 15: Problem details for errors](docs/src/content/docs/adr/0015-problem-details.md)
+- [ADR 16: Audit log](docs/src/content/docs/adr/0016-audit-log.md)
+- [ADR 17: User suspension](docs/src/content/docs/adr/0017-user-suspension.md)
+- [ADR 18: Scheduled jobs on several instances](docs/src/content/docs/adr/0018-multi-instance-scheduling.md)
 
 ## Common changes
 

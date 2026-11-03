@@ -60,7 +60,8 @@ difference; regenerate the file with `-Dopenapi.update=true`, see [API overview]
 `./mvnw verify` (and so `scripts/test.sh` and CI) fails when:
 
 - **Coverage** drops below the JaCoCo minimums in `pom.xml`: lines and branches overall, and lines in the `security` and
-  `auth` packages. Filtered runs (`-Dtest`, `-Dit.test`) skip the check.
+  `auth` packages (95% lines and 90% branches overall, 90% lines in each). Filtered runs through `scripts/test.sh`
+  (`-Dtest`, `-Dit.test`) report coverage without failing on it.
 - **Formatting** differs from `palantir-java-format` (Spotless). `scripts/test.sh` formats first; otherwise run
   `./mvnw spotless:apply`.
 - **SpotBugs** with FindSecBugs (maximum effort, low threshold) reports a bug. Accepted findings go in
@@ -70,7 +71,11 @@ difference; regenerate the file with `-Dopenapi.update=true`, see [API overview]
 
 **Mutation testing** (PIT) changes the code that decides who gets in and where requests go (the `security`, `auth`
 and `token` packages, and the webhook SSRF guard and signer) and checks that a test fails each time. It runs weekly in CI (`.github/workflows/mutation.yml`) and fails below the threshold in `pom.xml`; run it with
-`./mvnw test-compile org.pitest:pitest-maven:mutationCoverage` (report in `target/pit-reports`).
+`./mvnw test-compile org.pitest:pitest-maven:mutationCoverage` (report in `target/pit-reports`). It runs the
+integration tests as well, so with rootless Podman set what `scripts/test.sh` sets
+(`DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock TESTCONTAINERS_RYUK_DISABLED=true`), and remove the
+Testcontainers containers afterwards. CI uses `-Dthreads=2`; locally, more threads (e.g. one per spare core) make it
+much faster.
 
 ## Architecture tests
 
