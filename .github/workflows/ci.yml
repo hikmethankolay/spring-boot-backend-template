@@ -43,8 +43,11 @@ jobs:
 
   # Runs the .bat scripts, so they cannot silently drift from their .sh counterparts. The Windows runner has no
   # Linux containers, so only the scripts that need none run here; the build job covers the integration tests.
+  # Waits for build and docs: a failing test or Javadoc warning then shows up once, in the job that owns it, and
+  # this job only fails for what is Windows-specific.
   windows:
     name: Windows scripts
+    needs: [build, docs]
     runs-on: windows-latest
     timeout-minutes: 25
     permissions:
@@ -70,8 +73,10 @@ jobs:
       - name: Build jar
         run: scripts\build.bat --skip-tests
 
+  # The jobs that compile the code wait for build, so a compile error fails one check instead of all of them.
   image:
     name: Docker image and vulnerability scan
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -117,6 +122,7 @@ jobs:
 
   zap:
     name: ZAP baseline scan
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -154,6 +160,7 @@ jobs:
 
   docs:
     name: Documentation
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -179,6 +186,7 @@ jobs:
   # the template's package or repository links behind. Only in the template: a renamed project cannot be renamed again.
   rename:
     name: Rename project
+    needs: build
     if: github.repository == 'hikmethankolay/spring-boot-backend-template'
     runs-on: ubuntu-latest
     timeout-minutes: 15
