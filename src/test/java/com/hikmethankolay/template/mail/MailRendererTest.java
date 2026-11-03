@@ -68,7 +68,7 @@ class MailRendererTest {
     @Test
     void htmlTemplatesNeverPrintUnescapedValues() throws IOException {
         List<Path> templates;
-        try (Stream<Path> files = Files.list(Path.of("src/main/resources/mail"))) {
+        try (Stream<Path> files = Files.walk(Path.of("src/main/resources/mail"))) {
             templates = files.filter(file -> file.toString().endsWith(".html")).toList();
         }
 
