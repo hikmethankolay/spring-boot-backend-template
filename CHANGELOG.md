@@ -6,6 +6,11 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Changed
+
+- `CODE_OF_CONDUCT.md` follows the Contributor Covenant 3.0 instead of 2.1: its summary now names the encouraged and
+  restricted behaviours of 3.0, and reports aim to address and repair harm.
+
 ## [5.1.0] - 2026-11-03
 
 ### Added
