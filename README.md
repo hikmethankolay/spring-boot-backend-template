@@ -18,30 +18,43 @@ secure login, user accounts, errors, caching, monitoring and deployment. All of 
 
 <img src="docs/public/demo.svg" width="760" alt="Terminal: scripts/setup.sh generates the secrets, scripts/dev.sh starts PostgreSQL, Redis, Mailpit and the app in about four seconds, and scripts/smoke.sh signs a user up through the emailed link, logs in, reads and changes the email preferences, creates, edits and deletes a note, revokes the session and deletes the account, with every status as expected.">
 
+**Contents**
+
+- [Why use it](#why-use-it)
+- [Quick start](#quick-start)
+- [Features](#features)
+- [How it fits together](#how-it-fits-together)
+- [Scripts](#scripts)
+- [Start your own project](#start-your-own-project)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+- [Author](#author)
+
 ## Why use it
 
-- **Authentication you don't have to write.** Short-lived JWTs with rotating refresh tokens and reuse detection,
+- Authentication you don't have to write. Short-lived JWTs with rotating refresh tokens and reuse detection,
   logout that really revokes, a list of signed-in devices users can log out, every session ended on a password
   change, email verification, password reset, two-factor authentication with authenticator apps, login with GitHub
   and Google, brute-force lockout, rate limiting, security headers and an audit log users can read as their recent
   activity. Users are emailed when someone signs in from a new device or changes their password, email address or
   two-factor settings, and administrators can suspend an account without deleting it.
-- **Email that looks finished.** HTML templates with a plain-text twin and a shared layout, sent through an outbox
+- Email that looks finished. HTML templates with a plain-text twin and a shared layout, sent through an outbox
   that survives SMTP outages, email preferences with RFC 8058 one-click unsubscribe, and owner broadcasts that never
   delay a password reset.
-- **A worked example to copy.** The sample `note/` feature shows ownership checks, pagination, migrations, the data
+- A worked example to copy. The sample `note/` feature shows ownership checks, pagination, migrations, the data
   export and tests in a few small files, and `scripts/client.sh` generates a typed client for your frontend, or for
   your mobile app in its own language.
-- **Production defaults out of the box.** One `prod` profile switches on JSON logs, secure cookies, required email
+- Production defaults out of the box. One `prod` profile switches on JSON logs, secure cookies, required email
   verification and an internal metrics port. Migrations, Redis caching, an HTML email outbox, query timeouts,
   metrics with alert rules and a Grafana dashboard, tracing, account deletion and data export are already wired in.
-- **Tested against the real thing.** 400+ tests, 180 of them against real PostgreSQL and Redis containers, alongside
+- Tested against the real thing. 600+ tests, 250 of them against real PostgreSQL and Redis containers, alongside
   architecture rules, mutation testing, a load test and a vulnerability scan of the Docker image in CI.
-- **Ready to ship.** Releases publish signed multi-arch images with an SBOM; Kubernetes manifests pass the
+- Ready to ship. Releases publish signed multi-arch images with an SBOM; Kubernetes manifests pass the
   `restricted` Pod Security Standard.
-- **One command per task** on Linux, macOS and Windows: setup, dev, test, build, run, docker, docs and more.
+- One command per task on Linux, macOS and Windows: setup, dev, test, build, run, docker, docs and more.
 
-Built with Spring Boot 4.1, Java 25, PostgreSQL 18 and Redis 8. Not sure it fits? See how it
+Not sure it fits? See how it
 [compares with Spring Initializr, JHipster and Bootify](https://hikmethankolay.github.io/spring-boot-backend-template/guides/comparison/).
 
 ### Why the newest versions
@@ -64,6 +77,35 @@ PostgreSQL 18 and Redis 8 are the current major versions. Dependabot proposes up
 Policy: patch and minor updates land as soon as the tests pass. A new major version of a component is adopted once it
 is generally available and the tests pass, and is recorded in the
 [changelog](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/CHANGELOG.md).
+
+## Quick start
+
+You need **JDK 25** (a JRE is not enough) and **Docker or Podman**, or nothing at all: open the repository in
+**GitHub Codespaces** (*Code → Codespaces → Create codespace*) or in VS Code's *Dev Containers*, which run `setup`
+for you, then continue with `scripts/dev.sh`. With only Docker or Podman, run `setup`, then `scripts/docker.sh up`
+instead of `dev`: the image is built in a container.
+
+```bash
+git clone https://github.com/hikmethankolay/spring-boot-backend-template.git
+cd spring-boot-backend-template
+scripts/setup.sh    # checks prerequisites, creates .env with generated secrets, compiles
+scripts/dev.sh      # starts PostgreSQL, Redis and Mailpit, then the app
+scripts/smoke.sh    # in a second terminal: sign up, log in, email preferences, the notes API, log out, delete
+```
+
+On Windows, run the `.bat` versions: `scripts\setup.bat`, `scripts\dev.bat`, `scripts\smoke.bat`.
+
+Then open:
+
+| | |
+|---|---|
+| API | http://localhost:8080/api/v1 |
+| Interactive API docs | http://localhost:8080/swagger-ui.html |
+| Emails the app sent (sign-up links, password resets, security alerts), as HTML, text and raw | http://localhost:8025 |
+
+`setup` prints the password of the owner account `admin` and stores it in `.env`. To call the API with curl, follow
+[Try the API](https://hikmethankolay.github.io/spring-boot-backend-template/guides/getting-started/#try-the-api).
+To stop the app, press Ctrl+C and run `scripts/db.sh down`.
 
 ## Features
 
@@ -99,34 +141,6 @@ outbox, the data model, Kubernetes and the release pipeline. The
 [ADRs](https://hikmethankolay.github.io/spring-boot-backend-template/adr/0001-jwt-signing/) record why each major
 choice was made.
 
-## Quick start
-
-You need **JDK 25** (a JRE is not enough) and **Docker or Podman**, or nothing at all: open the repository in
-**GitHub Codespaces** (*Code → Codespaces → Create codespace*) or in VS Code's *Dev Containers*, which run `setup`
-for you, then continue with `scripts/dev.sh`. With only Docker or Podman, run `setup`, then `scripts/docker.sh up`
-instead of `dev`: the image is built in a container.
-
-```bash
-git clone https://github.com/hikmethankolay/spring-boot-backend-template.git
-cd spring-boot-backend-template
-scripts/setup.sh    # checks prerequisites, creates .env with generated secrets, compiles
-scripts/dev.sh      # starts PostgreSQL, Redis and Mailpit, then the app
-scripts/smoke.sh    # in a second terminal: sign up, log in, email preferences, the notes API, log out, delete
-```
-
-On Windows, run the `.bat` versions: `scripts\setup.bat`, `scripts\dev.bat`, `scripts\smoke.bat`.
-
-Then open:
-
-| | |
-|---|---|
-| API | http://localhost:8080/api/v1 |
-| Interactive API docs | http://localhost:8080/swagger-ui.html |
-| Emails the app sent (sign-up links, password resets, security alerts), as HTML, text and raw | http://localhost:8025 |
-
-`setup` prints the password of the owner account `admin` and stores it in `.env`.
-To stop the app, press Ctrl+C and run `scripts/db.sh down`.
-
 ## Scripts
 
 Each script exists as `scripts/<name>.sh` and `scripts\<name>.bat`.
@@ -144,7 +158,7 @@ Each script exists as `scripts/<name>.sh` and `scripts\<name>.bat`.
 | `docs` / `site` | Java reference (Javadoc) / the documentation website |
 | `client` | A TypeScript client for your frontend from the OpenAPI document, or with `--generator` one in another language |
 | `rename-project` | Rename the Maven coordinates, app name and Java package, and point the repository links to your repository |
-| `release` | Release commit for a version (`scripts/release.sh 4.1.0`); after asking, pushes it and starts the release workflow, which tags it |
+| `release` | Release commit for a version (`scripts/release.sh <version>`); after asking, pushes it and starts the release workflow, which tags it |
 
 ## Start your own project
 
@@ -170,13 +184,16 @@ and every public class is documented. See [Using the template](https://hikmethan
 | [API overview](https://hikmethankolay.github.io/spring-boot-backend-template/guides/api/) and [REST API reference](https://hikmethankolay.github.io/spring-boot-backend-template/api/) | Endpoints, errors (RFC 9457), pagination, headers |
 | [Caching](https://hikmethankolay.github.io/spring-boot-backend-template/guides/caching/) and [Observability](https://hikmethankolay.github.io/spring-boot-backend-template/guides/observability/) | Redis cache, metrics, alerts, dashboard, tracing, logs, email outbox |
 | [Production](https://hikmethankolay.github.io/spring-boot-backend-template/guides/production/) | The `prod` profile, Docker and Kubernetes, image verification, the go-live checklist and trade-offs |
+| [Webhooks](https://hikmethankolay.github.io/spring-boot-backend-template/guides/webhooks/) | Registering an endpoint, what a receiver gets, retries and the delivery log, publishing your own events, the SSRF guard |
 | [Java reference](https://hikmethankolay.github.io/spring-boot-backend-template/reference/) and [coverage](https://hikmethankolay.github.io/spring-boot-backend-template/coverage/) | Generated from the code on every release |
 
 The guides live in [`docs/`](docs/src/content/docs) and are published with every `v*` release.
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/CONTRIBUTING.md). Report vulnerabilities privately as described in [SECURITY.md](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/SECURITY.md).
+See [CONTRIBUTING.md](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/CONTRIBUTING.md) and the [Code of Conduct](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/CODE_OF_CONDUCT.md). Report vulnerabilities privately as described in [SECURITY.md](https://github.com/hikmethankolay/spring-boot-backend-template/blob/main/SECURITY.md).
+
+How the code fits together: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
 
