@@ -82,8 +82,13 @@ public class SocialProfileClient {
             if (user == null) {
                 throw new BadCredentialsException("The provider returned no profile.");
             }
-            String subject = String.valueOf(user.get(
-                    registration.getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName()));
+            Object id = user.get(
+                    registration.getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName());
+            // Without it every such profile would map to the one subject "null", and so to one linked account.
+            if (id == null || id.toString().isBlank()) {
+                throw new BadCredentialsException("The provider returned no subject.");
+            }
+            String subject = id.toString();
             return "github".equals(registration.getRegistrationId())
                     ? githubProfile(subject, user, userInfoUri + "/emails", accessToken)
                     : new SocialProfile(

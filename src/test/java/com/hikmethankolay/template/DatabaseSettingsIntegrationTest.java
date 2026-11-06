@@ -34,6 +34,11 @@ class DatabaseSettingsIntegrationTest extends IntegrationTest {
         assertThat(asAppRole("UPDATE audit_events SET action = 'forged'")).isEqualTo("42501");
         assertThat(asAppRole("DELETE FROM audit_events")).isEqualTo("42501");
         assertThat(asAppRole("TRUNCATE audit_events")).isEqualTo("42501");
+        // A temp view named pg_tables, which names the caller as owner, must not let it delete (V12 looked there).
+        assertThat(asAppRole("CREATE TEMP VIEW pg_tables AS SELECT 'public'::name AS schemaname, "
+                        + "'audit_events'::name AS tablename, current_user::name AS tableowner; "
+                        + "DELETE FROM audit_events"))
+                .isEqualTo("42501");
     }
 
     /** Retention runs through purge_audit_events, which works for the app role but keeps the last 90 days. */

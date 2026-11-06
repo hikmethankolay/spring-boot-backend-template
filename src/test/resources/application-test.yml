@@ -11,6 +11,9 @@ app:
     requests-per-minute: 5000
     # The route limits would throttle the suite; RateLimitIntegrationTest sets its own.
     routes: []
+  access-tokens:
+    # The default caps tokens at USER; AccessTokenIntegrationTest also covers administrators' tokens and the cap.
+    max-role: OWNER
   webhooks:
     encryption-key: test-webhook-encryption-key-0123456789abcdef
     # The tests' receiver listens on 127.0.0.1; WebhookAddressPolicyTest checks the production refusal.

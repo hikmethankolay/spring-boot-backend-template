@@ -237,13 +237,20 @@ public class MfaService {
         // The same keys as AuthService, so these failures and failed logins share one limit.
         String accountKey = "account:" + user.getId();
         String ipKey = "ip:" + ClientIp.limitKey(clientIp);
-        if (!loginAttempts.tryAcquire(ipKey, accountKey)) {
+        // Also the per-account cap on wrong codes that login/mfa enforces, so code guesses here count against it.
+        String mfaKey = "mfa:" + user.getId();
+        boolean acquired = loginAttempts.tryAcquire(ipKey, accountKey);
+        if (acquired && !loginAttempts.tryAcquire(mfaKey, loginAttempts.mfaMaxAttempts())) {
+            loginAttempts.giveBack(ipKey, accountKey);
+            acquired = false;
+        }
+        if (!acquired) {
             throw ApiException.tooManyRequests(
                     ProblemType.LOGIN_LOCKED,
                     "Too many failed attempts. Please try again later.",
                     loginAttempts.lockDuration());
         }
-        boolean passwordOk;
+        boolean passwordOk = false;
         boolean codeOk;
         boolean checked = false;
         try {
@@ -255,6 +262,10 @@ public class MfaService {
             if (!checked) {
                 loginAttempts.giveBack(ipKey, accountKey);
             }
+            // A wrong password (or no check at all) is not a wrong code.
+            if (!checked || !passwordOk) {
+                loginAttempts.release(mfaKey);
+            }
         }
         if (!passwordOk) {
             throw ApiException.badRequest(ProblemType.WRONG_PASSWORD, "Current password is incorrect.");
@@ -263,7 +274,34 @@ public class MfaService {
             throw ApiException.badRequest(ProblemType.INVALID_MFA_CODE, "The code is wrong, expired or used.");
         }
         loginAttempts.reset(accountKey);
+        loginAttempts.reset(mfaKey);
         loginAttempts.release(ipKey);
+    }
+
+    /**
+     * Checks both factors for an action that hands out a long-lived credential (such as a personal access token), when
+     * the user has two-factor authentication on. Wrong passwords and codes count like those of the other step-up
+     * routes.
+     *
+     * @param userId          the caller
+     * @param currentPassword the caller's password
+     * @param code            an authenticator code; required when two-factor authentication is on
+     * @return {@code false} if two-factor authentication is off and nothing was checked (check the password instead)
+     * @throws ApiException 400 if the code is missing or a factor is wrong, 429 if failures locked the IP or account
+     */
+    @Transactional
+    public boolean confirmBothFactorsIfEnabled(long userId, String currentPassword, String code) {
+        User user = findUser(userId);
+        if (!user.isTotpEnabled()) {
+            return false;
+        }
+        if (code == null || code.isBlank()) {
+            throw ApiException.badRequest(
+                    ProblemType.INVALID_MFA_CODE, "Two-factor authentication is on: send a code from the app.");
+        }
+        requireBothFactors(
+                user, currentPassword, LoginAttemptService.currentRemoteAddr(), () -> checkTotp(user, normalize(code)));
+        return true;
     }
 
     /** Deletes the user's recovery codes and stores new ones, in the caller's transaction. */

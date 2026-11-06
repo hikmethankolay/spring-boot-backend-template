@@ -284,22 +284,25 @@ public class BroadcastService {
             boolean partial = false;
             try {
                 while (true) {
-                    List<Recipient> batch = jdbc.query(
-                            // The preference comes with the recipient: no query per recipient.
-                            "SELECT u.id, u.email, coalesce(p.enabled, true) FROM users u "
-                                    + "LEFT JOIN email_preferences p ON p.user_id = u.id AND p.category = ?"
-                                    + AUDIENCE_FILTER + " AND u.id > ? ORDER BY u.id LIMIT ?",
-                            (row, i) -> new Recipient(row.getLong(1), row.getString(2), row.getBoolean(3)),
-                            category.key(),
-                            roles,
-                            verifiedOnly,
-                            lastId,
-                            batchSize);
-                    if (batch.isEmpty()) {
-                        break;
-                    }
                     long from = lastId;
-                    Integer sent = newTransaction.execute(status -> {
+                    // The batch is read in the transaction that queues it, and its users are share-locked: an account
+                    // deleted meanwhile either is not read, or its deletion waits for this commit and then removes
+                    // the rows queued here (EmailOutbox.userDeleted). Read outside, a deleted user's mail was kept.
+                    Batch result = newTransaction.execute(status -> {
+                        List<Recipient> batch = jdbc.query(
+                                // The preference comes with the recipient: no query per recipient.
+                                "SELECT u.id, u.email, coalesce(p.enabled, true) FROM users u "
+                                        + "LEFT JOIN email_preferences p ON p.user_id = u.id AND p.category = ?"
+                                        + AUDIENCE_FILTER + " AND u.id > ? ORDER BY u.id LIMIT ? FOR SHARE OF u",
+                                (row, i) -> new Recipient(row.getLong(1), row.getString(2), row.getBoolean(3)),
+                                category.key(),
+                                roles,
+                                verifiedOnly,
+                                from,
+                                batchSize);
+                        if (batch.isEmpty()) {
+                            return new Batch(0, from);
+                        }
                         int count = (int) batch.stream()
                                 .filter(recipient -> outbox.enqueueBroadcast(
                                         id,
@@ -324,14 +327,17 @@ public class BroadcastService {
                             status.setRollbackOnly();
                             return null;
                         }
-                        return count;
+                        return new Batch(count, batch.getLast().id());
                     });
-                    if (sent == null) {
+                    if (result == null) {
                         log.warn("Broadcast {} is being queued by another run; this one stops", id);
                         return;
                     }
-                    queued += sent;
-                    lastId = batch.getLast().id();
+                    if (result.lastUserId() == from) {
+                        break;
+                    }
+                    queued += result.queued();
+                    lastId = result.lastUserId();
                 }
             } catch (RuntimeException ex) {
                 log.error("Broadcast {} stopped after user id {}", id, lastId, ex);
@@ -371,4 +377,7 @@ public class BroadcastService {
     }
 
     private record Recipient(long id, String email, boolean enabled) {}
+
+    /** One queued batch: how many were queued and the last user id read ({@code lastUserId == from} when empty). */
+    private record Batch(int queued, long lastUserId) {}
 }

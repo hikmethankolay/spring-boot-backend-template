@@ -221,7 +221,7 @@ class WebhookUnitsTest {
         WebhookDelivery delivery = new WebhookDelivery(1L, "msg_1", "note.created", "{}");
         ReflectionTestUtils.setField(delivery, "id", 7L);
         WebhookEndpoint endpoint = new WebhookEndpoint(1L, "https://example.com", null, List.of("note.created"));
-        when(deliveries.lockDue(any())).thenReturn(Optional.of(delivery), Optional.empty());
+        when(deliveries.lockDue(any(), any())).thenReturn(Optional.of(delivery), Optional.empty());
         when(deliveries.findById(7L)).thenReturn(Optional.of(delivery));
         when(endpoints.findById(any())).thenReturn(Optional.of(endpoint));
         when(endpoints.lockById(anyLong())).thenReturn(Optional.of(endpoint));

@@ -6,6 +6,7 @@ import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.ProblemType;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.mfa.MfaService;
 import com.hikmethankolay.template.security.TokenService;
 import com.hikmethankolay.template.token.dto.AccessTokenResponse;
 import com.hikmethankolay.template.token.dto.CreateAccessTokenRequest;
@@ -64,6 +65,8 @@ public class AccessTokenService {
 
     private final AccessTokenProperties properties;
 
+    private final MfaService mfa;
+
     /**
      * Creates the service.
      *
@@ -73,6 +76,7 @@ public class AccessTokenService {
      * @param audit          records creation and revocation
      * @param securityMailer tells the user a token was created
      * @param properties     what tokens may do in this deployment
+     * @param mfa            checks the second factor when the user has one
      */
     public AccessTokenService(
             AccessTokenRepository tokens,
@@ -80,13 +84,15 @@ public class AccessTokenService {
             UserService userService,
             AuditLog audit,
             SecurityMailer securityMailer,
-            AccessTokenProperties properties) {
+            AccessTokenProperties properties,
+            MfaService mfa) {
         this.tokens = tokens;
         this.users = users;
         this.userService = userService;
         this.audit = audit;
         this.securityMailer = securityMailer;
         this.properties = properties;
+        this.mfa = mfa;
     }
 
     /**
@@ -129,7 +135,10 @@ public class AccessTokenService {
         }
         // Serializes with a password change and with other creates: the check, count and insert below see its result.
         users.findLockedById(userId);
-        userService.confirmPassword(userId, request.currentPassword());
+        // A token never meets the second factor again, so creating one needs it when the user has one.
+        if (!mfa.confirmBothFactorsIfEnabled(userId, request.currentPassword(), request.code())) {
+            userService.confirmPassword(userId, request.currentPassword());
+        }
         Instant now = Instant.now();
         if (tokens.countByUserIdAndExpiresAtAfter(userId, now) >= properties.maxPerUser()) {
             throw ApiException.conflict(
@@ -181,12 +190,22 @@ public class AccessTokenService {
      */
     @EventListener
     public void revokeAll(SessionsInvalidated event) {
+        revokeAll(event.userId());
+    }
+
+    /**
+     * Deletes every token of a user, for example once two-factor authentication is turned on.
+     *
+     * @param userId the user
+     */
+    @Transactional
+    public void revokeAll(long userId) {
         // The changed user row is written only at commit: lock it now, so a create in flight finishes first and its
         // token is deleted below, or starts after the change and sees it.
-        users.findLockedById(event.userId());
-        int revoked = tokens.deleteAllByUserId(event.userId());
+        users.findLockedById(userId);
+        int revoked = tokens.deleteAllByUserId(userId);
         if (revoked > 0) {
-            audit.record(AuditEvent.ACCESS_TOKENS_REVOKED, event.userId(), "accessTokens", revoked);
+            audit.record(AuditEvent.ACCESS_TOKENS_REVOKED, userId, "accessTokens", revoked);
         }
     }
 

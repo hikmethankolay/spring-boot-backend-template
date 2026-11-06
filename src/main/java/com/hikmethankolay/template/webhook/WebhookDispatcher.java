@@ -9,8 +9,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -131,12 +133,20 @@ public class WebhookDispatcher {
     public int deliverDue(Instant now) {
         int handled = 0;
         Instant started = Instant.now();
+        // Owners sent to in this round. Each round sends at most one delivery per owner, so one owner's backlog or
+        // slow receiver delays the others by one send per round, not by its whole queue. -1 is no user's id.
+        Set<Long> served = new HashSet<>(Set.of(-1L));
         while (handled < BATCH_SIZE) {
             // A batch of slow sends takes minutes: lease and back off from the current time, not the batch's start.
             Instant claimedAt = now.plus(Duration.between(started, Instant.now()));
-            Optional<Attempt> attempt = transaction.execute(status -> claim(claimedAt));
+            Optional<Attempt> attempt = transaction.execute(status -> claim(claimedAt, served));
             if (attempt == null || attempt.isEmpty()) {
-                break;
+                if (served.size() == 1) {
+                    break;
+                }
+                // Round over: every owner with something due got a turn; start the next round.
+                served.retainAll(Set.of(-1L));
+                continue;
             }
             handled++;
             Attempt claimed = attempt.get();
@@ -161,17 +171,29 @@ public class WebhookDispatcher {
         }
     }
 
-    private Optional<Attempt> claim(Instant now) {
-        Optional<WebhookDelivery> due = deliveries.lockDue(now);
+    private Optional<Attempt> claim(Instant now, Set<Long> served) {
+        Optional<WebhookDelivery> due = deliveries.lockDue(now, served);
         if (due.isEmpty()) {
             return Optional.empty();
         }
         WebhookDelivery delivery = due.get();
         WebhookEndpoint endpoint = endpoints.findById(delivery.getEndpointId()).orElse(null);
+        if (endpoint != null) {
+            served.add(endpoint.getUserId());
+        }
         User owner =
                 endpoint == null ? null : users.findById(endpoint.getUserId()).orElse(null);
         if (endpoint == null || !endpoint.isEnabled() || owner == null || owner.getSuspendedAt() != null) {
             delivery.markFailed(null, "The endpoint is turned off or its owner suspended", now);
+            count("skipped");
+            return Optional.of(Attempt.skipped(delivery.getId()));
+        }
+        // Application-wide events were queued for the owner's role at the time; an owner demoted since gets no more.
+        boolean adminEvent = WebhookEventType.of(delivery.getEventType())
+                .map(type -> type.audience() != WebhookEventType.Audience.OWNER)
+                .orElse(false);
+        if (adminEvent && owner.getRole().compareTo(properties.adminEventsMinRole()) < 0) {
+            delivery.markFailed(null, "The endpoint's owner no longer has the role for application-wide events", now);
             count("skipped");
             return Optional.of(Attempt.skipped(delivery.getId()));
         }

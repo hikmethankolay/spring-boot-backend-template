@@ -67,6 +67,8 @@ public class SecurityMailer {
      * @param ip     the client address, or {@code null} if unknown
      */
     public void newLogin(String to, String device, String ip) {
+        // The device comes from the client's User-Agent: keep it to one short line of plain words, so it cannot
+        // carry a link or instructions into a genuine security email.
         if (newLoginEnabled) {
             send(
                     "new-login",
@@ -74,7 +76,7 @@ public class SecurityMailer {
                     "New sign-in to your account",
                     "Your account was signed in to from a device it has not used recently.",
                     "Device",
-                    device,
+                    plainDevice(device),
                     "IP address",
                     ip == null ? "unknown" : ip);
         }
@@ -244,5 +246,26 @@ public class SecurityMailer {
                         subject,
                         Map.of("message", message, "details", facts, "sessionsUrl", sessionsUrl)));
         meterRegistry.counter("mail.security.alerts", "alert", alert).increment();
+    }
+
+    /**
+     * Reduces a User-Agent derived device name to letters, digits, spaces and {@code ./()-}, without links, at most
+     * 60 characters.
+     *
+     * @param device the device name, or {@code null}
+     * @return the plain device name, or {@code unknown}
+     */
+    static String plainDevice(String device) {
+        if (device == null) {
+            return "unknown";
+        }
+        String plain = device.replaceAll("(?i)(https?:|www\\.)\\S*", " ")
+                .replaceAll("[^\\p{L}\\p{N} ./()-]", " ")
+                .replaceAll("\\s+", " ")
+                .strip();
+        if (plain.isEmpty()) {
+            return "unknown";
+        }
+        return plain.length() <= 60 ? plain : plain.substring(0, 60);
     }
 }

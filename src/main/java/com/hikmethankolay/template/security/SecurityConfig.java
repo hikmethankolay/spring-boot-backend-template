@@ -305,6 +305,8 @@ public class SecurityConfig {
         // which would reject every access token (typ "at+jwt", RFC 9068).
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(),
+                // JwtTimestampValidator accepts a token without exp; every access token has one.
+                new JwtClaimValidator<Object>(JwtClaimNames.EXP, exp -> exp != null),
                 new JwtIssuerValidator(properties.jwt().issuer()),
                 new JwtTypeValidator(TokenService.ACCESS_TOKEN_TYPE, "application/" + TokenService.ACCESS_TOKEN_TYPE),
                 new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience)),

@@ -1,0 +1,10 @@
+The account "[(${username})]" asked to use this address as its sign-in
+and recovery address. Confirm only if that is your account:
+
+[(${link})]
+
+The link expires in [(${ttl})]. If this is not your account, ignore
+this email and the address will not be added to it.
+
+--
+[(${appName})]

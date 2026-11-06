@@ -1,5 +1,6 @@
 package com.hikmethankolay.template.mfa;
 
+import com.hikmethankolay.template.auth.RefreshTokenService;
 import com.hikmethankolay.template.common.ApiDocs;
 import com.hikmethankolay.template.mfa.dto.ConfirmTotpRequest;
 import com.hikmethankolay.template.mfa.dto.DisableTotpRequest;
@@ -7,6 +8,7 @@ import com.hikmethankolay.template.mfa.dto.RecoveryCodesResponse;
 import com.hikmethankolay.template.mfa.dto.RegenerateRecoveryCodesRequest;
 import com.hikmethankolay.template.mfa.dto.TotpEnrollmentResponse;
 import com.hikmethankolay.template.security.TokenService;
+import com.hikmethankolay.template.token.AccessTokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -46,13 +48,21 @@ public class MfaController {
 
     private final MfaService mfaService;
 
+    private final RefreshTokenService refreshTokens;
+
+    private final AccessTokenService accessTokens;
+
     /**
      * Creates the controller.
      *
-     * @param mfaService two-factor authentication logic
+     * @param mfaService    two-factor authentication logic
+     * @param refreshTokens ends the caller's other sessions once two-factor authentication is on
+     * @param accessTokens  revokes personal access tokens once two-factor authentication is on
      */
-    public MfaController(MfaService mfaService) {
+    public MfaController(MfaService mfaService, RefreshTokenService refreshTokens, AccessTokenService accessTokens) {
         this.mfaService = mfaService;
+        this.refreshTokens = refreshTokens;
+        this.accessTokens = accessTokens;
     }
 
     /**
@@ -112,7 +122,12 @@ public class MfaController {
             content = @Content(mediaType = ApiDocs.PROBLEM_JSON, schema = @Schema(ref = ApiDocs.PROBLEM_SCHEMA)))
     public RecoveryCodesResponse confirm(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ConfirmTotpRequest request) {
-        return mfaService.confirm(TokenService.userId(jwt), request.currentPassword(), request.code());
+        long userId = TokenService.userId(jwt);
+        RecoveryCodesResponse codes = mfaService.confirm(userId, request.currentPassword(), request.code());
+        // Sessions and tokens made with the password alone would otherwise keep working around the new factor.
+        refreshTokens.revokeOthers(userId, TokenService.sessionId(jwt));
+        accessTokens.revokeAll(userId);
+        return codes;
     }
 
     /**

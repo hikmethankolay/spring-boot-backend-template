@@ -254,6 +254,69 @@ class MfaIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void turningTwoFactorOnEndsOtherSessionsAndTokensAndTokensThenNeedACode() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        String otherSession = login(username, PASSWORD);
+        String pat = JsonPath.read(
+                mockMvc.perform(createToken(token, null))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString(),
+                "$.token");
+
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        confirm(token, Totp.code(secret, step));
+
+        // Credentials made with the password alone stop working; the session that turned it on goes on.
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(otherSession))).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(pat))).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token))).andExpect(status().isOk());
+        // A new token now needs a code from the app as well as the password.
+        mockMvc.perform(createToken(token, null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:problem:invalid-mfa-code"));
+        mockMvc.perform(createToken(token, Totp.code(secret, step + 1))).andExpect(status().isCreated());
+    }
+
+    private static MockHttpServletRequestBuilder createToken(String token, String code) {
+        return post("/api/v1/users/me/access-tokens")
+                .with(bearer(token))
+                .with(fromIp("10.0.12.1"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(code == null ? json("""
+                                {"name":"script","scope":"READ","expiresInDays":30,"currentPassword":"%s"}""", PASSWORD) : json("""
+                                {"name":"script","scope":"READ","expiresInDays":30,"currentPassword":"%s","code":"%s"}""", PASSWORD, code));
+    }
+
+    @Test
+    void codeGuessesAtLoginAlsoBlockTheStepUpRoutes() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndLogin(username);
+        byte[] secret = enroll(token);
+        long step = Totp.step(Instant.now().getEpochSecond());
+        confirm(token, Totp.code(secret, step));
+        String challenge = passwordStep(username, "10.0.11.1");
+        String wrong = wrongCode(secret, step);
+        // Use up the per-account code limit (4 in the test profile) at login, each from a new IP.
+        for (int attempt = 0; attempt < 4; attempt++) {
+            mockMvc.perform(mfaLogin(challenge, wrong, "10.0.11." + (10 + attempt)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // The step-up routes share that limit: a fresh IP with the right code is still refused.
+        mockMvc.perform(disable(token, PASSWORD, Totp.code(secret, step + 1), "10.0.11.30"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("urn:problem:login-locked"));
+        mockMvc.perform(regenerate(token, PASSWORD, Totp.code(secret, step + 1), "10.0.11.31"))
+                .andExpect(status().isTooManyRequests());
+        mockMvc.perform(get("/api/v1/users/me").with(bearer(token)))
+                .andExpect(jsonPath("$.mfaEnabled").value(true));
+    }
+
+    @Test
     void guessingTheCodeToTurnTwoFactorOffRunsIntoTheLockout() throws Exception {
         String token = registerAndLogin(uniqueUsername());
         byte[] secret = enroll(token);

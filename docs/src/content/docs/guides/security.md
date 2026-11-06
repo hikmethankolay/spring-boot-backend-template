@@ -92,7 +92,9 @@ curl -s localhost:8080/api/v1/notes -H "Authorization: Bearer pat_…"
 - **Format and storage.** `pat_` plus 43 random characters (256 bits). Only its SHA-256 is stored, like refresh
   tokens; the prefix lets secret scanners spot a leaked one.
 - **What it acts as.** The token's user with their *current* role, read from the database on every request, capped by
-  `ACCESS_TOKENS_MAX_ROLE`; so an owner's token can call the owner endpoints unless the deployment lowers the cap. A
+  `ACCESS_TOKENS_MAX_ROLE` (default `USER`), so administrator and owner endpoints stay with interactive logins unless
+  the deployment raises the cap. Creating a token needs the password and, when two-factor authentication is on, a
+  code from the app; turning two-factor authentication on revokes every token. A
   `READ` token may only send `GET`, `HEAD` and `OPTIONS`; `ACCESS_TOKENS_ALLOW_WRITE=false` makes every token
   read-only.
 - **What it can never do.** Account self-service under `/api/v1/users/me/**` (password, two-factor, sessions, linked

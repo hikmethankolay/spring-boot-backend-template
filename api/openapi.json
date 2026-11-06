@@ -6496,6 +6496,13 @@
       "CreateAccessTokenRequest" : {
         "type" : "object",
         "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "Required when two-factor authentication is on",
+            "example" : "123456",
+            "maxLength" : 20,
+            "minLength" : 0
+          },
           "currentPassword" : {
             "type" : "string",
             "format" : "password",

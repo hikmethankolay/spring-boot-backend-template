@@ -334,7 +334,7 @@ class AccountIntegrationTest extends IntegrationTest {
         String resetToken = CapturingMailSender.token(latestMail(username, "Reset your password"));
         String newAddress = "moved-" + username + "@example.com";
         changeEmail(token, newAddress);
-        String verificationToken = CapturingMailSender.token(mail.latest(newAddress, "Confirm your email")
+        String verificationToken = CapturingMailSender.token(mail.latest(newAddress, CHANGE_MAIL)
                 .orElseThrow(() -> new AssertionError("No verification email for " + newAddress)));
 
         postJson("/api/v1/auth/verify-email", json("""
@@ -357,7 +357,7 @@ class AccountIntegrationTest extends IntegrationTest {
 
         // Same answer as for a free address; the conflict only shows to whoever opens the link sent to it.
         changeEmail(token, takenAddress);
-        String link = CapturingMailSender.token(mail.latest(takenAddress, "Confirm your email")
+        String link = CapturingMailSender.token(mail.latest(takenAddress, CHANGE_MAIL)
                 .orElseThrow(() -> new AssertionError("No verification email for " + takenAddress)));
         mockMvc.perform(post("/api/v1/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -451,12 +451,12 @@ class AccountIntegrationTest extends IntegrationTest {
         String token = registerAndLogin(username);
         String newAddress = "moved-" + username + "@example.com";
         changeEmail(token, newAddress);
-        SimpleMailMessage first = mail.latest(newAddress, "Confirm your email").orElseThrow();
+        SimpleMailMessage first = mail.latest(newAddress, CHANGE_MAIL).orElseThrow();
 
         // Within the cooldown nothing is sent.
         postJson("/api/v1/auth/verify-email/resend", json("""
                 {"email":"%s"}""", newAddress), 202);
-        assertThat(mail.latest(newAddress, "Confirm your email")).containsSame(first);
+        assertThat(mail.latest(newAddress, CHANGE_MAIL)).containsSame(first);
         // After it, a new link replaces the lost one.
         jdbc.update(
                 "UPDATE account_tokens SET created_at = now() - interval '2 minutes' "
@@ -464,7 +464,7 @@ class AccountIntegrationTest extends IntegrationTest {
                 username);
         postJson("/api/v1/auth/verify-email/resend", json("""
                 {"email":"%s"}""", newAddress), 202);
-        SimpleMailMessage second = mail.latest(newAddress, "Confirm your email").orElseThrow();
+        SimpleMailMessage second = mail.latest(newAddress, CHANGE_MAIL).orElseThrow();
         assertThat(second).isNotSameAs(first);
         postJson("/api/v1/auth/verify-email", json("""
                 {"token":"%s"}""", CapturingMailSender.token(first)), 400);
@@ -482,8 +482,7 @@ class AccountIntegrationTest extends IntegrationTest {
         String token = registerAndLogin(username);
         String theirs = "taken-over-" + username + "@example.com";
         changeEmail(token, theirs);
-        String link = CapturingMailSender.token(
-                mail.latest(theirs, "Confirm your email").orElseThrow());
+        String link = CapturingMailSender.token(mail.latest(theirs, CHANGE_MAIL).orElseThrow());
 
         // ...and the owner changes the password, which ends every session.
         mockMvc.perform(put("/api/v1/users/me/password")
@@ -506,8 +505,8 @@ class AccountIntegrationTest extends IntegrationTest {
         String username = uniqueUsername();
         String token = registerAndLogin(username);
         changeEmail(token, "moved-" + username + "@example.com");
-        String link = CapturingMailSender.token(mail.latest("moved-" + username + "@example.com", "Confirm your email")
-                .orElseThrow());
+        String link = CapturingMailSender.token(
+                mail.latest("moved-" + username + "@example.com", CHANGE_MAIL).orElseThrow());
 
         mockMvc.perform(patch("/api/v1/users/me")
                         .with(bearer(token))
@@ -550,9 +549,8 @@ class AccountIntegrationTest extends IntegrationTest {
                 {"email":"%s@example.com"}""", username), 202);
         String resetToken = CapturingMailSender.token(latestMail(username, "Reset your password"));
         changeEmail(token, "moved-" + username + "@example.com");
-        String firstLink =
-                CapturingMailSender.token(mail.latest("moved-" + username + "@example.com", "Confirm your email")
-                        .orElseThrow());
+        String firstLink = CapturingMailSender.token(
+                mail.latest("moved-" + username + "@example.com", CHANGE_MAIL).orElseThrow());
 
         // A newer change replaces the link of the first.
         changeEmail(token, "moved-again-" + username + "@example.com");

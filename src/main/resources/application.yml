@@ -213,6 +213,13 @@ app:
       - path: /api/v1/mail/unsubscribe/**
         requests: 60
         window: 1m
+      # Each social login calls the provider twice; a resend mails an address that may not be the caller's.
+      - path: /api/v1/auth/oauth2/**
+        requests: 30
+        window: 1m
+      - path: /api/v1/auth/verify-email/resend
+        requests: 5
+        window: 1h
       # Sending a broadcast checks the owner's password; this keeps a stolen token from guessing it.
       - path: /api/v1/admin/mail/broadcasts/**
         requests: 30
@@ -223,7 +230,7 @@ app:
     enabled: ${ACCESS_TOKENS_ENABLED:true}
     # The highest role a token acts with (USER, ADMIN or OWNER). A token acts with its user's current role, capped
     # here: USER keeps the administrator and owner endpoints for interactive logins.
-    max-role: ${ACCESS_TOKENS_MAX_ROLE:OWNER}
+    max-role: ${ACCESS_TOKENS_MAX_ROLE:USER}
     # false makes every token read-only (GET, HEAD, OPTIONS), whatever scope it was created with.
     allow-write-scope: ${ACCESS_TOKENS_ALLOW_WRITE:true}
     max-lifetime: ${ACCESS_TOKENS_MAX_LIFETIME:365d}
