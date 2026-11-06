@@ -49,11 +49,11 @@ public class SocialProfileClient {
         // Spring Security's default token client setup, plus the timeouts.
         tokens.setRestClient(RestClient.builder()
                 .requestFactory(requestFactory)
-                .messageConverters(converters -> {
+                .configureMessageConverters(builder -> builder.configureMessageConvertersList(converters -> {
                     converters.clear();
                     converters.add(new FormHttpMessageConverter());
                     converters.add(new OAuth2AccessTokenResponseHttpMessageConverter());
-                })
+                }))
                 .defaultStatusHandler(new OAuth2ErrorResponseErrorHandler())
                 .build());
         this.json = RestClient.builder().requestFactory(requestFactory).build();
