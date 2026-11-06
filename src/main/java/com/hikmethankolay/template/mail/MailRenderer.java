@@ -7,8 +7,8 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
-import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
+import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
@@ -29,7 +29,8 @@ import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 @Component
 public class MailRenderer {
 
-    private final TemplateEngine engine = new TemplateEngine();
+    // The Spring engine evaluates expressions with SpEL; OGNL is not on the classpath (see pom.xml).
+    private final SpringTemplateEngine engine = new SpringTemplateEngine();
 
     private final String appName;
 

@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout.html :: layout(~{::content})}">
+<body>
+<th:block th:fragment="content">
+    <p>The account <strong th:text="${username}">jane</strong> asked to use this address as its sign-in and
+        recovery address. Confirm only if that is your account.</p>
+    <th:block th:replace="~{button.html :: button(${link}, 'Use this address for my account')}"></th:block>
+    <p>The link expires in <span th:text="${ttl}">24 hours</span>. If this is not your account, ignore this email and
+        the address will not be added to it.</p>
+</th:block>
+</body>
+</html>

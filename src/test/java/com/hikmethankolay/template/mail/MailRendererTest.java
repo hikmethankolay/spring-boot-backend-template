@@ -56,6 +56,19 @@ class MailRendererTest {
     }
 
     @Test
+    void anEmailChangeConfirmationNamesTheAccount() {
+        RenderedMail mail = renderer.render(
+                "confirm-email-change",
+                "Use this address?",
+                Map.of("link", LINK, "ttl", "24 hours", "username", "<eve>"));
+
+        // The recipient must see which account their address is being attached to, escaped in HTML.
+        assertThat(mail.html()).contains("&lt;eve&gt;", "href=\"" + LINK + "\"", "24 hours");
+        assertThat(mail.text()).contains("\"<eve>\"", LINK, "24 hours").doesNotContain("[(");
+        assertThat(mail.text().lines()).allSatisfy(line -> assertThat(line).hasSizeLessThan(78));
+    }
+
+    @Test
     void valuesAreEscapedInHtml() {
         RenderedMail mail = renderer.render(
                 "verify-email", "<b>Hi</b>", Map.of("link", "https://x.test/?a=<script>", "ttl", "<i>1</i>"));

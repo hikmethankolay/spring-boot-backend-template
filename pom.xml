@@ -29,6 +29,9 @@
         <archunit.version>1.5.1</archunit.version>
         <!-- Argon2PasswordEncoder needs BouncyCastle; Spring Boot does not manage its version. -->
         <bouncycastle.version>1.86</bouncycastle.version>
+        <!-- Boot 4.1.2 manages 1.62.0, which parses tracestate headers in quadratic time (GHSA-ccrj-gw8r-854m).
+             Drop this override once the Boot parent manages 1.67.0 or later. -->
+        <opentelemetry.version>1.67.0</opentelemetry.version>
         <!-- 1.5.x uses Jackson 2, which springdoc already brings; validates responses against api/openapi.json. -->
         <json-schema-validator.version>3.0.8</json-schema-validator.version>
         <error-prone.version>2.51.0</error-prone.version>
@@ -88,10 +91,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
-        <!-- Email templates. Thymeleaf core only: the starter would also register a web view resolver. -->
+        <!-- Email templates. Thymeleaf without the starter, which would also register a web view resolver. The Spring
+             integration evaluates expressions with SpEL, so OGNL (GHSA-crwc-vw2r-qr6m in 3.3.4, the only line
+             Thymeleaf 3.1 supports) is left out entirely. -->
+        <dependency>
+            <groupId>org.thymeleaf</groupId>
+            <artifactId>thymeleaf-spring6</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.thymeleaf</groupId>
             <artifactId>thymeleaf</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>ognl</groupId>
+                    <artifactId>ognl</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

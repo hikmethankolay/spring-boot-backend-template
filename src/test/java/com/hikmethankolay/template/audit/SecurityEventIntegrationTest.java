@@ -69,16 +69,19 @@ class SecurityEventIntegrationTest extends IntegrationTest {
         String username = uniqueUsername();
         long id = register(username);
         String token = login(username, PASSWORD);
-        String insert = "INSERT INTO audit_events (action, user_id, actor_id) VALUES (?, ?, ?)";
-        jdbc.update(insert, "admin.user_updated", id, "999999");
-        jdbc.update(insert, "user.password_changed", id, String.valueOf(id));
+        String insert = "INSERT INTO audit_events (action, user_id, actor_id, client_ip) VALUES (?, ?, ?, ?)";
+        jdbc.update(insert, "admin.user_updated", id, "999999", "198.51.100.9");
+        jdbc.update(insert, "user.password_changed", id, String.valueOf(id), "203.0.113.5");
 
         mockMvc.perform(get("/api/v1/users/me/security-events").with(bearer(token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].event").value("user.password_changed"))
                 .andExpect(jsonPath("$.content[0].actorId").value(String.valueOf(id)))
+                .andExpect(jsonPath("$.content[0].clientIp").value("203.0.113.5"))
                 .andExpect(jsonPath("$.content[1].event").value("admin.user_updated"))
-                .andExpect(jsonPath("$.content[1].actorId").value(SecurityEvents.OTHER_ACTOR));
+                .andExpect(jsonPath("$.content[1].actorId").value(SecurityEvents.OTHER_ACTOR))
+                // The administrator's address is theirs, not the user's.
+                .andExpect(jsonPath("$.content[1].clientIp").doesNotExist());
     }
 
     @Test

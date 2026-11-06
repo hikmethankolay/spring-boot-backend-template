@@ -9,10 +9,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hikmethankolay.template.IntegrationTest;
 import com.hikmethankolay.template.TestMailConfiguration.CapturingMailSender;
 import com.jayway.jsonpath.JsonPath;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -44,6 +47,9 @@ class BroadcastIntegrationTest extends IntegrationTest {
 
     @Autowired
     private TransactionTemplate transaction;
+
+    @Autowired
+    private DataSource dataSource;
 
     private static MockHttpServletRequestBuilder broadcast(
             String path, String token, String category, String password) {
@@ -100,6 +106,39 @@ class BroadcastIntegrationTest extends IntegrationTest {
         assertThat(queuedTo(id, after + "@example.com")).isOne();
         assertThat(jdbc.queryForObject("SELECT queued FROM mail_broadcasts WHERE id = ?", Integer.class, id))
                 .isEqualTo(pending(id));
+    }
+
+    @Test
+    void anAccountDeletedWhileItsBatchIsReadGetsNoBroadcast() throws Exception {
+        String before = uniqueUsername();
+        long beforeId = register(before);
+        String victim = uniqueUsername();
+        long victimId = register(victim);
+        long id = jdbc.queryForObject("""
+                INSERT INTO mail_broadcasts (category, subject, title, body, roles, verified_only, created_at,
+                    last_user_id, progress_at)
+                VALUES ('product-updates', 'Deleted test', 'Deleted', 'Body', 'USER', FALSE,
+                    now() - interval '10 minutes', ?, now() - interval '10 minutes')
+                RETURNING id""", Long.class, beforeId);
+
+        // The account deletion is underway (row locked, not yet committed) when the batch is read.
+        try (Connection deleting = dataSource.getConnection()) {
+            deleting.setAutoCommit(false);
+            try (Statement statement = deleting.createStatement()) {
+                statement.executeUpdate("DELETE FROM users WHERE id = " + victimId);
+            }
+            broadcasts.resumeStalled();
+            Thread.sleep(500);
+            // The batch read waits for the deletion instead of queuing mail for a row that is about to go.
+            assertThat(finishedAt(id)).isNull();
+            deleting.commit();
+        }
+
+        for (int wait = 0; wait < 200 && finishedAt(id) == null; wait++) {
+            Thread.sleep(50);
+        }
+        assertThat(finishedAt(id)).isNotNull();
+        assertThat(queuedTo(id, victim + "@example.com")).isZero();
     }
 
     @Test

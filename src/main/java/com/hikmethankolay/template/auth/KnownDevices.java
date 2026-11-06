@@ -4,6 +4,7 @@ import com.hikmethankolay.template.common.ClientIp;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.config.AppProperties;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.user.SessionsInvalidated;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -142,6 +144,17 @@ public class KnownDevices {
                     jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, userId), device, ip);
         }
         return token;
+    }
+
+    /**
+     * Forgets a user's devices when their sessions end (password change or reset, suspension), so a device an
+     * attacker used before the account was recovered does not stay trusted and silence the next new-login alert.
+     *
+     * @param event identifies the user
+     */
+    @EventListener
+    public void forgetDevices(SessionsInvalidated event) {
+        jdbc.update("DELETE" + " FROM known_devices WHERE user_id = ?", event.userId());
     }
 
     /**

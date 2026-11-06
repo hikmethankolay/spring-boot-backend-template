@@ -61,6 +61,28 @@ public class AccountMailer {
     }
 
     /**
+     * Sends the link that confirms a new address for an account. Unlike {@link #sendEmailVerification}, it names the
+     * account: the recipient is attaching their address to it, not just proving they own the address.
+     *
+     * @param to       the new address
+     * @param username the account asking for the change
+     * @param token    the raw email change token
+     * @param ttl      how long the link is valid
+     * @param deferred leave the sending to the outbox poller, for anonymous requests
+     */
+    public void sendEmailChangeConfirmation(String to, String username, String token, Duration ttl, boolean deferred) {
+        RenderedMail mail = renderer.render(
+                "confirm-email-change",
+                "Use this address for the account " + username + "?",
+                Map.of("link", link("/verify-email", token), "ttl", humanize(ttl), "username", username));
+        if (deferred) {
+            outbox.enqueueDeferred(to, mail);
+        } else {
+            outbox.enqueue(to, mail);
+        }
+    }
+
+    /**
      * Sends the password reset link. Deferred to the outbox poller: an anonymous request triggers it, only for
      * addresses with an account (see {@link EmailOutbox#enqueueDeferred}).
      *

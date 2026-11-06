@@ -154,7 +154,15 @@ GRANT USAGE ON SCHEMA public TO app;
 ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
 ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app;
+-- Functions (such as the audit purge) run only for the roles granted them, not for every role.
+ALTER DEFAULT PRIVILEGES FOR ROLE app_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO app;
+-- No temporary tables or views: they are searched before the system catalog, which functions could be tricked by.
+REVOKE TEMPORARY ON DATABASE app FROM PUBLIC;
 ```
+
+On a database that already has the audit purge function, also run
+`REVOKE EXECUTE ON FUNCTION purge_audit_events(timestamptz) FROM PUBLIC; GRANT EXECUTE ON FUNCTION purge_audit_events(timestamptz) TO app;`.
 
 For an existing database migrated by `app` itself, transfer the tables to `app_owner` first
 (`REASSIGN OWNED BY app TO app_owner;`, run as a superuser), then grant as above.

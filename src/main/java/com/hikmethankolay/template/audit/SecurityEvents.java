@@ -81,7 +81,8 @@ public class SecurityEvents {
     }
 
     /**
-     * Maps rows about one user; an actor other than the user is shown as {@value #OTHER_ACTOR}, never by id.
+     * Maps rows about one user; an actor other than the user is shown as {@value #OTHER_ACTOR}, never by id,
+     * and that actor's client address is left out (it is the administrator's, not the user's).
      *
      * @param userId the user the events are about
      * @return the row mapper
@@ -90,11 +91,12 @@ public class SecurityEvents {
         String self = String.valueOf(userId);
         return (ResultSet row, int rowNumber) -> {
             String actor = row.getString("actor_id");
+            boolean foreign = actor != null && !actor.equals(self);
             return new SecurityEventResponse(
                     row.getTimestamp("occurred_at").toInstant(),
                     row.getString("action"),
-                    actor == null || actor.equals(self) ? actor : OTHER_ACTOR,
-                    row.getString("client_ip"));
+                    foreign ? OTHER_ACTOR : actor,
+                    foreign ? null : row.getString("client_ip"));
         };
     }
 }

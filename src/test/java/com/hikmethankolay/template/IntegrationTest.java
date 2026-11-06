@@ -79,10 +79,14 @@ public abstract class IntegrationTest {
                 .orElseThrow(() -> new AssertionError("No sign-up email for " + address)));
     }
 
-    /** Opens the newest "Confirm your email" link sent to an address. */
+    /** Subject start of the mail that confirms a new address for an existing account. */
+    protected static final String CHANGE_MAIL = "Use this address for the account";
+
+    /** Opens the newest "Confirm your email" link, or email change confirmation, sent to an address. */
     protected void confirmEmail(String address) throws Exception {
         String token = CapturingMailSender.token(signUpMail
                 .latest(address, "Confirm your email")
+                .or(() -> signUpMail.latest(address, CHANGE_MAIL))
                 .orElseThrow(() -> new AssertionError("No verification email for " + address)));
         mockMvc.perform(post("/api/v1/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)

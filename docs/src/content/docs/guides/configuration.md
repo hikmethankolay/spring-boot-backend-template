@@ -38,7 +38,7 @@ protection turned off (see [Production](../production/#the-prod-profile)).
 | `MFA_ENCRYPTION_KEY` | *(required; `setup` fills it in)* | Encrypts two-factor secrets in the database and signs unsubscribe links, each key at least 32 characters; comma-separated, the first encrypts ([key rotation](../security/#rotating-mfa_encryption_key)). Dropping a key breaks what it encrypted and signed |
 | `MFA_CHALLENGE_TTL` | `5m` | Time to enter the authenticator code after the password |
 | `ACCESS_TOKENS_ENABLED` | `true` | [Personal access tokens](../security/#personal-access-tokens); `false` rejects every token and the endpoints that create them |
-| `ACCESS_TOKENS_MAX_ROLE` | `OWNER` | Highest role a token acts with (`USER`, `ADMIN`, `OWNER`); `USER` keeps administrator and owner endpoints for interactive logins |
+| `ACCESS_TOKENS_MAX_ROLE` | `USER` | Highest role a token acts with (`USER`, `ADMIN`, `OWNER`); `USER` keeps administrator and owner endpoints for interactive logins |
 | `ACCESS_TOKENS_ALLOW_WRITE` | `true` | `false` makes every token read-only (`GET`, `HEAD`, `OPTIONS`), whatever its scope |
 | `ACCESS_TOKENS_MAX_LIFETIME` / `ACCESS_TOKENS_MAX_PER_USER` | `365d` / `20` | Longest lifetime a token may be created with (at least `1d`) / unexpired tokens per user |
 | `WEBHOOK_ENCRYPTION_KEY` | *(required while webhooks are on; `setup` fills it in)* | Encrypts webhook signing secrets in the database, each key at least 32 characters and separate from `MFA_ENCRYPTION_KEY`; comma-separated, the first encrypts. An endpoint whose key is dropped is turned off until its secret is rotated |

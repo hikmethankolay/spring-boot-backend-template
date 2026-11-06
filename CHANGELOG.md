@@ -6,6 +6,35 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Security
+
+- Webhook deliveries are claimed round-robin by owner, so one user's backlog or slow receiver no longer delays every
+  other user's deliveries.
+- Email-change confirmations use their own mail, which names the account the address is being added to.
+- Turning off two-factor authentication and regenerating recovery codes count wrong codes against the same per-account
+  limit as `POST /api/v1/auth/login/mfa`.
+- The security-event feed and the data export no longer show the client address of an administrator who acted on the
+  user.
+- Migration V23: the `audit_events` append-only trigger reads the table owner from `pg_catalog` with a fixed search
+  path, so a temporary `pg_tables` view cannot unlock deletes.
+- Broadcast recipients are read and share-locked in the transaction that queues them, so an account deleted meanwhile
+  gets no broadcast.
+- OpenTelemetry 1.67.0 (GHSA-ccrj-gw8r-854m). Mail templates use Thymeleaf's Spring integration (SpEL), so OGNL
+  (GHSA-crwc-vw2r-qr6m) is no longer a dependency.
+- Turning on two-factor authentication ends the user's other sessions and revokes their personal access tokens;
+  creating a token then needs a code from the app (new optional `code` field).
+- Access tokens must carry `exp`; a social profile without a subject is refused; known devices are forgotten when
+  sessions are invalidated; application-wide webhook events stop for an owner demoted below the required role; the
+  new-login alert reduces the device name to plain words.
+- New rate limits for `/api/v1/auth/oauth2/**` and `/api/v1/auth/verify-email/resend`; the Redoc page loads its
+  script with Subresource Integrity; the Production guide revokes `TEMPORARY` and default function `EXECUTE` from
+  `PUBLIC`.
+
+### Changed
+
+- `ACCESS_TOKENS_MAX_ROLE` defaults to `USER` (was `OWNER`). Set it to `ADMIN` or `OWNER` to let tokens use
+  administrator endpoints.
+
 ## [5.1.1] - 2026-11-03
 
 ### Added

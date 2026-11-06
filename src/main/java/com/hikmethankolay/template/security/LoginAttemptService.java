@@ -215,7 +215,7 @@ public class LoginAttemptService {
      *
      * @return {@code getRemoteAddr()} of the current request, or {@code "none"} outside a request
      */
-    private static String currentRemoteAddr() {
+    public static String currentRemoteAddr() {
         return RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
                 ? attributes.getRequest().getRemoteAddr()
                 : "none";

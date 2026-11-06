@@ -324,8 +324,13 @@ public class AccountService {
      */
     private void sendEmailChangeLink(User user, boolean deferred) {
         Duration ttl = properties.verificationTokenTtl();
-        mailer.sendEmailVerification(
-                user.getPendingEmail(), issue(user.getId(), AccountTokenType.EMAIL_CHANGE, ttl), ttl, deferred);
+        // Names the account, so the owner of the new address knows what they are attaching it to.
+        mailer.sendEmailChangeConfirmation(
+                user.getPendingEmail(),
+                user.getUsername(),
+                issue(user.getId(), AccountTokenType.EMAIL_CHANGE, ttl),
+                ttl,
+                deferred);
     }
 
     /**

@@ -153,6 +153,29 @@ class WebhookIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void oneOwnersBacklogDoesNotHoldUpAnotherOwnersDelivery() throws Exception {
+        String busy = registerAndLogin(uniqueUsername());
+        String other = registerAndLogin(uniqueUsername());
+        create(busy, "note.created");
+        create(other, "note.created");
+        long first = createNote(busy);
+        long second = createNote(busy);
+        long third = createNote(busy);
+        long others = createNote(other);
+
+        // Queued last, the other owner's delivery still goes out in the first round, before the backlog's second.
+        dispatcher.deliverDue(Instant.now());
+        List<Long> order = new ArrayList<>();
+        for (Received message = received.poll(2, TimeUnit.SECONDS);
+                message != null;
+                message = received.poll(200, TimeUnit.MILLISECONDS)) {
+            order.add(((Number) JsonPath.read(message.body(), "$.data.id")).longValue());
+        }
+        assertThat(order).contains(first, second, third, others);
+        assertThat(order.indexOf(others)).isLessThan(order.indexOf(second));
+    }
+
+    @Test
     void aSuspendedOwnersQueuedEventsAreNotSent() throws Exception {
         String username = uniqueUsername();
         long userId = register(username);

@@ -14,6 +14,7 @@ import com.hikmethankolay.template.audit.AuditLog;
 import com.hikmethankolay.template.common.ApiException;
 import com.hikmethankolay.template.common.SecureTokens;
 import com.hikmethankolay.template.mail.SecurityMailer;
+import com.hikmethankolay.template.mfa.MfaService;
 import com.hikmethankolay.template.token.dto.CreateAccessTokenRequest;
 import com.hikmethankolay.template.user.Role;
 import com.hikmethankolay.template.user.SessionsInvalidated;
@@ -151,6 +152,7 @@ class AccessTokenServiceTest {
     }
 
     private AccessTokenService service(AccessTokenProperties properties) {
-        return new AccessTokenService(tokens, users, userService, audit, mock(SecurityMailer.class), properties);
+        return new AccessTokenService(
+                tokens, users, userService, audit, mock(SecurityMailer.class), properties, mock(MfaService.class));
     }
 }
