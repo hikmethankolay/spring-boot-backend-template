@@ -301,6 +301,8 @@
                 </configuration>
                 <executions>
                     <execution>
+                        <!-- IDE builds compile with ECJ, whose bytecode gives false SpotBugs findings. -->
+                        <?m2e ignore?>
                         <goals>
                             <goal>check</goal>
                         </goals>
