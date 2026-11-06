@@ -106,7 +106,7 @@ push and type-checks it, but check the generator you choose against your own bui
 | `DELETE` | `/api/v1/users/me/sessions` | authenticated | `204`; every other session is logged out at once, this one stays |
 | `DELETE` | `/api/v1/users/me/sessions/{id}` | authenticated | `204`; that device is logged out at once |
 | `GET` | `/api/v1/users/me/access-tokens` | authenticated | `200` unexpired [personal access tokens](../security/#personal-access-tokens), never their values |
-| `POST` | `/api/v1/users/me/access-tokens` | authenticated + password | `201` `{token, details}`; the `pat_…` token is shown only this once |
+| `POST` | `/api/v1/users/me/access-tokens` | authenticated + password (+ `code` when 2FA is on) | `201` `{token, details}`; the `pat_…` token is shown only this once |
 | `DELETE` | `/api/v1/users/me/access-tokens/{id}` | authenticated | `204`; the token stops working at once |
 | `GET` | `/api/v1/users/me/social-accounts` | authenticated | `200` linked GitHub/Google accounts: `id`, `provider`, `linkedAt` |
 | `DELETE` | `/api/v1/users/me/social-accounts/{id}` | authenticated + password | `204`; that provider account can no longer sign in |

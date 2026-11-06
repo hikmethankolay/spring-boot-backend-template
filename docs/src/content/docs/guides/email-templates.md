@@ -13,12 +13,15 @@ text part. [ADR 7](../../adr/0007-email-templates/) explains the choice.
 | --- | --- | --- | --- |
 | `sign-up-link` | Finish creating your account | Someone starts a sign-up with a new address | `link`, `ttl` |
 | `already-registered` | You already have an account | Someone starts a sign-up with a registered address | — |
-| `verify-email` | Confirm your email address | An address changes and must be confirmed | `link`, `ttl` |
+| `verify-email` | Confirm your email address | An unverified address must be confirmed (resend, or an address an administrator set) | `link`, `ttl` |
+| `confirm-email-change` | Use this address for the account {username}? | A user asks to change their address; sent to the new one and names the account, so its owner knows what they attach it to | `link`, `ttl`, `username` |
 | `password-reset` | Reset your password | Someone asks for a password reset | `link`, `ttl` |
 | `security-alert` | Depends on the alert | See [Security alerts](#security-alerts) | `message`, `details`, `sessionsUrl` |
 | `broadcast/announcement` | Chosen by the owner | The owner sends a [broadcast](#broadcasts) | `title`, `paragraphs` |
 
 Every template also gets `subject` and `appName` (`MAIL_APP_NAME`, by default `spring.application.name`).
+Expressions are Spring EL (`SpringTemplateEngine`); OGNL is not on the classpath. Keep values out of expressions:
+templates are constant files, and request data only ever arrives as model variables.
 
 ## Adding an email
 

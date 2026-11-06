@@ -323,9 +323,12 @@ Users can protect their account with an authenticator app (TOTP, RFC 6238: Googl
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /api/v1/users/me/mfa/totp` | New secret and its `otpauth://` URI; show the URI as a QR code |
-| `POST /api/v1/users/me/mfa/totp/confirm` | Password and the first code from the app: turns 2FA on and returns ten recovery codes, once |
+| `POST /api/v1/users/me/mfa/totp/confirm` | Password and the first code from the app: turns 2FA on and returns ten recovery codes, once. Ends the user's other sessions and revokes their personal access tokens, which were made with the password alone |
 | `POST /api/v1/users/me/mfa/totp/recovery-codes` | Replaces every recovery code with ten new ones, returned once; needs the password **and** a code from the app (not a recovery code) |
 | `DELETE /api/v1/users/me/mfa/totp` | Turns 2FA off; needs the password **and** a code or recovery code |
+
+Wrong codes on these routes count against the same per-account limit as `/login/mfa` (`LOGIN_MFA_MAX_ATTEMPTS`), so
+guessing cannot move from a locked login step to them.
 | `POST /api/v1/auth/login/mfa` | Second login step: `{"mfaToken": "…", "code": "123456"}` |
 
 Once it is on, a correct password (or GitHub/Google login) answers `202` with an `mfaToken` instead of tokens; the
@@ -493,6 +496,8 @@ one; the headers then describe whichever limit is closest to running out:
 | `/api/v1/auth/refresh` | 60 per minute |
 | `/api/v1/auth/password-reset/**` | 5 per hour |
 | `/api/v1/mail/unsubscribe/**` | 60 per minute |
+| `/api/v1/auth/oauth2/**` (social login; each call reaches the provider) | 30 per minute |
+| `/api/v1/auth/verify-email/resend` | 5 per hour |
 | `/api/v1/admin/mail/broadcasts/**` | 30 per hour |
 
 Sign-up emails are also limited to one per address per minute, whatever the client IP.

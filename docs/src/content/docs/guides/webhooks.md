@@ -21,7 +21,30 @@ The `whsec_` secret is shown only in this response; `POST /api/v1/webhooks/{id}/
 keeps signing for 24 hours). Any authenticated caller may manage their own endpoints, including a
 [personal access token](../security/#personal-access-tokens) with the `WRITE` scope, so an integration can register
 its own receiver. A user has at most `WEBHOOKS_MAX_ENDPOINTS_PER_USER` (10) endpoints.
-`POST /api/v1/webhooks/{id}/test` queues a `webhook.test` event (`data`: `{endpointId}`).
+`POST /api/v1/webhooks/{id}/test` queues a `webhook.test` event (`data`: `{endpointId}`). Endpoints belong to the
+user, not to the token that created them: revoking a token or changing the password leaves them in place, so review
+them in `GET /api/v1/webhooks` after a token leaks.
+
+| Method | Path | Answer |
+|---|---|---|
+| `GET` | `/api/v1/webhooks` | `200` the caller's endpoints |
+| `POST` | `/api/v1/webhooks` | `201` `{secret, endpoint}` |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/webhooks/{id}` | `200` endpoint / `200` endpoint / `204`; another user's id is `404` |
+| `POST` | `/api/v1/webhooks/{id}/secret` | `200` `{secret, endpoint}`, the new secret shown once |
+| `POST` | `/api/v1/webhooks/{id}/test` | `202` the queued delivery |
+| `GET` | `/api/v1/webhooks/{id}/deliveries` | `200` a page of deliveries |
+| `POST` | `/api/v1/webhooks/{id}/deliveries/{deliveryId}/retry` | `202` the delivery, queued again |
+
+An endpoint:
+
+```json
+{"id": 3, "url": "https://example.com/webhooks", "description": "CRM sync",
+ "eventTypes": ["note.created", "note.deleted"], "enabled": true, "disabledReason": null,
+ "consecutiveFailures": 0, "createdAt": "2026-01-01T00:00:00Z"}
+```
+
+`disabledReason` says why the application turned it off (`410 Gone`, too many failures), and is `null` while it is on
+or when its owner turned it off.
 
 | Event | Sent to | `data` |
 |---|---|---|
@@ -69,7 +92,15 @@ failed attempts in a row, turns the endpoint off, gives up its pending deliverie
 `PATCH /api/v1/webhooks/{id}` with `{"enabled": true}` turns it back on.
 
 `GET /api/v1/webhooks/{id}/deliveries` lists recent deliveries with their status, attempts, last HTTP status and
-error; `POST /api/v1/webhooks/{id}/deliveries/{deliveryId}/retry` sends one again with the same `webhook-id`. Finished
+error:
+
+```json
+{"id": 1203, "messageId": "msg_6f1c0a5e3b6d4b2f9a7e8c1d2b3a4f5e", "eventType": "note.created",
+ "status": "PENDING", "attempts": 1, "responseStatus": 500, "lastError": "HTTP 500",
+ "createdAt": "2026-01-01T00:00:00Z", "nextAttemptAt": "2026-01-01T00:00:30Z", "finishedAt": null}
+```
+
+`status` is `PENDING`, `SENT` or `FAILED`; `POST /api/v1/webhooks/{id}/deliveries/{deliveryId}/retry` sends one again with the same `webhook-id`. Finished
 deliveries are deleted after `WEBHOOKS_DELIVERY_RETENTION`. Metrics:
 `webhook_deliveries_total{outcome="sent|retry|failed|skipped"}`.
 
@@ -96,6 +127,12 @@ deliveries are deleted after `WEBHOOKS_DELIVERY_RETENTION`. Metrics:
 `WebhookDispatcher` polls every `WEBHOOKS_POLL_INTERVAL` on every instance. It locks a due delivery with
 `FOR UPDATE SKIP LOCKED`, leases it and commits, sends it with no transaction open, then records the outcome, so a slow
 receiver never holds a database connection and several instances never send the same row at once.
+
+Deliveries are taken **round-robin by owner**: within a pass each owner with something due gets one send per round,
+oldest first, so one user's backlog or slow receiver delays other users by at most one send per round, not by its whole
+queue. Each send waits at most `WEBHOOKS_CONNECT_TIMEOUT` (5s) to connect and `WEBHOOKS_RESPONSE_TIMEOUT` (10s) for an
+answer. Application-wide events also check the owner's current role before each send, so an owner demoted since the
+event was queued gets no more of them.
 
 A user-supplied URL could point at internal services (`localhost`, Redis, the metrics port, cloud metadata at
 `169.254.169.254`). `WebhookAddressPolicy` refuses any host that resolves to a loopback, private, link-local, unique
