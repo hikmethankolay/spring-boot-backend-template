@@ -1,10 +1,13 @@
 name: Mutation testing
 
 # PIT mutates the security and auth code and checks that the tests notice. Too slow for every
-# pull request, so it runs weekly and on demand; the report is uploaded as an artifact.
+# pull request, so it runs weekly, on demand and for every release tag; the report is uploaded as an artifact,
+# which the documentation site (pages.yml) reads for its mutation score badge.
 on:
   schedule:
     - cron: '0 5 * * 1'
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:

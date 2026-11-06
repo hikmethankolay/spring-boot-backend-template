@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      actions: read   # to download the latest mutation report
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,9 +53,18 @@ jobs:
           SITE_BASE: /${{ github.event.repository.name }}
         run: scripts/site.sh
 
-      # Same run as mutation.yml, so the badge shows the score of the released code.
-      - name: Mutation testing
-        run: ./mvnw -B test-compile org.pitest:pitest-maven:mutationCoverage -Dthreads=2
+      # PIT takes about 25 minutes, so the site does not run it: the score comes from the latest successful run of
+      # mutation.yml (weekly, on demand and on every release tag). Without one yet, the mutation badge is skipped.
+      - name: Latest mutation report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list --workflow mutation.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')
+          if [[ -n "$run" ]] && gh run download "$run" --name mutation-report --dir target/pit-reports; then
+            echo "Mutation report from run $run"
+          else
+            echo "::notice::No mutation report available; the mutation score badge is not updated."
+          fi
 
       # shields.io endpoint files for the README's coverage and mutation score badges.
       - name: Badge data
@@ -73,11 +83,13 @@ jobs:
           coverage=$(grep -o '<counter type="LINE" missed="[0-9]*" covered="[0-9]*"/>' target/site/jacoco/jacoco.xml \
             | tail -n 1 | sed -E 's/.*missed="([0-9]+)" covered="([0-9]+)".*/\1 \2/' \
             | awk '{ printf "%.1f", 100 * $2 / ($1 + $2) }')
-          killed=$(grep -o "detected='true'" target/pit-reports/mutations.xml | wc -l)
-          total=$(grep -o "<mutation " target/pit-reports/mutations.xml | wc -l)
-          mutation=$(awk -v k="$killed" -v t="$total" 'BEGIN { printf "%.0f", 100 * k / t }')
           badge coverage "$coverage" > target/pages/badges/coverage.json
-          badge "mutation score" "$mutation" > target/pages/badges/mutation.json
+          if [[ -f target/pit-reports/mutations.xml ]]; then
+            killed=$(grep -o "detected='true'" target/pit-reports/mutations.xml | wc -l)
+            total=$(grep -o "<mutation " target/pit-reports/mutations.xml | wc -l)
+            mutation=$(awk -v k="$killed" -v t="$total" 'BEGIN { printf "%.0f", 100 * k / t }')
+            badge "mutation score" "$mutation" > target/pages/badges/mutation.json
+          fi
           cat target/pages/badges/*.json
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
