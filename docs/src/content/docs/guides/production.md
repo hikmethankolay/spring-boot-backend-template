@@ -67,14 +67,14 @@ are signed by cosign 3 in the Sigstore bundle format, so verify them with cosign
 `--new-bundle-format`); earlier releases verify with either version:
 
 ```bash
-cosign verify ghcr.io/hikmethankolay/spring-boot-backend-template:5.1.1 \
+cosign verify ghcr.io/hikmethankolay/spring-boot-backend-template:5.2.0 \
   --certificate-identity-regexp '^https://github.com/hikmethankolay/spring-boot-backend-template/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 # Build provenance (SLSA) and the SBOM (SPDX) attached to the image; needs Docker with buildx
-docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:5.1.1 \
+docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:5.2.0 \
   --format '{{ json (index .Provenance "linux/amd64").SLSA }}'
-docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:5.1.1 \
+docker buildx imagetools inspect ghcr.io/hikmethankolay/spring-boot-backend-template:5.2.0 \
   --format '{{ json (index .SBOM "linux/amd64").SPDX }}'
 ```
 
@@ -83,7 +83,7 @@ Verify both before trusting the file
 ([slsa-verifier](https://github.com/slsa-framework/slsa-verifier) checks the provenance):
 
 ```bash
-tag=v5.1.1
+tag=v5.2.0
 gh release download "$tag" -R hikmethankolay/spring-boot-backend-template -p 'sbom.spdx.json*'
 cosign verify-blob sbom.spdx.json --bundle sbom.spdx.json.sigstore.json \
   --certificate-identity-regexp '^https://github.com/hikmethankolay/spring-boot-backend-template/\.github/workflows/release\.yml@refs/tags/v' \

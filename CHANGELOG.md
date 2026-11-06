@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-11-06
+
 ### Security
 
 - Webhook deliveries are claimed round-robin by owner, so one user's backlog or slow receiver no longer delays every
@@ -740,7 +742,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.1.1...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.1.1...v5.2.0
 [5.1.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v4.3.0...v5.0.0
