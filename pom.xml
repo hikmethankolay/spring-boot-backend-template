@@ -33,13 +33,13 @@
              Drop this override once the Boot parent manages 1.67.0 or later. -->
         <opentelemetry.version>1.67.0</opentelemetry.version>
         <!-- 1.5.x uses Jackson 2, which springdoc already brings; validates responses against api/openapi.json. -->
-        <json-schema-validator.version>3.0.8</json-schema-validator.version>
-        <error-prone.version>2.51.0</error-prone.version>
-        <spotless.version>3.10.4</spotless.version>
+        <json-schema-validator.version>3.0.9</json-schema-validator.version>
+        <error-prone.version>2.52.0</error-prone.version>
+        <spotless.version>3.11.0</spotless.version>
         <palantir-java-format.version>2.102.0</palantir-java-format.version>
         <spotbugs-maven-plugin.version>4.10.5.0</spotbugs-maven-plugin.version>
         <findsecbugs.version>1.14.0</findsecbugs.version>
-        <pitest.version>1.30.1</pitest.version>
+        <pitest.version>1.30.2</pitest.version>
         <pitest-junit5.version>1.2.3</pitest-junit5.version>
     </properties>
 
