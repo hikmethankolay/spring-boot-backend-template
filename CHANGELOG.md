@@ -6,6 +6,8 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-11-19
+
 ### Security
 
 - Java4Shell (CVE-2026-114938): the image's Java runtime is built from Temurin 25.0.5.1 on amd64, which fixes the
@@ -756,7 +758,8 @@ each one.
 - Lockout, startup, rate limit, release and logging follow-ups from the same audit. Rate-limit counters reset once
   on deploy because their Redis keys changed format.
 
-[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.2.0...HEAD
+[Unreleased]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.2.1...HEAD
+[5.2.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.2.0...v5.2.1
 [5.2.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.1.1...v5.2.0
 [5.1.1]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/hikmethankolay/spring-boot-backend-template/compare/v5.0.0...v5.1.0
