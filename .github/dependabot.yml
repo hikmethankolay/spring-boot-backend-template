@@ -12,30 +12,47 @@ updates:
         patterns: ["*"]
         exclude-patterns: ["org.springframework*"]
 
+  # CI tooling, not shipped code: monthly is enough. Security updates still open immediately.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
+      # Listed first, since a dependency joins the first group it matches.
       # init, analyze and upload-sarif must stay on one version, or the CodeQL job fails.
       codeql:
         patterns: ["github/codeql-action*"]
+      # Major versions keep their own PRs.
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
+  # The shipped runtime images: weekly, all in one PR.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
 
-  # The PostgreSQL, Redis, Mailpit and monitoring images in compose.yaml.
+  # The PostgreSQL, Redis, Mailpit and monitoring images in compose.yaml. Development only.
   - package-ecosystem: docker-compose
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      compose-images:
+        patterns: ["*"]
 
+  # The documentation site only.
   - package-ecosystem: npm
     directory: /docs
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       astro:
         patterns: ["astro", "@astrojs/*"]
+      docs-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
