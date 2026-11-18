@@ -22,9 +22,21 @@ RUN jdeps --ignore-missing-deps --multi-release 25 --print-module-deps --recursi
  && echo "$(cat modules.txt),jdk.unsupported,jdk.management,jdk.naming.dns,java.security.sasl,java.security.jgss,jdk.zipfs" \
       > modules.txt
 
+# --- JDK for jlink, per target architecture ---
+# shortcut: Java4Shell (CVE-2026-114938) is fixed in Temurin 25.0.5.1, which the eclipse-temurin image does not ship
+# yet. amd64 swaps in the patched JDK; arm64 is not affected (the bug needs AVX-512). Once Dependabot moves the image
+# past 25.0.5.1, delete jdk-amd64 and jdk-arm64 and build the jre stage straight from the image again.
+FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk-arm64
+FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk-amd64
+ADD --checksum=sha256:760f91b22c3efc9bd1b64ff950598231be82928cc807e30691a0e7a2995a62c0 \
+    https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5.1_2.tar.gz \
+    /tmp/jdk.tar.gz
+RUN rm -rf "$JAVA_HOME" && mkdir "$JAVA_HOME" \
+ && tar -xzf /tmp/jdk.tar.gz -C "$JAVA_HOME" --strip-components=1 && rm /tmp/jdk.tar.gz
+
 # --- JRE stage: a Java runtime with only those modules ---
 # Runs on the target platform, because jlink copies that platform's native libraries.
-FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jre
+FROM jdk-${TARGETARCH} AS jre
 COPY --from=build /workspace/modules.txt /modules.txt
 RUN jlink --add-modules "$(cat /modules.txt)" --strip-debug --no-man-pages --no-header-files --compress=zip-6 \
       --output /jre
