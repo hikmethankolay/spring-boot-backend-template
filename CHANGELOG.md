@@ -6,6 +6,20 @@ releases use [semantic versioning](https://semver.org/). Each release's full lis
 
 ## [Unreleased]
 
+### Security
+
+- Java4Shell (CVE-2026-114938): the image's Java runtime is built from Temurin 25.0.5.1 on amd64, which fixes the
+  remote code execution in the AVX-512 Base64 decoder. The `eclipse-temurin` image does not ship 25.0.5.1 yet, so the
+  Dockerfile downloads it with a pinned checksum; arm64 is not affected and keeps the image's JDK.
+- The distroless base image has the fixed zlib (CVE-2026-76844, CVE-2026-85091).
+
+### Changed
+
+- Bouncy Castle 1.87, json-schema-validator 3.0.9, Error Prone 2.52.0, Spotless 3.11.0, PIT 1.30.2 and Maven 3.10.1.
+- Docker Compose: Grafana 13.3.1, Prometheus 3.16.0 and Mailpit 1.33. Docs site: Astro and Starlight 0.43.
+- Dependabot groups updates per ecosystem, with major versions in their own pull requests, and checks GitHub
+  Actions, the Compose images and the docs site monthly.
+
 ## [5.2.0] - 2026-11-06
 
 ### Security
