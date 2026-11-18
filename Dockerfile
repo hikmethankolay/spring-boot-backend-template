@@ -31,7 +31,7 @@ RUN jlink --add-modules "$(cat /modules.txt)" --strip-debug --no-man-pages --no-
 
 # --- Runtime stage: distroless (no shell, no package manager), non-root ---
 # java-base has the C library and the few system libraries a JDK needs; the JRE comes from the stage above.
-FROM gcr.io/distroless/java-base-debian13:nonroot@sha256:fe40972ca2d78f7eb58dd93354c2b01f1c1ae55fd4dd03ea6367769cb91c7160
+FROM gcr.io/distroless/java-base-debian13:nonroot@sha256:c6e94f034ea6026da3039a51c855e77b5230e25727fe7fd402fa8a535956f5f1
 COPY --from=jre /jre /opt/java
 # A numeric user lets Kubernetes verify runAsNonRoot (see deploy/kubernetes).
 USER 10001:10001
