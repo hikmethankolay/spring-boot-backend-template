@@ -3,7 +3,7 @@
 # --- Build stage: compile, extract the layered jar and list the JDK modules it needs ---
 # Runs on the build machine's platform: the jar is the same for every target architecture.
 # Base images are pinned by digest for reproducible builds; Dependabot proposes updates.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk@sha256:ce2ef9d2d67a68de5e196d4de9d743327c44a10b57fe02ec39f572c652cacfd3 AS build
 WORKDIR /workspace
 
 COPY .mvn .mvn
@@ -26,8 +26,8 @@ RUN jdeps --ignore-missing-deps --multi-release 25 --print-module-deps --recursi
 # shortcut: Java4Shell (CVE-2026-114938) is fixed in Temurin 25.0.5.1, which the eclipse-temurin image does not ship
 # yet. amd64 swaps in the patched JDK; arm64 is not affected (the bug needs AVX-512). Once Dependabot moves the image
 # past 25.0.5.1, delete jdk-amd64 and jdk-arm64 and build the jre stage straight from the image again.
-FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk-arm64
-FROM eclipse-temurin:25-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk-amd64
+FROM eclipse-temurin:25-jdk@sha256:ce2ef9d2d67a68de5e196d4de9d743327c44a10b57fe02ec39f572c652cacfd3 AS jdk-arm64
+FROM eclipse-temurin:25-jdk@sha256:ce2ef9d2d67a68de5e196d4de9d743327c44a10b57fe02ec39f572c652cacfd3 AS jdk-amd64
 ADD --checksum=sha256:760f91b22c3efc9bd1b64ff950598231be82928cc807e30691a0e7a2995a62c0 \
     https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5.1_2.tar.gz \
     /tmp/jdk.tar.gz
@@ -43,7 +43,7 @@ RUN jlink --add-modules "$(cat /modules.txt)" --strip-debug --no-man-pages --no-
 
 # --- Runtime stage: distroless (no shell, no package manager), non-root ---
 # java-base has the C library and the few system libraries a JDK needs; the JRE comes from the stage above.
-FROM gcr.io/distroless/java-base-debian13:nonroot@sha256:a46b597173cd059fd95875cacd2bc7f3b7a8b13f636b5826ea65ea06afc33868
+FROM gcr.io/distroless/java-base-debian13:nonroot@sha256:4b56aef44dee352ec8321ac447db1592909c029183a41be1c41375ca8b936549
 COPY --from=jre /jre /opt/java
 # A numeric user lets Kubernetes verify runAsNonRoot (see deploy/kubernetes).
 USER 10001:10001
