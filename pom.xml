@@ -34,7 +34,7 @@
         <opentelemetry.version>1.67.0</opentelemetry.version>
         <!-- 1.5.x uses Jackson 2, which springdoc already brings; validates responses against api/openapi.json. -->
         <json-schema-validator.version>3.0.9</json-schema-validator.version>
-        <error-prone.version>2.52.0</error-prone.version>
+        <error-prone.version>2.53.0</error-prone.version>
         <spotless.version>3.11.0</spotless.version>
         <palantir-java-format.version>2.102.0</palantir-java-format.version>
         <spotbugs-maven-plugin.version>4.10.5.0</spotbugs-maven-plugin.version>
